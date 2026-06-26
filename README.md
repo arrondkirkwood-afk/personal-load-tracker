@@ -85,9 +85,26 @@ Saved loads, daily add-ons, and daily earnings records are stored in the browser
 
 Download your CSV files before clearing browser data, switching browsers, replacing your device, or moving the app to another web address.
 
+## Updating The Home Screen App
+
+The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
+
+To update the app:
+
+1. Make changes with Codex.
+2. Increase the version number in `script.js` and `service-worker.js`.
+3. Upload updated files to GitHub.
+4. Wait for GitHub Pages green check.
+5. Open the iPhone app.
+6. Tap Check for Updates.
+7. Close and reopen the app if needed.
+
+GitHub is only needed when changing the app files, not for daily use.
+
 ## Files
 
 - `index.html`
 - `style.css`
 - `script.js`
+- `service-worker.js`
 - `README.md`

@@ -300,7 +300,8 @@ label span {
 }
 
 .helper-text,
-.backup-reminder {
+.backup-reminder,
+.update-status {
   margin: -2px 0 12px;
   color: var(--muted);
   font-size: 0.9rem;
@@ -313,6 +314,19 @@ label span {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel-strong);
+}
+
+.update-status {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: var(--radius-sm);
+}
+
+.update-status:empty {
+  display: none;
 }
 
 .pay-disclaimer {
@@ -637,7 +651,29 @@ textarea.invalid {
 }
 
 .backup-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.app-footer {
+  display: flex;
+  justify-content: center;
+  margin: 18px 0 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.84rem;
+  font-weight: 760;
+}
+
+.app-footer span {
+  padding: 9px 13px;
+  color: var(--accent-dark);
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(216, 225, 232, 0.9);
+  border-radius: 999px;
+  box-shadow: var(--shadow-soft);
+}
+
+.app-footer strong {
+  color: var(--heading);
 }
 
 .saved-card-list {

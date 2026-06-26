@@ -1,3 +1,6 @@
+const APP_VERSION = "1.0.1";
+const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
+const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
 const STORAGE_KEY = 'personalOilfieldLoadTracker.loads';
 const ADD_ON_STORAGE_KEY = 'personalOilfieldLoadTracker.dailyAddOns';
 const EARNINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.dailySummaries';
@@ -203,6 +206,9 @@ const logCount = document.getElementById('log-count');
 const downloadLogButton = document.getElementById('download-log-button');
 const downloadEarningsButton = document.getElementById('download-earnings-button');
 const clearLogButton = document.getElementById('clear-log-button');
+const checkUpdatesButton = document.getElementById('check-updates-button');
+const updateStatus = document.getElementById('update-status');
+const appVersion = document.getElementById('app-version');
 const storageWarning = document.getElementById('storage-warning');
 const saveStatus = document.getElementById('save-status');
 
@@ -248,6 +254,169 @@ function clearSaveMessage() {
 
   saveStatus.textContent = '';
   saveStatus.className = 'save-status';
+}
+
+function setUpdateStatus(message) {
+  if (!updateStatus) {
+    return;
+  }
+
+  updateStatus.textContent = message;
+}
+
+async function clearOldAppCaches() {
+  if (!('caches' in globalThis)) {
+    return;
+  }
+
+  const cacheNames = await caches.keys();
+  await Promise.all(
+    cacheNames
+      .filter((cacheName) => cacheName.startsWith(APP_CACHE_PREFIX) && cacheName !== APP_CACHE_NAME)
+      .map((cacheName) => caches.delete(cacheName))
+  );
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) {
+    return null;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.register('./service-worker.js');
+
+    if (registration.active) {
+      registration.active.postMessage({ type: 'CLEAR_OLD_CACHES' });
+    }
+
+    return registration;
+  } catch {
+    return null;
+  }
+}
+
+function waitForInstallingWorker(registration) {
+  const worker = registration?.installing;
+
+  if (!worker) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    let isResolved = false;
+
+    const finish = (value) => {
+      if (isResolved) {
+        return;
+      }
+
+      isResolved = true;
+      worker.removeEventListener('statechange', handleStateChange);
+      resolve(value);
+    };
+
+    const handleStateChange = () => {
+      if (worker.state === 'installed' || worker.state === 'activated') {
+        finish(worker);
+      }
+
+      if (worker.state === 'redundant') {
+        finish(null);
+      }
+    };
+
+    worker.addEventListener('statechange', handleStateChange);
+    handleStateChange();
+    setTimeout(() => finish(worker.state === 'installed' ? worker : null), 5000);
+  });
+}
+
+function waitForControllerChange(timeout = 2500) {
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let isResolved = false;
+
+    const finish = () => {
+      if (isResolved) {
+        return;
+      }
+
+      isResolved = true;
+      navigator.serviceWorker.removeEventListener('controllerchange', finish);
+      resolve();
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', finish);
+    setTimeout(finish, timeout);
+  });
+}
+
+async function reloadAfterServiceWorkerUpdate(registration) {
+  setUpdateStatus('Update complete. Reloading...');
+
+  if (registration?.waiting) {
+    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    await waitForControllerChange();
+  }
+
+  globalThis.location.reload();
+}
+
+async function checkForUpdates() {
+  if (checkUpdatesButton) {
+    checkUpdatesButton.disabled = true;
+  }
+
+  setUpdateStatus('Checking for updates...');
+
+  try {
+    await clearOldAppCaches();
+
+    if (!('serviceWorker' in navigator)) {
+      setUpdateStatus('If update does not appear, close and reopen the app.');
+      return;
+    }
+
+    const existingRegistration = await navigator.serviceWorker.getRegistration();
+    const registration = existingRegistration || await registerServiceWorker();
+
+    if (!registration) {
+      setUpdateStatus('If update does not appear, close and reopen the app.');
+      return;
+    }
+
+    const updatedRegistration = await registration.update().catch(() => registration);
+    const installedWorker = await waitForInstallingWorker(updatedRegistration);
+
+    await clearOldAppCaches();
+
+    if (updatedRegistration.active) {
+      updatedRegistration.active.postMessage({ type: 'CLEAR_OLD_CACHES' });
+    }
+
+    if (updatedRegistration.waiting || installedWorker) {
+      await reloadAfterServiceWorkerUpdate(updatedRegistration);
+      return;
+    }
+
+    setUpdateStatus('You are using the latest version. If update does not appear, close and reopen the app.');
+
+    setTimeout(() => {
+      setUpdateStatus('Update complete. Reloading...');
+      globalThis.location.reload();
+    }, 1400);
+  } catch {
+    setUpdateStatus('If update does not appear, close and reopen the app.');
+  } finally {
+    setTimeout(() => {
+      if (checkUpdatesButton) {
+        checkUpdatesButton.disabled = false;
+      }
+    }, 1600);
+  }
 }
 
 function readJsonFromStorage(key, label) {
@@ -1451,6 +1620,10 @@ function escapeHtml(value) {
 
 function initialize() {
   const today = todayLocal();
+  if (appVersion) {
+    appVersion.textContent = APP_VERSION;
+  }
+
   daily.date.value = daily.date.value || today;
   fields.loadDate.value = fields.loadDate.value || daily.date.value;
   fields.loadStatus.value = fields.loadStatus.value || COMPLETED_STATUS;
@@ -1461,6 +1634,7 @@ function initialize() {
   renderStorageWarning();
   renderSummary();
   updateDailySummary();
+  registerServiceWorker();
 }
 
 form.addEventListener('submit', saveLoad);
@@ -1483,5 +1657,6 @@ savedLoadCards.addEventListener('click', handleSavedCardAction);
 downloadLogButton.addEventListener('click', downloadLoadLog);
 downloadEarningsButton.addEventListener('click', downloadDailyEarningsSummary);
 clearLogButton.addEventListener('click', clearSavedLog);
+checkUpdatesButton.addEventListener('click', checkForUpdates);
 
 initialize();

@@ -311,11 +311,17 @@
         </div>
         <p class="backup-reminder">Use Download Load Log regularly to back up your records.</p>
         <div class="button-row backup-actions">
+          <button class="button ghost" id="check-updates-button" type="button">Check for Updates</button>
           <button class="button secondary" id="download-log-button" type="button">Download Load Log CSV</button>
           <button class="button secondary" id="download-earnings-button" type="button">Download Daily Earnings CSV</button>
           <button class="button danger" id="clear-log-button" type="button">Clear Saved Load Log</button>
         </div>
+        <p class="update-status" id="update-status" aria-live="polite"></p>
       </section>
+
+      <footer class="app-footer">
+        <span>App version <strong id="app-version">1.0.1</strong></span>
+      </footer>
     </section>
   </main>
 
