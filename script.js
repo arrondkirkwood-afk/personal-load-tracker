@@ -87,7 +87,8 @@ const fieldIds = [
   'arrived-dropoff-time',
   'completed-time',
   'start-meter-reading',
-  'end-meter-reading'
+  'end-meter-reading',
+  'jotform-confirmation-number'
 ];
 
 const numberFieldIds = new Set([
@@ -143,7 +144,10 @@ const summary = {
   waterWeight: document.getElementById('summary-water-weight'),
   totalWeight: document.getElementById('summary-total-weight'),
   grossTruckWeight: document.getElementById('summary-gross-truck-weight'),
+  startMeterReading: document.getElementById('summary-start-meter-reading'),
+  endMeterReading: document.getElementById('summary-end-meter-reading'),
   barrelsOffloaded: document.getElementById('meter-barrels-offloaded'),
+  grossBarrelsHauled: document.getElementById('summary-gross-barrels-hauled'),
   differenceGross: document.getElementById('meter-difference-gross'),
   offloadStatus: document.getElementById('meter-offload-status'),
   payRange: document.getElementById('pay-range'),
@@ -608,7 +612,8 @@ function normalizeSavedLoad(load) {
     arrivedDropoffTime: load.arrivedDropoffTime || '',
     completedTime: load.completedTime || '',
     startMeterReading: isFiniteNumber(load.startMeterReading) ? load.startMeterReading : null,
-    endMeterReading: isFiniteNumber(load.endMeterReading) ? load.endMeterReading : null
+    endMeterReading: isFiniteNumber(load.endMeterReading) ? load.endMeterReading : null,
+    jotformConfirmationNumber: load.jotformConfirmationNumber || ''
   };
 
   return { ...normalized, ...calculateDerived(normalized) };
@@ -756,7 +761,10 @@ function renderSummary() {
   summary.waterWeight.textContent = isFiniteNumber(derived.estimatedWaterWeight) ? formatWeight(derived.estimatedWaterWeight) : noLoadText;
   summary.totalWeight.textContent = isFiniteNumber(derived.estimatedTotalLoadWeight) ? formatWeight(derived.estimatedTotalLoadWeight) : noLoadText;
   summary.grossTruckWeight.textContent = isFiniteNumber(derived.estimatedGrossTruckWeight) ? formatWeight(derived.estimatedGrossTruckWeight) : '-';
+  summary.startMeterReading.textContent = isFiniteNumber(values.startMeterReading) ? formatNumber(values.startMeterReading) : '-';
+  summary.endMeterReading.textContent = isFiniteNumber(values.endMeterReading) ? formatNumber(values.endMeterReading) : '-';
   summary.barrelsOffloaded.textContent = isFiniteNumber(derived.barrelsOffloaded) ? formatBarrels(derived.barrelsOffloaded) : '-';
+  summary.grossBarrelsHauled.textContent = isFiniteNumber(values.grossBarrels) ? formatBarrels(values.grossBarrels) : '-';
   summary.differenceGross.textContent = isFiniteNumber(derived.differenceVsGrossBarrels) ? formatBarrels(derived.differenceVsGrossBarrels) : '-';
   summary.offloadStatus.textContent = derived.offloadStatus;
   summary.payRange.textContent = derived.matchedPayRange;
@@ -849,6 +857,7 @@ function renderSavedLoadCards(records) {
         ${loadChip('Loaded miles', formatMiles(load.loadedMiles))}
         ${loadChip('Offloaded', formatBarrels(load.barrelsOffloaded))}
         ${loadChip('Diff vs gross', formatBarrels(load.differenceVsGrossBarrels))}
+        ${loadChip('Offload status', load.offloadStatus)}
         ${loadChip('Base pay', formatMoney(load.estimatedPay))}
         ${loadChip('Pickup time', formatDuration(load.pickupTimeMinutes))}
         ${loadChip('Drop-off time', formatDuration(load.dropoffTimeMinutes))}
@@ -870,6 +879,11 @@ function renderSavedLoadCards(records) {
           ${detailItem('Estimated gross truck weight', formatWeight(load.estimatedGrossTruckWeight))}
           ${detailItem('Start meter reading', formatNumber(load.startMeterReading))}
           ${detailItem('End meter reading', formatNumber(load.endMeterReading))}
+          ${detailItem('Barrels offloaded', formatBarrels(load.barrelsOffloaded))}
+          ${detailItem('Gross barrels hauled', formatBarrels(load.grossBarrels))}
+          ${detailItem('Difference vs gross barrels', formatBarrels(load.differenceVsGrossBarrels))}
+          ${detailItem('Offload status', load.offloadStatus)}
+          ${detailItem('Jotform confirmation number', load.jotformConfirmationNumber || '-')}
           ${detailItem('Arrived at pickup', load.arrivedPickupTime || '-')}
           ${detailItem('Loaded / picked up', load.loadedTime || '-')}
           ${detailItem('Arrived at drop off', load.arrivedDropoffTime || '-')}
@@ -881,7 +895,6 @@ function renderSavedLoadCards(records) {
           ${detailItem('Total paid wait time', formatDuration(load.totalPaidWaitMinutes))}
           ${detailItem('Wait pay', formatMoney(load.waitPay))}
           ${detailItem('Estimated total pay', formatMoney(load.estimatedEntryPay))}
-          ${detailItem('Offload status', load.offloadStatus)}
           ${detailItem('Pay range matched', load.matchedPayRange)}
           ${detailItem('Notes', load.notes || '-', true)}
         </div>
@@ -1294,6 +1307,7 @@ function downloadLoadLog() {
     'Barrels offloaded',
     'Difference vs gross barrels',
     'Offload status',
+    'Jotform confirmation number',
     'Arrived at pickup time',
     'Loaded / picked up time',
     'Arrived at drop off time',
@@ -1343,6 +1357,7 @@ function downloadLoadLog() {
     formatCsvNumber(load.barrelsOffloaded),
     formatCsvNumber(load.differenceVsGrossBarrels),
     load.offloadStatus,
+    load.jotformConfirmationNumber,
     load.arrivedPickupTime,
     load.loadedTime,
     load.arrivedDropoffTime,
