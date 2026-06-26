@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Oilfield Load Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <section class="tracker" aria-labelledby="app-title">
+      <header class="header">
+        <p class="eyebrow">Personal Field Records</p>
+        <h1 id="app-title">Personal Oilfield Load Tracker</h1>
+      </header>
+
+      <p class="disclaimer">
+        For personal recordkeeping and field-estimate use only. Estimated earnings are for personal verification only and may not match official payroll. This app is not an official company accounting system, payroll record, certified scale ticket, custody-transfer measurement, or legal compliance guarantee.
+      </p>
+      <p class="storage-warning" id="storage-warning" role="alert" hidden></p>
+
+      <section class="panel daily-summary" aria-labelledby="daily-summary-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">1</p>
+            <h2 id="daily-summary-title">Today's Daily Summary</h2>
+          </div>
+          <label class="date-control" for="daily-date">
+            <span>Selected date</span>
+            <input id="daily-date" type="date">
+          </label>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="metric-card"><span>Completed loads</span><strong id="daily-completed-loads">0</strong></article>
+          <article class="metric-card"><span>Rejects</span><strong id="daily-rejects">0</strong></article>
+          <article class="metric-card"><span>Total gross barrels hauled</span><strong id="daily-gross-barrels">0.00 bbl</strong></article>
+          <article class="metric-card"><span>Total loaded miles</span><strong id="daily-loaded-miles">0.0 mi</strong></article>
+          <article class="metric-card"><span>Total barrels offloaded</span><strong id="daily-barrels-offloaded">0.00 bbl</strong></article>
+          <article class="metric-card"><span>Difference vs gross barrels</span><strong id="daily-difference-gross">0.00 bbl</strong></article>
+          <article class="metric-card"><span>Total estimated load pay</span><strong id="daily-completed-pay">$0.00</strong></article>
+          <article class="metric-card"><span>Reject pay</span><strong id="daily-reject-pay">$0.00</strong></article>
+          <article class="metric-card"><span>Total paid pickup wait time</span><strong id="daily-paid-pickup-wait">0 hr 0 min</strong></article>
+          <article class="metric-card"><span>Total paid drop-off wait time</span><strong id="daily-paid-dropoff-wait">0 hr 0 min</strong></article>
+          <article class="metric-card"><span>Total paid wait time</span><strong id="daily-paid-wait">0 hr 0 min</strong></article>
+          <article class="metric-card"><span>Total estimated wait pay</span><strong id="daily-wait-pay">$0.00</strong></article>
+          <article class="metric-card"><span>Per diem pay</span><strong id="daily-per-diem-pay">$0.00</strong></article>
+          <article class="metric-card"><span>Sleeper berth pay</span><strong id="daily-sleeper-pay">$0.00</strong></article>
+          <article class="metric-card total-card"><span>Total estimated daily earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
+        </div>
+      </section>
+
+      <section class="panel entry-panel" aria-labelledby="entry-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">2</p>
+            <h2 id="entry-title">Add / Edit Load Entry</h2>
+          </div>
+          <span id="edit-status" class="status-pill">New entry</span>
+        </div>
+
+        <form id="load-form" class="load-form" novalidate>
+          <div class="form-subsection">
+            <h3>A. Driver / Equipment</h3>
+            <div class="field-grid">
+              <label for="driver-name">
+                <span>Driver name</span>
+                <input id="driver-name" type="text" autocomplete="name">
+              </label>
+              <label for="truck-number">
+                <span>Truck number</span>
+                <input id="truck-number" type="text" autocomplete="off">
+              </label>
+              <label for="trailer-number">
+                <span>Trailer number</span>
+                <input id="trailer-number" type="text" autocomplete="off">
+              </label>
+              <label for="empty-truck-weight">
+                <span>Empty truck/trailer weight</span>
+                <input id="empty-truck-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="empty-truck-weight-error">
+                <small id="empty-truck-weight-error" class="field-error"></small>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-subsection">
+            <h3>B. Load Details</h3>
+            <div class="field-grid">
+              <label for="load-date">
+                <span>Date <em>required</em></span>
+                <input id="load-date" type="date" aria-describedby="load-date-error">
+                <small id="load-date-error" class="field-error"></small>
+              </label>
+              <label for="load-number">
+                <span>Load number</span>
+                <input id="load-number" type="text" autocomplete="off">
+              </label>
+              <label for="ticket-number">
+                <span>Ticket number</span>
+                <input id="ticket-number" type="text" autocomplete="off">
+              </label>
+              <label for="bol-number">
+                <span>BOL number</span>
+                <input id="bol-number" type="text" autocomplete="off">
+              </label>
+              <label for="load-status">
+                <span>Load status <em>required</em></span>
+                <select id="load-status" aria-describedby="load-status-error">
+                  <option value="Completed Load">Completed Load</option>
+                  <option value="Reject">Reject</option>
+                </select>
+                <small id="load-status-error" class="field-error"></small>
+              </label>
+              <label for="product-type">
+                <span>Product type</span>
+                <input id="product-type" type="text" autocomplete="off" placeholder="Crude oil">
+              </label>
+              <label for="pickup-location">
+                <span>Pickup location</span>
+                <input id="pickup-location" type="text" autocomplete="off">
+              </label>
+              <label for="dropoff-location">
+                <span>Drop off location</span>
+                <input id="dropoff-location" type="text" autocomplete="off">
+              </label>
+              <label for="gross-barrels">
+                <span>Gross barrels <em>required</em></span>
+                <input id="gross-barrels" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="gross-barrels-error">
+                <small id="gross-barrels-error" class="field-error"></small>
+              </label>
+              <label for="api-gravity">
+                <span>API gravity</span>
+                <input id="api-gravity" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="api-gravity-error">
+                <small id="api-gravity-error" class="field-error"></small>
+              </label>
+              <label for="bsw-percentage">
+                <span>BS&amp;W / water percentage</span>
+                <input id="bsw-percentage" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-describedby="bsw-percentage-error">
+                <small id="bsw-percentage-error" class="field-error"></small>
+              </label>
+              <label for="loaded-miles">
+                <span>Loaded miles</span>
+                <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
+                <small id="loaded-miles-error" class="field-error"></small>
+              </label>
+              <label class="full-width" for="notes">
+                <span>Notes</span>
+                <textarea id="notes" rows="3" placeholder="Optional notes"></textarea>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-subsection">
+            <h3>C. Time Tracking</h3>
+            <div class="field-grid">
+              <label for="arrived-pickup-time">
+                <span>Arrived at pickup time</span>
+                <input id="arrived-pickup-time" type="time">
+              </label>
+              <label for="loaded-time">
+                <span>Loaded / picked up time</span>
+                <input id="loaded-time" type="time">
+              </label>
+              <label for="arrived-dropoff-time">
+                <span>Arrived at drop off time</span>
+                <input id="arrived-dropoff-time" type="time">
+              </label>
+              <label for="completed-time">
+                <span>Dropped off / completed time</span>
+                <input id="completed-time" type="time">
+              </label>
+            </div>
+          </div>
+
+          <div class="form-subsection">
+            <h3>D. Drop Off Meter Readings</h3>
+            <div class="field-grid">
+              <label for="start-meter-reading">
+                <span>Start meter reading</span>
+                <input id="start-meter-reading" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="start-meter-reading-error">
+                <small id="start-meter-reading-error" class="field-error"></small>
+              </label>
+              <label for="end-meter-reading">
+                <span>End meter reading</span>
+                <input id="end-meter-reading" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="end-meter-reading-error">
+                <small id="end-meter-reading-error" class="field-error"></small>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-subsection">
+            <h3>E. Daily Add-Ons</h3>
+            <p class="helper-text">Per diem and sleeper berth are saved once for the selected date.</p>
+            <div class="field-grid">
+              <label class="checkbox-field" for="per-diem-checkbox">
+                <input id="per-diem-checkbox" type="checkbox">
+                <span>Per diem checkbox ($50)</span>
+              </label>
+              <label class="checkbox-field" for="sleeper-berth-checkbox">
+                <input id="sleeper-berth-checkbox" type="checkbox">
+                <span>Sleeper berth checkbox ($60)</span>
+              </label>
+              <label class="full-width" for="daily-earnings-notes">
+                <span>Daily earnings notes</span>
+                <textarea id="daily-earnings-notes" rows="2" placeholder="Optional daily pay notes"></textarea>
+              </label>
+            </div>
+          </div>
+
+          <div class="calculation-panel" aria-labelledby="calculation-title">
+            <h3 id="calculation-title">Summary Load Calculation</h3>
+            <div class="result-grid">
+              <div class="result-row"><span>Water barrels</span><strong id="summary-water-barrels">-</strong></div>
+              <div class="result-row"><span>Oil barrels</span><strong id="summary-oil-barrels">-</strong></div>
+              <div class="result-row"><span>Crude weight per barrel</span><strong id="summary-crude-weight">-</strong></div>
+              <div class="result-row"><span>Estimated oil weight</span><strong id="summary-oil-weight">-</strong></div>
+              <div class="result-row"><span>Estimated water weight</span><strong id="summary-water-weight">-</strong></div>
+              <div class="result-row"><span>Estimated total load weight</span><strong id="summary-total-weight">-</strong></div>
+              <div class="result-row"><span>Estimated gross truck weight</span><strong id="summary-gross-truck-weight">-</strong></div>
+              <div class="result-row"><span>Barrels offloaded</span><strong id="meter-barrels-offloaded">-</strong></div>
+              <div class="result-row"><span>Difference vs gross barrels</span><strong id="meter-difference-gross">-</strong></div>
+              <div class="result-row"><span>Offload status</span><strong id="meter-offload-status">-</strong></div>
+              <div class="result-row"><span>Pay range matched</span><strong id="pay-range">0 miles</strong></div>
+              <div class="result-row"><span>Estimated base pay</span><strong id="pay-estimated">$0.00</strong></div>
+              <div class="result-row"><span>Pickup time</span><strong id="summary-pickup-time">-</strong></div>
+              <div class="result-row"><span>Paid pickup wait time</span><strong id="summary-paid-pickup-wait">0 hr 0 min</strong></div>
+              <div class="result-row"><span>Drop-off time</span><strong id="summary-dropoff-time">-</strong></div>
+              <div class="result-row"><span>Paid drop-off wait time</span><strong id="summary-paid-dropoff-wait">0 hr 0 min</strong></div>
+              <div class="result-row"><span>Total paid wait time</span><strong id="summary-paid-wait">0 hr 0 min</strong></div>
+              <div class="result-row"><span>Estimated wait pay</span><strong id="summary-wait-pay">$0.00</strong></div>
+              <div class="result-row total-row"><span>Estimated total pay for this load</span><strong id="pay-entry-total">$0.00</strong></div>
+              <div class="result-row"><span>Total cycle time</span><strong id="summary-cycle-time">-</strong></div>
+            </div>
+            <p class="pay-disclaimer">Wait pay and estimated earnings are for personal verification only and may not match official payroll. This app is not an official payroll system.</p>
+          </div>
+
+          <p class="validation-summary" id="validation-summary" role="alert"></p>
+          <p class="save-status" id="save-status" aria-live="polite"></p>
+
+          <div class="duplicate-warning" id="duplicate-warning" role="dialog" aria-live="assertive" hidden>
+            <p>This looks like a duplicate saved load. Do you still want to save it?</p>
+            <div class="button-row compact">
+              <button class="button secondary" id="save-anyway-button" type="button">Save Anyway</button>
+              <button class="button ghost" id="cancel-duplicate-button" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <div class="button-row form-actions">
+            <button class="button primary" id="save-load-button" type="submit">Save Load</button>
+            <button class="button ghost" id="clear-form-button" type="button">Clear Form</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel saved-loads" aria-labelledby="saved-loads-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">3</p>
+            <h2 id="saved-loads-title">Saved Loads for Selected Date</h2>
+          </div>
+          <span id="log-count">0 saved</span>
+        </div>
+        <div id="saved-load-cards" class="saved-card-list">
+          <article class="empty-card">No saved loads for this date yet.</article>
+        </div>
+      </section>
+
+      <section class="panel earnings-review" aria-labelledby="earnings-review-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">4</p>
+            <h2 id="earnings-review-title">Daily Earnings Review</h2>
+          </div>
+          <span id="earnings-date-label" class="status-pill">-</span>
+        </div>
+        <div class="review-grid">
+          <div class="result-row"><span>Date</span><strong id="review-date">-</strong></div>
+          <div class="result-row"><span>Completed load count</span><strong id="review-completed-loads">0</strong></div>
+          <div class="result-row"><span>Reject count</span><strong id="review-rejects">0</strong></div>
+          <div class="result-row"><span>Total loaded miles</span><strong id="review-loaded-miles">0.0 mi</strong></div>
+          <div class="result-row"><span>Total gross barrels</span><strong id="review-gross-barrels">0.00 bbl</strong></div>
+          <div class="result-row"><span>Total barrels offloaded</span><strong id="review-barrels-offloaded">0.00 bbl</strong></div>
+          <div class="result-row"><span>Total difference vs gross barrels</span><strong id="review-difference-gross">0.00 bbl</strong></div>
+          <div class="result-row"><span>Total completed load pay</span><strong id="review-completed-pay">$0.00</strong></div>
+          <div class="result-row"><span>Total reject pay</span><strong id="review-reject-pay">$0.00</strong></div>
+          <div class="result-row"><span>Total paid pickup wait time</span><strong id="review-paid-pickup-wait">0 hr 0 min</strong></div>
+          <div class="result-row"><span>Total paid drop-off wait time</span><strong id="review-paid-dropoff-wait">0 hr 0 min</strong></div>
+          <div class="result-row"><span>Total paid wait time</span><strong id="review-paid-wait">0 hr 0 min</strong></div>
+          <div class="result-row"><span>Total estimated wait pay</span><strong id="review-wait-pay">$0.00</strong></div>
+          <div class="result-row"><span>Per diem applied</span><strong id="review-per-diem-applied">No</strong></div>
+          <div class="result-row"><span>Per diem amount</span><strong id="review-per-diem-pay">$0.00</strong></div>
+          <div class="result-row"><span>Sleeper berth applied</span><strong id="review-sleeper-applied">No</strong></div>
+          <div class="result-row"><span>Sleeper berth amount</span><strong id="review-sleeper-pay">$0.00</strong></div>
+          <div class="result-row total-row"><span>Total estimated daily earnings</span><strong id="review-total-earnings">$0.00</strong></div>
+        </div>
+      </section>
+
+      <section class="panel backup-panel" aria-labelledby="backup-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">5</p>
+            <h2 id="backup-title">Download / Backup</h2>
+          </div>
+        </div>
+        <p class="backup-reminder">Use Download Load Log regularly to back up your records.</p>
+        <div class="button-row backup-actions">
+          <button class="button secondary" id="download-log-button" type="button">Download Load Log CSV</button>
+          <button class="button secondary" id="download-earnings-button" type="button">Download Daily Earnings CSV</button>
+          <button class="button danger" id="clear-log-button" type="button">Clear Saved Load Log</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
