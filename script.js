@@ -1,4 +1,4 @@
-const APP_VERSION = "1.1.2";
+const APP_VERSION = "1.2.1";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -8,10 +8,21 @@ const EARNINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.dailySummaries';
 const PROFILE_STORAGE_KEY = 'personalOilfieldLoadTracker.profile';
 const META_STORAGE_KEY = 'personalOilfieldLoadTracker.meta';
 const MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.preMigrationBackup.v2';
+const FIREBASE_MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.firebaseMigrationSafetyBackup.v3';
 const LEGACY_STORAGE_KEY = 'personalOilfieldLoadTrackerLog';
 const LEGACY_ADD_ON_STORAGE_KEY = 'personalOilfieldDailyEarningsAddOns';
 const LEGACY_EARNINGS_STORAGE_KEY = 'personalOilfieldDailyEarningsRecords';
 const BACKUP_FORMAT = 'personal-oilfield-load-tracker-backup';
+const CLOUD_MIGRATION_VERSION = 1;
+const FIREBASE_SDK_VERSION = '10.12.5';
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC68MPQAa0nsAX-Wq2WSfO09H1kI6P4kaA",
+  authDomain: "arrond-oilfield-load-tracker.firebaseapp.com",
+  projectId: "arrond-oilfield-load-tracker",
+  storageBucket: "arrond-oilfield-load-tracker.firebasestorage.app",
+  messagingSenderId: "82334123608",
+  appId: "1:82334123608:web:6c6f208d3411eef9cc6c2d"
+};
 const COMPLETED_STATUS = 'Completed Load';
 const REJECT_STATUS = 'Reject';
 const REJECT_PAY = 20;
@@ -262,8 +273,27 @@ const appVersion = document.getElementById('app-version');
 const settingsAppVersion = document.getElementById('settings-app-version');
 const settingsDataVersion = document.getElementById('settings-data-version');
 const settingsUpdateState = document.getElementById('settings-update-state');
+const settingsSyncState = document.getElementById('settings-sync-state');
 const storageWarning = document.getElementById('storage-warning');
 const saveStatus = document.getElementById('save-status');
+const authControls = {
+  form: document.getElementById('auth-form'),
+  email: document.getElementById('auth-email'),
+  password: document.getElementById('auth-password'),
+  signInButton: document.getElementById('sign-in-button'),
+  signOutButton: document.getElementById('sign-out-button'),
+  authStatus: document.getElementById('auth-status'),
+  authError: document.getElementById('auth-error'),
+  signedInEmail: document.getElementById('signed-in-email'),
+  syncStatus: document.getElementById('sync-status'),
+  cloudLoadCount: document.getElementById('cloud-load-count'),
+  localLoadCount: document.getElementById('local-load-count'),
+  migrationPanel: document.getElementById('migration-panel'),
+  migrationSummary: document.getElementById('migration-summary'),
+  migrationStatus: document.getElementById('migration-status'),
+  downloadBeforeMigrationButton: document.getElementById('download-before-migration-button'),
+  startMigrationButton: document.getElementById('start-migration-button')
+};
 
 const storageWarnings = [];
 const storageAudit = {
@@ -278,9 +308,31 @@ let dailyAddOns = loadDailyAddOns();
 let dailyEarningsRecords = loadDailySummaries();
 let driverProfile = loadDriverProfile();
 let appMeta = loadAppMeta();
+let localStartupSnapshot = cloneTrackerState({
+  loads: savedLoads,
+  dailyAddOns,
+  dailySummaries: dailyEarningsRecords,
+  profile: driverProfile,
+  metadata: appMeta
+});
 let editingLoadId = null;
 let pendingDuplicateRecord = null;
 let waitingServiceWorker = null;
+const cloudSync = {
+  enabled: false,
+  app: null,
+  auth: null,
+  db: null,
+  sdk: null,
+  user: null,
+  authReady: false,
+  unsubscribe: [],
+  pendingWrites: 0,
+  lastError: '',
+  applyingCloudState: false,
+  source: 'local',
+  state: createEmptyCloudState()
+};
 
 function toKey(id) {
   return id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -356,6 +408,1133 @@ function clearProfileStatus() {
 
   profileControls.status.textContent = '';
   profileControls.status.className = 'save-status';
+}
+
+function deepClone(value) {
+  try {
+    return JSON.parse(JSON.stringify(value ?? null));
+  } catch {
+    return null;
+  }
+}
+
+function cloneTrackerState(state) {
+  return {
+    loads: deepClone(state.loads || []) || [],
+    dailyAddOns: deepClone(state.dailyAddOns || {}) || {},
+    dailySummaries: deepClone(state.dailySummaries || {}) || {},
+    profile: deepClone(state.profile || {}) || {},
+    metadata: deepClone(state.metadata || {}) || {}
+  };
+}
+
+function createEmptyCloudState() {
+  return {
+    loads: [],
+    dailyAddOns: {},
+    dailySummaries: {},
+    profile: null,
+    settings: null,
+    migration: null,
+    loaded: {
+      loads: false,
+      dailyAddOns: false,
+      dailySummaries: false,
+      profile: false,
+      settings: false,
+      migration: false
+    },
+    hasPendingWrites: false,
+    fromCache: false,
+    lastSnapshotAt: null
+  };
+}
+
+function setElementText(element, value) {
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function setAuthError(message, isError = false) {
+  if (!authControls.authError) {
+    return;
+  }
+
+  authControls.authError.textContent = message;
+  authControls.authError.classList.toggle('error', Boolean(isError));
+}
+
+function setMigrationStatus(message, isError = false) {
+  if (!authControls.migrationStatus) {
+    return;
+  }
+
+  authControls.migrationStatus.textContent = message;
+  authControls.migrationStatus.classList.toggle('error', Boolean(isError));
+}
+
+function setSyncStatus(message, state = '') {
+  setElementText(authControls.syncStatus, message);
+
+  if (authControls.syncStatus) {
+    authControls.syncStatus.className = `status-pill sync-pill${state ? ` ${state}` : ''}`;
+  }
+
+  if (settingsSyncState) {
+    settingsSyncState.textContent = message;
+  }
+}
+
+function isBrowserOnline() {
+  return !globalThis.navigator || globalThis.navigator.onLine !== false;
+}
+
+function isCloudSignedIn() {
+  return Boolean(cloudSync.enabled && cloudSync.user && cloudSync.db && cloudSync.sdk);
+}
+
+function isCloudReady() {
+  if (!isCloudSignedIn()) {
+    return false;
+  }
+
+  return Object.values(cloudSync.state.loaded).every(Boolean);
+}
+
+function isCloudMigrationComplete() {
+  const migrationVersion = Number(cloudSync.state.migration?.migrationVersion || 0);
+  return migrationVersion >= CLOUD_MIGRATION_VERSION || cloudSync.state.settings?.cloudAuthoritative === true;
+}
+
+function getLocalSafetyLoadCount() {
+  return countUniqueLoads(localStartupSnapshot.loads || []);
+}
+
+function updateSyncStatusFromState() {
+  if (!cloudSync.enabled) {
+    setSyncStatus('Local only');
+    return;
+  }
+
+  if (!cloudSync.authReady) {
+    setSyncStatus('Connecting');
+    return;
+  }
+
+  if (!cloudSync.user) {
+    setSyncStatus('Local only');
+    return;
+  }
+
+  if (cloudSync.lastError) {
+    setSyncStatus('Sync error', 'error');
+    return;
+  }
+
+  if (!isBrowserOnline()) {
+    setSyncStatus('Offline', 'offline');
+    return;
+  }
+
+  if (cloudSync.pendingWrites > 0 || cloudSync.state.hasPendingWrites) {
+    setSyncStatus('Syncing', 'pending');
+    return;
+  }
+
+  if (!isCloudReady()) {
+    setSyncStatus('Connecting');
+    return;
+  }
+
+  if (cloudSync.state.fromCache) {
+    setSyncStatus('Offline', 'offline');
+    return;
+  }
+
+  setSyncStatus('Synced');
+}
+
+function updateAuthUi() {
+  const signedIn = Boolean(cloudSync.user);
+  setElementText(authControls.authStatus, signedIn ? 'Signed in' : (cloudSync.authReady ? 'Not signed in' : 'Checking sign-in...'));
+  setElementText(authControls.signedInEmail, signedIn ? (cloudSync.user.email || 'Signed in') : 'Not signed in');
+  setElementText(authControls.cloudLoadCount, String(cloudSync.state.loads.length));
+  setElementText(authControls.localLoadCount, String(getLocalSafetyLoadCount()));
+
+  if (authControls.email) {
+    authControls.email.disabled = signedIn;
+  }
+
+  if (authControls.password) {
+    authControls.password.disabled = signedIn;
+  }
+
+  if (authControls.signInButton) {
+    authControls.signInButton.hidden = signedIn;
+    authControls.signInButton.disabled = !cloudSync.enabled && cloudSync.authReady;
+  }
+
+  if (authControls.signOutButton) {
+    authControls.signOutButton.hidden = !signedIn;
+  }
+
+  updateMigrationPanel();
+  updateSyncStatusFromState();
+}
+
+function getLoadComparableTime(load) {
+  const value = load?.updatedAt || load?.savedAt || load?.createdAt || '';
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function normalizeFingerprintValue(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function buildLoadFingerprint(load) {
+  const source = {
+    id: normalizeFingerprintValue(load.id),
+    loadDate: normalizeFingerprintValue(load.loadDate),
+    ticketNumber: normalizeFingerprintValue(load.ticketNumber),
+    bolNumber: normalizeFingerprintValue(load.bolNumber),
+    loadNumber: normalizeFingerprintValue(load.loadNumber),
+    pickupLocation: normalizeFingerprintValue(load.pickupLocation),
+    dropoffLocation: normalizeFingerprintValue(load.dropoffLocation),
+    driverName: normalizeFingerprintValue(load.driverName),
+    truckNumber: normalizeFingerprintValue(load.truckNumber),
+    trailerNumber: normalizeFingerprintValue(load.trailerNumber),
+    savedAt: normalizeFingerprintValue(load.savedAt),
+    grossBarrels: normalizeFingerprintValue(load.grossBarrels),
+    loadedMiles: normalizeFingerprintValue(load.loadedMiles)
+  };
+
+  return `load-${hashString(JSON.stringify(source))}`;
+}
+
+function toCloudDocumentId(value) {
+  const text = String(value || '').trim();
+  const safeText = text ? encodeURIComponent(text).replaceAll('.', '%2E') : `missing-${Date.now()}`;
+  return safeText.length <= 1200 ? safeText : `long-${hashString(safeText)}`;
+}
+
+function timestampToIso(value) {
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate().toISOString();
+  }
+
+  return value;
+}
+
+function normalizeCloudData(value) {
+  const converted = timestampToIso(value);
+
+  if (Array.isArray(converted)) {
+    return converted.map(normalizeCloudData);
+  }
+
+  if (converted && typeof converted === 'object' && typeof converted.toDate !== 'function') {
+    return Object.fromEntries(
+      Object.entries(converted)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .map(([key, entryValue]) => [key, normalizeCloudData(entryValue)])
+    );
+  }
+
+  return converted;
+}
+
+function sanitizeForFirestore(value) {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForFirestore).filter((entry) => entry !== undefined);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== undefined && typeof entryValue !== 'function')
+        .map(([key, entryValue]) => [key, sanitizeForFirestore(entryValue)])
+        .filter(([, entryValue]) => entryValue !== undefined)
+    );
+  }
+
+  return value === undefined ? null : value;
+}
+
+function getCloudDuplicateMaps() {
+  const byId = new Map();
+  const byFingerprint = new Map();
+
+  cloudSync.state.loads.forEach((load) => {
+    if (load.id) {
+      byId.set(String(load.id), load);
+    }
+
+    byFingerprint.set(load.migrationFingerprint || buildLoadFingerprint(load), load);
+  });
+
+  return { byId, byFingerprint };
+}
+
+function getMigrationPreview(localLoads = localStartupSnapshot.loads || []) {
+  const { byId, byFingerprint } = getCloudDuplicateMaps();
+  let uploadCount = 0;
+  let skippedCount = 0;
+  let newerCloudCount = 0;
+
+  getUniqueSavedLoads(localLoads).forEach((load) => {
+    const cloudById = byId.get(String(load.id));
+    const cloudByFingerprint = byFingerprint.get(buildLoadFingerprint(load));
+
+    if (cloudById) {
+      if (getLoadComparableTime(load) > getLoadComparableTime(cloudById)) {
+        uploadCount += 1;
+      } else {
+        skippedCount += 1;
+        newerCloudCount += getLoadComparableTime(cloudById) > getLoadComparableTime(load) ? 1 : 0;
+      }
+      return;
+    }
+
+    if (cloudByFingerprint) {
+      skippedCount += 1;
+      return;
+    }
+
+    uploadCount += 1;
+  });
+
+  return {
+    examinedCount: countUniqueLoads(localLoads),
+    cloudCount: cloudSync.state.loads.length,
+    uploadCount,
+    skippedCount,
+    newerCloudCount
+  };
+}
+
+function updateMigrationPanel() {
+  if (!authControls.migrationPanel) {
+    return;
+  }
+
+  const localCount = getLocalSafetyLoadCount();
+  const ready = isCloudReady();
+  const shouldShow = Boolean(cloudSync.user && ready && localCount > 0 && !isCloudMigrationComplete());
+
+  authControls.migrationPanel.hidden = !shouldShow;
+
+  if (!shouldShow) {
+    return;
+  }
+
+  const preview = getMigrationPreview();
+  setElementText(
+    authControls.migrationSummary,
+    `Found ${preview.examinedCount} local load ${preview.examinedCount === 1 ? 'record' : 'records'} and ${preview.cloudCount} cloud load ${preview.cloudCount === 1 ? 'record' : 'records'}. Migration will upload ${preview.uploadCount} not already in Firebase and skip ${preview.skippedCount} duplicate or newer cloud ${preview.skippedCount === 1 ? 'record' : 'records'}. Local browser records stay in place.`
+  );
+
+  if (authControls.startMigrationButton) {
+    authControls.startMigrationButton.disabled = preview.examinedCount === 0;
+  }
+}
+
+function canStartFirebase() {
+  return Boolean(globalThis.location && authControls.form);
+}
+
+async function loadFirebaseModules() {
+  const baseUrl = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}`;
+  const [appModule, authModule, firestoreModule] = await Promise.all([
+    import(`${baseUrl}/firebase-app.js`),
+    import(`${baseUrl}/firebase-auth.js`),
+    import(`${baseUrl}/firebase-firestore.js`)
+  ]);
+
+  return {
+    initializeApp: appModule.initializeApp,
+    getAuth: authModule.getAuth,
+    signInWithEmailAndPassword: authModule.signInWithEmailAndPassword,
+    signOut: authModule.signOut,
+    onAuthStateChanged: authModule.onAuthStateChanged,
+    setPersistence: authModule.setPersistence,
+    browserLocalPersistence: authModule.browserLocalPersistence,
+    getFirestore: firestoreModule.getFirestore,
+    enableIndexedDbPersistence: firestoreModule.enableIndexedDbPersistence,
+    collection: firestoreModule.collection,
+    doc: firestoreModule.doc,
+    setDoc: firestoreModule.setDoc,
+    deleteDoc: firestoreModule.deleteDoc,
+    getDocs: firestoreModule.getDocs,
+    writeBatch: firestoreModule.writeBatch,
+    onSnapshot: firestoreModule.onSnapshot,
+    serverTimestamp: firestoreModule.serverTimestamp
+  };
+}
+
+async function initializeFirebaseSync() {
+  if (!canStartFirebase()) {
+    cloudSync.authReady = true;
+    updateAuthUi();
+    return;
+  }
+
+  setSyncStatus('Connecting');
+
+  try {
+    cloudSync.sdk = await loadFirebaseModules();
+    cloudSync.app = cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
+    cloudSync.auth = cloudSync.sdk.getAuth(cloudSync.app);
+    cloudSync.db = cloudSync.sdk.getFirestore(cloudSync.app);
+    cloudSync.enabled = true;
+
+    await cloudSync.sdk.setPersistence(cloudSync.auth, cloudSync.sdk.browserLocalPersistence).catch(() => {
+      setAuthError('Sign-in can still work, but this browser may not remember the session as reliably.', true);
+    });
+
+    await cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db).catch(() => {
+      setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
+    });
+
+    cloudSync.sdk.onAuthStateChanged(cloudSync.auth, handleFirebaseUser, handleFirebaseAuthError);
+
+    globalThis.addEventListener?.('online', updateSyncStatusFromState);
+    globalThis.addEventListener?.('offline', updateSyncStatusFromState);
+  } catch {
+    cloudSync.enabled = false;
+    cloudSync.authReady = true;
+    cloudSync.lastError = 'Firebase sync could not start.';
+    setAuthError('Firebase sync could not start. Local records are still available.', true);
+    updateAuthUi();
+  }
+}
+
+function stopCloudListeners() {
+  cloudSync.unsubscribe.forEach((unsubscribe) => {
+    try {
+      unsubscribe();
+    } catch {
+      // Listener cleanup is best effort.
+    }
+  });
+
+  cloudSync.unsubscribe = [];
+}
+
+function cloudUserPath(...segments) {
+  return ['users', cloudSync.user.uid, ...segments];
+}
+
+function cloudCollection(...segments) {
+  return cloudSync.sdk.collection(cloudSync.db, ...cloudUserPath(...segments));
+}
+
+function cloudDocument(...segments) {
+  return cloudSync.sdk.doc(cloudSync.db, ...cloudUserPath(...segments));
+}
+
+function normalizeCloudLoadDocument(documentSnapshot) {
+  const data = normalizeCloudData(documentSnapshot.data() || {});
+  return normalizeSavedLoad({
+    ...data,
+    id: data.id || data.loadId || decodeURIComponent(String(documentSnapshot.id || ''))
+  });
+}
+
+function normalizeCloudDateMap(snapshot, normalizer) {
+  const records = {};
+
+  snapshot.docs.forEach((documentSnapshot) => {
+    const data = normalizeCloudData(documentSnapshot.data() || {});
+    const key = data.date || decodeURIComponent(String(documentSnapshot.id || ''));
+
+    if (key) {
+      records[key] = normalizer({ ...data, date: key });
+    }
+  });
+
+  return records;
+}
+
+function updateCloudSnapshotMetadata(snapshot) {
+  cloudSync.state.hasPendingWrites = Boolean(snapshot.metadata?.hasPendingWrites);
+  cloudSync.state.fromCache = Boolean(snapshot.metadata?.fromCache);
+  cloudSync.state.lastSnapshotAt = new Date().toISOString();
+}
+
+function handleCloudSnapshotChange(snapshot) {
+  updateCloudSnapshotMetadata(snapshot);
+  cloudSync.lastError = '';
+  handleCloudStateChanged();
+}
+
+function handleCloudListenerError() {
+  cloudSync.lastError = 'Cloud sync error.';
+  setAuthError('Cloud sync had a problem. Local records were not changed.', true);
+  updateAuthUi();
+}
+
+function listenToCloudCollection(name, collectionName, mapper) {
+  const unsubscribe = cloudSync.sdk.onSnapshot(
+    cloudCollection(collectionName),
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      cloudSync.state[name] = mapper(snapshot);
+      cloudSync.state.loaded[name] = true;
+      handleCloudSnapshotChange(snapshot);
+    },
+    handleCloudListenerError
+  );
+
+  cloudSync.unsubscribe.push(unsubscribe);
+}
+
+function listenToCloudDocument(name, collectionName, documentName) {
+  const unsubscribe = cloudSync.sdk.onSnapshot(
+    cloudDocument(collectionName, documentName),
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      cloudSync.state[name] = snapshot.exists() ? normalizeCloudData(snapshot.data()) : null;
+      cloudSync.state.loaded[name] = true;
+      handleCloudSnapshotChange(snapshot);
+    },
+    handleCloudListenerError
+  );
+
+  cloudSync.unsubscribe.push(unsubscribe);
+}
+
+function startCloudListeners() {
+  stopCloudListeners();
+  cloudSync.state = createEmptyCloudState();
+  setAuthError('');
+  setMigrationStatus('');
+  updateAuthUi();
+
+  listenToCloudCollection('loads', 'loads', (snapshot) => (
+    snapshot.docs.map(normalizeCloudLoadDocument).sort((left, right) => (
+      String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
+      || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
+    ))
+  ));
+  listenToCloudCollection('dailyAddOns', 'dailyAddOns', (snapshot) => normalizeCloudDateMap(snapshot, (item) => normalizeDailyAddOns({ [item.date]: item })[item.date]));
+  listenToCloudCollection('dailySummaries', 'dailySummaries', (snapshot) => normalizeCloudDateMap(snapshot, (item) => item));
+  listenToCloudDocument('profile', 'profile', 'current');
+  listenToCloudDocument('settings', 'settings', 'app');
+  listenToCloudDocument('migration', 'metadata', 'migration');
+}
+
+function handleFirebaseUser(user) {
+  cloudSync.authReady = true;
+  cloudSync.user = user || null;
+  cloudSync.lastError = '';
+  setAuthError('');
+
+  if (!user) {
+    stopCloudListeners();
+    cloudSync.state = createEmptyCloudState();
+    cloudSync.source = 'local';
+    restoreLocalSafetySnapshot();
+    updateAuthUi();
+    return;
+  }
+
+  startCloudListeners();
+  updateAuthUi();
+}
+
+function handleFirebaseAuthError() {
+  cloudSync.authReady = true;
+  cloudSync.lastError = 'Authentication error.';
+  setAuthError('Sign-in could not be checked. Local records are still available.', true);
+  updateAuthUi();
+}
+
+function shouldApplyCloudState() {
+  if (!isCloudReady()) {
+    return false;
+  }
+
+  if (isCloudMigrationComplete()) {
+    return true;
+  }
+
+  if (getLocalSafetyLoadCount() === 0) {
+    return true;
+  }
+
+  return appMeta.cloudSync?.authoritative === true && appMeta.cloudSync?.uid === cloudSync.user.uid;
+}
+
+function persistCurrentStateToLocalFallback() {
+  storeJson(STORAGE_KEY, savedLoads, 'load log');
+  storeJson(ADD_ON_STORAGE_KEY, dailyAddOns, 'daily add-ons');
+  storeJson(EARNINGS_STORAGE_KEY, dailyEarningsRecords, 'daily summaries');
+  storeJson(PROFILE_STORAGE_KEY, driverProfile, 'driver profile');
+  saveAppMeta();
+}
+
+function applyCloudStateToApp() {
+  if (cloudSync.applyingCloudState) {
+    return;
+  }
+
+  cloudSync.applyingCloudState = true;
+
+  savedLoads = cloudSync.state.loads.map(normalizeSavedLoad);
+  dailyAddOns = normalizeDailyAddOns(cloudSync.state.dailyAddOns);
+  dailyEarningsRecords = isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {};
+  driverProfile = normalizeDriverProfile(cloudSync.state.profile || {});
+  appMeta = {
+    ...appMeta,
+    ...(isPlainObject(cloudSync.state.settings) ? cloudSync.state.settings : {}),
+    cloudSync: {
+      authoritative: true,
+      uid: cloudSync.user.uid,
+      email: cloudSync.user.email || '',
+      lastSyncedAt: new Date().toISOString()
+    }
+  };
+
+  refreshAllDailyEarningsRecords();
+  applyProfileToControls();
+  applyDailyAddOnsToControls();
+  renderSummary();
+  updateDailySummary();
+  persistCurrentStateToLocalFallback();
+  cloudSync.source = 'cloud';
+  cloudSync.applyingCloudState = false;
+}
+
+function restoreLocalSafetySnapshot() {
+  savedLoads = (localStartupSnapshot.loads || []).map(normalizeSavedLoad);
+  dailyAddOns = normalizeDailyAddOns(localStartupSnapshot.dailyAddOns || {});
+  dailyEarningsRecords = isPlainObject(localStartupSnapshot.dailySummaries) ? localStartupSnapshot.dailySummaries : {};
+  driverProfile = normalizeDriverProfile(localStartupSnapshot.profile || {});
+  appMeta = isPlainObject(localStartupSnapshot.metadata) ? localStartupSnapshot.metadata : {};
+
+  refreshAllDailyEarningsRecords();
+  applyProfileToControls();
+  applyDailyAddOnsToControls();
+  renderSummary();
+  updateDailySummary();
+}
+
+function handleCloudStateChanged() {
+  if (shouldApplyCloudState()) {
+    applyCloudStateToApp();
+  }
+
+  updateAuthUi();
+}
+
+function getFriendlyAuthError(error) {
+  const code = error?.code || '';
+
+  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
+    return 'Email or password did not match.';
+  }
+
+  if (code.includes('too-many-requests')) {
+    return 'Too many attempts. Wait a bit and try again.';
+  }
+
+  if (code.includes('network')) {
+    return 'Could not reach Firebase. Check the connection and try again.';
+  }
+
+  return 'Sign-in failed. Check the email and password, then try again.';
+}
+
+async function handleSignIn(event) {
+  event.preventDefault();
+
+  if (!cloudSync.enabled || !cloudSync.auth) {
+    setAuthError('Firebase sync is not ready. Local records are still available.', true);
+    return;
+  }
+
+  const email = authControls.email?.value.trim() || '';
+  const password = authControls.password?.value || '';
+
+  if (!email || !password) {
+    setAuthError('Enter the Firebase email and password.', true);
+    return;
+  }
+
+  setAuthError('Signing in...');
+
+  if (authControls.signInButton) {
+    authControls.signInButton.disabled = true;
+  }
+
+  try {
+    await cloudSync.sdk.signInWithEmailAndPassword(cloudSync.auth, email, password);
+
+    if (authControls.password) {
+      authControls.password.value = '';
+    }
+
+    setAuthError('Signed in. Checking cloud records...');
+  } catch (error) {
+    setAuthError(getFriendlyAuthError(error), true);
+  } finally {
+    if (authControls.signInButton) {
+      authControls.signInButton.disabled = false;
+    }
+  }
+}
+
+async function handleSignOut() {
+  if (!cloudSync.enabled || !cloudSync.auth) {
+    return;
+  }
+
+  setAuthError('Signing out...');
+
+  try {
+    await cloudSync.sdk.signOut(cloudSync.auth);
+    setAuthError('Signed out. Cloud records are hidden on this device.');
+  } catch {
+    setAuthError('Sign out failed. Try again when the connection is available.', true);
+  }
+}
+
+function buildCloudLoadPayload(record) {
+  const normalized = normalizeSavedLoad(record);
+  const now = new Date().toISOString();
+
+  return sanitizeForFirestore({
+    ...normalized,
+    id: normalized.id,
+    createdAt: normalized.createdAt || normalized.savedAt || now,
+    updatedAt: normalized.updatedAt || now,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    migrationFingerprint: buildLoadFingerprint(normalized),
+    cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+  });
+}
+
+function buildCloudAddOnPayload(date) {
+  return sanitizeForFirestore({
+    ...getDailyAddOn(date),
+    date,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    updatedAt: new Date().toISOString(),
+    cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+  });
+}
+
+function buildCloudSummaryPayload(date) {
+  return sanitizeForFirestore({
+    ...getDailyEarningsSummary(date),
+    date,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    updatedAt: new Date().toISOString(),
+    cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+  });
+}
+
+function buildCloudProfilePayload() {
+  return sanitizeForFirestore({
+    ...driverProfile,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    updatedAt: driverProfile.updatedAt || new Date().toISOString(),
+    cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+  });
+}
+
+function buildCloudSettingsPayload(extra = {}) {
+  return sanitizeForFirestore({
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    storageKeys: {
+      loads: STORAGE_KEY,
+      dailyAddOns: ADD_ON_STORAGE_KEY,
+      dailySummaries: EARNINGS_STORAGE_KEY,
+      profile: PROFILE_STORAGE_KEY,
+      metadata: META_STORAGE_KEY
+    },
+    cloudAuthoritative: isCloudMigrationComplete() || appMeta.cloudSync?.authoritative === true,
+    updatedAt: new Date().toISOString(),
+    ...extra,
+    cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+  });
+}
+
+function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending.') {
+  if (!isCloudSignedIn() || cloudSync.applyingCloudState) {
+    return;
+  }
+
+  cloudSync.pendingWrites += 1;
+  updateSyncStatusFromState();
+
+  Promise.resolve()
+    .then(writeOperation)
+    .then(() => {
+      cloudSync.lastError = '';
+    })
+    .catch(() => {
+      cloudSync.lastError = failureMessage;
+      setAuthError(`${failureMessage} Local records were still saved on this device.`, true);
+    })
+    .finally(() => {
+      cloudSync.pendingWrites = Math.max(0, cloudSync.pendingWrites - 1);
+      updateAuthUi();
+    });
+}
+
+function syncLoadToCloud(record) {
+  if (!isCloudSignedIn()) {
+    return;
+  }
+
+  queueCloudWrite(() => cloudSync.sdk.setDoc(
+    cloudDocument('loads', toCloudDocumentId(record.id)),
+    buildCloudLoadPayload(record),
+    { merge: true }
+  ), 'Load could not be synced to Firebase yet.');
+}
+
+function deleteCloudLoad(loadId) {
+  if (!isCloudSignedIn()) {
+    return;
+  }
+
+  queueCloudWrite(() => cloudSync.sdk.deleteDoc(
+    cloudDocument('loads', toCloudDocumentId(loadId))
+  ), 'Deleted load could not be synced to Firebase yet.');
+}
+
+function syncDailyAddOnToCloud(date) {
+  if (!isCloudSignedIn() || !date) {
+    return;
+  }
+
+  queueCloudWrite(() => {
+    const addOn = dailyAddOns[date];
+    const ref = cloudDocument('dailyAddOns', toCloudDocumentId(date));
+
+    if (!addOn || (!addOn.perDiem && !addOn.sleeperBerth && !addOn.trainerPay && !addOn.notes)) {
+      return cloudSync.sdk.deleteDoc(ref);
+    }
+
+    return cloudSync.sdk.setDoc(ref, buildCloudAddOnPayload(date), { merge: true });
+  }, 'Daily add-ons could not be synced to Firebase yet.');
+}
+
+function syncDailySummaryToCloud(date) {
+  if (!isCloudSignedIn() || !date) {
+    return;
+  }
+
+  queueCloudWrite(() => cloudSync.sdk.setDoc(
+    cloudDocument('dailySummaries', toCloudDocumentId(date)),
+    buildCloudSummaryPayload(date),
+    { merge: true }
+  ), 'Daily totals could not be synced to Firebase yet.');
+}
+
+function syncProfileToCloud() {
+  if (!isCloudSignedIn()) {
+    return;
+  }
+
+  queueCloudWrite(() => cloudSync.sdk.setDoc(
+    cloudDocument('profile', 'current'),
+    buildCloudProfilePayload(),
+    { merge: true }
+  ), 'Profile could not be synced to Firebase yet.');
+}
+
+function syncSettingsToCloud(extra = {}) {
+  if (!isCloudSignedIn()) {
+    return;
+  }
+
+  queueCloudWrite(() => cloudSync.sdk.setDoc(
+    cloudDocument('settings', 'app'),
+    buildCloudSettingsPayload(extra),
+    { merge: true }
+  ), 'Settings could not be synced to Firebase yet.');
+}
+
+function syncCurrentDateToCloud(date) {
+  if (!isCloudSignedIn() || !date) {
+    return;
+  }
+
+  syncDailyAddOnToCloud(date);
+  syncDailySummaryToCloud(date);
+}
+
+function syncImportedStateToCloud(nextState, mode) {
+  if (!isCloudSignedIn()) {
+    return;
+  }
+
+  queueCloudWrite(async () => {
+    const batch = cloudSync.sdk.writeBatch(cloudSync.db);
+    const nextLoadIds = new Set(nextState.loads.map((load) => String(load.id)));
+    const nextAddOnDates = new Set(Object.keys(nextState.dailyAddOns || {}));
+    const nextSummaryDates = new Set(Object.keys(nextState.dailySummaries || {}));
+
+    nextState.loads.forEach((load) => {
+      batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
+    });
+
+    Object.keys(nextState.dailyAddOns || {}).forEach((date) => {
+      batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), sanitizeForFirestore({
+        ...nextState.dailyAddOns[date],
+        date,
+        cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+      }), { merge: true });
+    });
+
+    Object.keys(nextState.dailySummaries || {}).forEach((date) => {
+      batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
+        ...nextState.dailySummaries[date],
+        date,
+        cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+      }), { merge: true });
+    });
+
+    batch.set(cloudDocument('profile', 'current'), sanitizeForFirestore({
+      ...nextState.profile,
+      cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+    }), { merge: true });
+    batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+      lastImport: nextState.metadata?.lastImport || { importedAt: new Date().toISOString(), importMode: mode }
+    }), { merge: true });
+
+    if (mode === 'replace') {
+      cloudSync.state.loads.forEach((load) => {
+        if (!nextLoadIds.has(String(load.id))) {
+          batch.delete(cloudDocument('loads', toCloudDocumentId(load.id)));
+        }
+      });
+
+      Object.keys(cloudSync.state.dailyAddOns || {}).forEach((date) => {
+        if (!nextAddOnDates.has(date)) {
+          batch.delete(cloudDocument('dailyAddOns', toCloudDocumentId(date)));
+        }
+      });
+
+      Object.keys(cloudSync.state.dailySummaries || {}).forEach((date) => {
+        if (!nextSummaryDates.has(date)) {
+          batch.delete(cloudDocument('dailySummaries', toCloudDocumentId(date)));
+        }
+      });
+    }
+
+    await batch.commit();
+  }, 'Imported data could not be synced to Firebase yet.');
+}
+
+function getLocalMigrationState() {
+  const startupHasLoads = countUniqueLoads(localStartupSnapshot.loads || []) > 0;
+
+  return cloneTrackerState({
+    loads: getUniqueSavedLoads(startupHasLoads ? localStartupSnapshot.loads : savedLoads),
+    dailyAddOns: startupHasLoads ? localStartupSnapshot.dailyAddOns : dailyAddOns,
+    dailySummaries: startupHasLoads ? localStartupSnapshot.dailySummaries : dailyEarningsRecords,
+    profile: startupHasLoads ? localStartupSnapshot.profile : driverProfile,
+    metadata: startupHasLoads ? localStartupSnapshot.metadata : appMeta
+  });
+}
+
+function saveFirebaseMigrationSafetyBackup(localState) {
+  return storeJson(FIREBASE_MIGRATION_BACKUP_STORAGE_KEY, {
+    format: BACKUP_FORMAT,
+    backupType: 'pre-firebase-cloud-migration',
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    createdAt: new Date().toISOString(),
+    recordCount: countUniqueLoads(localState.loads),
+    data: localState
+  }, 'Firebase migration safety backup');
+}
+
+function buildMigrationMetadata(stats, localState, verifiedCloudCount) {
+  return sanitizeForFirestore({
+    migrationVersion: CLOUD_MIGRATION_VERSION,
+    migrationDate: new Date().toISOString(),
+    source: 'localStorage',
+    sourceDataVersion: localState.metadata?.dataSchemaVersion || DATA_SCHEMA_VERSION,
+    sourceAppVersion: localState.metadata?.appVersion || APP_VERSION,
+    recordsExamined: stats.examinedCount,
+    recordsUploaded: stats.uploadedCount,
+    recordsSkippedAsDuplicates: stats.skippedCount,
+    recordsSkippedForNewerCloudVersion: stats.newerCloudCount,
+    verifiedCloudCount,
+    localRecordsPreserved: true,
+    storageKeys: {
+      loads: STORAGE_KEY,
+      dailyAddOns: ADD_ON_STORAGE_KEY,
+      dailySummaries: EARNINGS_STORAGE_KEY,
+      profile: PROFILE_STORAGE_KEY,
+      metadata: META_STORAGE_KEY
+    },
+    cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+  });
+}
+
+async function migrateLocalDataToFirebase() {
+  if (!isCloudReady()) {
+    setMigrationStatus('Cloud records are still loading. Try again in a moment.', true);
+    return;
+  }
+
+  const localState = getLocalMigrationState();
+  const localLoads = getUniqueSavedLoads(localState.loads).map(normalizeSavedLoad);
+  const preview = getMigrationPreview(localLoads);
+
+  if (localLoads.length === 0) {
+    setMigrationStatus('No local load records were found to migrate.', true);
+    return;
+  }
+
+  const confirmed = typeof globalThis.confirm === 'function'
+    ? globalThis.confirm(`Migrate ${localLoads.length} local load records to Firebase? Local browser records will remain as a safety copy.`)
+    : false;
+
+  if (!confirmed) {
+    setMigrationStatus('Migration canceled. Local records were not changed.');
+    return;
+  }
+
+  if (!saveFirebaseMigrationSafetyBackup(localState)) {
+    setMigrationStatus('Migration stopped because the local safety backup could not be saved.', true);
+    return;
+  }
+
+  setMigrationStatus(`Migration started. Examining ${preview.examinedCount} local records...`);
+
+  if (authControls.startMigrationButton) {
+    authControls.startMigrationButton.disabled = true;
+  }
+
+  const { byId, byFingerprint } = getCloudDuplicateMaps();
+  const batch = cloudSync.sdk.writeBatch(cloudSync.db);
+  const stats = {
+    examinedCount: localLoads.length,
+    uploadedCount: 0,
+    skippedCount: 0,
+    newerCloudCount: 0
+  };
+
+  try {
+    localLoads.forEach((load) => {
+      const fingerprint = buildLoadFingerprint(load);
+      const cloudById = byId.get(String(load.id));
+      const cloudByFingerprint = byFingerprint.get(fingerprint);
+
+      if (cloudById && getLoadComparableTime(cloudById) >= getLoadComparableTime(load)) {
+        stats.skippedCount += 1;
+        stats.newerCloudCount += getLoadComparableTime(cloudById) > getLoadComparableTime(load) ? 1 : 0;
+        return;
+      }
+
+      if (!cloudById && cloudByFingerprint) {
+        stats.skippedCount += 1;
+        return;
+      }
+
+      batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload({
+        ...load,
+        migrationFingerprint: fingerprint
+      }), { merge: true });
+      stats.uploadedCount += 1;
+    });
+
+    const addOns = normalizeDailyAddOns(localState.dailyAddOns || {});
+    Object.keys(addOns).forEach((date) => {
+      batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), sanitizeForFirestore({
+        ...addOns[date],
+        date,
+        appVersion: APP_VERSION,
+        dataSchemaVersion: DATA_SCHEMA_VERSION,
+        cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+      }), { merge: true });
+    });
+
+    const summaries = isPlainObject(localState.dailySummaries) ? localState.dailySummaries : {};
+    Object.keys(summaries).forEach((date) => {
+      batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
+        ...summaries[date],
+        date,
+        appVersion: APP_VERSION,
+        dataSchemaVersion: DATA_SCHEMA_VERSION,
+        cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+      }), { merge: true });
+    });
+
+    batch.set(cloudDocument('profile', 'current'), sanitizeForFirestore({
+      ...normalizeDriverProfile(localState.profile || {}),
+      appVersion: APP_VERSION,
+      dataSchemaVersion: DATA_SCHEMA_VERSION,
+      cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+    }), { merge: true });
+    batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+      cloudAuthoritative: true,
+      migrationVersion: CLOUD_MIGRATION_VERSION
+    }), { merge: true });
+
+    await batch.commit();
+
+    const verifiedSnapshot = await cloudSync.sdk.getDocs(cloudCollection('loads'));
+    const verifiedCloudCount = verifiedSnapshot.docs.length;
+    const migrationMetadata = buildMigrationMetadata(stats, localState, verifiedCloudCount);
+
+    await cloudSync.sdk.setDoc(cloudDocument('metadata', 'migration'), migrationMetadata, { merge: true });
+    await cloudSync.sdk.setDoc(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+      cloudAuthoritative: true,
+      migrationCompletedAt: migrationMetadata.migrationDate,
+      migrationVersion: CLOUD_MIGRATION_VERSION
+    }), { merge: true });
+
+    cloudSync.state.migration = normalizeCloudData(migrationMetadata);
+    appMeta = {
+      ...appMeta,
+      cloudSync: {
+        authoritative: true,
+        uid: cloudSync.user.uid,
+        email: cloudSync.user.email || '',
+        migrationCompletedAt: migrationMetadata.migrationDate
+      }
+    };
+    saveAppMeta();
+    setMigrationStatus(`Migration complete. Uploaded ${stats.uploadedCount}, skipped ${stats.skippedCount}, verified ${verifiedCloudCount} cloud load records. Local records remain on this device.`);
+    updateAuthUi();
+  } catch {
+    setMigrationStatus('Migration failed before completion. Local records were not deleted or changed. You can try again safely.', true);
+  } finally {
+    if (authControls.startMigrationButton) {
+      authControls.startMigrationButton.disabled = false;
+    }
+  }
+}
+
+function downloadBackupBeforeMigration() {
+  const localState = getLocalMigrationState();
+  const backup = {
+    format: BACKUP_FORMAT,
+    backupType: 'pre-firebase-cloud-migration-download',
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    recordCount: countUniqueLoads(localState.loads),
+    data: localState
+  };
+
+  downloadJson(`personal-oilfield-pre-firebase-migration-${todayLocal()}.json`, backup);
+  setMigrationStatus(`Downloaded backup with ${backup.recordCount} ${backup.recordCount === 1 ? 'record' : 'records'}.`);
 }
 
 async function clearOldAppCaches() {
@@ -1777,6 +2956,8 @@ function saveDriverProfile() {
 
   renderProfileSummary();
   saveAppMeta();
+  syncProfileToCloud();
+  syncSettingsToCloud();
   setProfileStatus('Profile saved. New loads will use this driver and equipment.');
 }
 
@@ -1929,7 +3110,7 @@ function buildLoadRecord(values) {
     ...existingLoad,
     id: existingLoad?.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     savedAt: existingLoad?.savedAt || new Date().toISOString(),
-    updatedAt: existingLoad ? new Date().toISOString() : null,
+    updatedAt: new Date().toISOString(),
     ...values
   });
 }
@@ -1967,6 +3148,8 @@ function commitLoadRecord(record) {
   daily.date.value = record.loadDate || daily.date.value;
   storeLoads();
   refreshAllDailyEarningsRecords();
+  syncLoadToCloud(record);
+  syncCurrentDateToCloud(record.loadDate);
   applyDailyAddOnsToControls();
   renderSummary();
   updateDailySummary();
@@ -2042,6 +3225,8 @@ function deleteLoadEntry(loadId) {
   savedLoads = savedLoads.filter((item) => item.id !== loadId);
   storeLoads();
   refreshAllDailyEarningsRecords();
+  deleteCloudLoad(loadId);
+  syncCurrentDateToCloud(load.loadDate);
   hideDuplicateWarning();
   clearSaveMessage();
 
@@ -2275,6 +3460,7 @@ function handleAddOnChange() {
   clearSaveMessage();
   saveDailyAddOnFromControls();
   refreshAllDailyEarningsRecords();
+  syncCurrentDateToCloud(daily.date.value);
   updateDailySummary();
 }
 
@@ -2524,6 +3710,13 @@ function getTrackerSnapshot() {
     dataSchemaVersion: DATA_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     recordCount: countUniqueLoads(),
+    source: isCloudSignedIn() && cloudSync.source === 'cloud' ? 'firestore' : 'localStorage',
+    firebase: {
+      projectId: FIREBASE_CONFIG.projectId,
+      signedIn: Boolean(cloudSync.user),
+      signedInEmail: cloudSync.user?.email || '',
+      cloudAuthoritative: isCloudMigrationComplete() || appMeta.cloudSync?.authoritative === true
+    },
     storageKeys: {
       loads: STORAGE_KEY,
       dailyAddOns: ADD_ON_STORAGE_KEY,
@@ -2760,6 +3953,7 @@ function commitImportedState(nextState) {
   renderSummary();
   updateDailySummary();
   saveAppMeta();
+  syncImportedStateToCloud(nextState, nextState.metadata?.importMode || nextState.stats?.importMode || importMode?.value || 'merge');
   return true;
 }
 
@@ -2790,6 +3984,11 @@ function importJsonBackup() {
     try {
       const imported = parseBackupText(String(reader.result || ''));
       const nextState = buildImportedState(imported, mode);
+
+      if (mode === 'replace') {
+        downloadJson(`personal-oilfield-before-replace-import-${todayLocal()}.json`, getTrackerSnapshot());
+      }
+
       const committed = commitImportedState(nextState);
 
       if (!committed) {
@@ -2886,6 +4085,7 @@ function initialize() {
   renderSummary();
   updateDailySummary();
   registerServiceWorker();
+  initializeFirebaseSync();
 }
 
 form.addEventListener('submit', saveLoad);
@@ -2921,5 +4121,9 @@ exportBackupButton.addEventListener('click', exportJsonBackup);
 importBackupButton.addEventListener('click', importJsonBackup);
 checkUpdatesButton.addEventListener('click', checkForUpdates);
 updateNowButton.addEventListener('click', activateWaitingUpdate);
+authControls.form?.addEventListener('submit', handleSignIn);
+authControls.signOutButton?.addEventListener('click', handleSignOut);
+authControls.downloadBeforeMigrationButton?.addEventListener('click', downloadBackupBeforeMigration);
+authControls.startMigrationButton?.addEventListener('click', migrateLocalDataToFirebase);
 
 initialize();

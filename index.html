@@ -33,6 +33,54 @@
         <button class="button secondary" id="update-now-button" type="button">Update Now</button>
       </section>
 
+      <section class="panel cloud-panel" aria-labelledby="cloud-sync-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Cloud</p>
+            <h2 id="cloud-sync-title">Firebase Sync</h2>
+          </div>
+          <span class="status-pill sync-pill" id="sync-status">Connecting</span>
+        </div>
+        <div class="cloud-layout">
+          <form id="auth-form" class="auth-form">
+            <div class="field-grid auth-fields">
+              <label for="auth-email">
+                <span>Email</span>
+                <input id="auth-email" type="email" autocomplete="username">
+              </label>
+              <label for="auth-password">
+                <span>Password</span>
+                <input id="auth-password" type="password" autocomplete="current-password">
+              </label>
+            </div>
+            <div class="button-row auth-actions">
+              <button class="button primary" id="sign-in-button" type="submit">Sign In</button>
+              <button class="button ghost" id="sign-out-button" type="button" hidden>Sign Out</button>
+            </div>
+          </form>
+          <div class="cloud-status-card">
+            <div class="settings-list">
+              <span>Status</span><strong id="auth-status">Checking sign-in...</strong>
+              <span>Signed in as</span><strong id="signed-in-email">Not signed in</strong>
+              <span>Cloud records</span><strong id="cloud-load-count">0</strong>
+              <span>Local safety copy</span><strong id="local-load-count">0</strong>
+            </div>
+          </div>
+        </div>
+        <div class="migration-panel" id="migration-panel" hidden>
+          <div class="migration-copy">
+            <strong>Local records ready for cloud migration</strong>
+            <span id="migration-summary">Sign in to compare local and cloud records.</span>
+          </div>
+          <div class="button-row migration-actions">
+            <button class="button ghost" id="download-before-migration-button" type="button">Download Backup First</button>
+            <button class="button secondary" id="start-migration-button" type="button">Migrate Local Records</button>
+          </div>
+          <p class="update-status" id="migration-status" aria-live="polite"></p>
+        </div>
+        <p class="update-status" id="auth-error" aria-live="polite"></p>
+      </section>
+
       <section class="panel daily-summary" aria-labelledby="daily-summary-title">
         <div class="section-heading">
           <div>
@@ -425,6 +473,7 @@
               <span>Application version</span><strong id="settings-app-version">1.0.4</strong>
               <span>Data version</span><strong id="settings-data-version">1</strong>
               <span>Update status</span><strong id="settings-update-state">Ready</strong>
+              <span>Sync status</span><strong id="settings-sync-state">Local only</strong>
             </div>
           </div>
         </div>
