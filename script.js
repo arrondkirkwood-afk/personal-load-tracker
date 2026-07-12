@@ -1,17 +1,23 @@
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.1.2";
+const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
 const STORAGE_KEY = 'personalOilfieldLoadTracker.loads';
 const ADD_ON_STORAGE_KEY = 'personalOilfieldLoadTracker.dailyAddOns';
 const EARNINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.dailySummaries';
+const PROFILE_STORAGE_KEY = 'personalOilfieldLoadTracker.profile';
+const META_STORAGE_KEY = 'personalOilfieldLoadTracker.meta';
+const MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.preMigrationBackup.v2';
 const LEGACY_STORAGE_KEY = 'personalOilfieldLoadTrackerLog';
 const LEGACY_ADD_ON_STORAGE_KEY = 'personalOilfieldDailyEarningsAddOns';
 const LEGACY_EARNINGS_STORAGE_KEY = 'personalOilfieldDailyEarningsRecords';
+const BACKUP_FORMAT = 'personal-oilfield-load-tracker-backup';
 const COMPLETED_STATUS = 'Completed Load';
 const REJECT_STATUS = 'Reject';
 const REJECT_PAY = 20;
 const PER_DIEM_PAY = 50;
 const SLEEPER_BERTH_PAY = 60;
+const TRAINER_PAY = 50;
 const WAIT_PAY_RATE = 24;
 const WAIT_GRACE_MINUTES = 60;
 const NO_RATE_FOUND_LABEL = 'No rate found — enter manually';
@@ -84,6 +90,7 @@ const fieldIds = [
   'api-gravity',
   'bsw-percentage',
   'loaded-miles',
+  're-routed-miles',
   'notes',
   'arrived-pickup-time',
   'loaded-time',
@@ -100,6 +107,7 @@ const numberFieldIds = new Set([
   'api-gravity',
   'bsw-percentage',
   'loaded-miles',
+  're-routed-miles',
   'start-meter-reading',
   'end-meter-reading'
 ]);
@@ -116,16 +124,21 @@ const errors = {
   apiGravity: document.getElementById('api-gravity-error'),
   bswPercentage: document.getElementById('bsw-percentage-error'),
   loadedMiles: document.getElementById('loaded-miles-error'),
+  reRoutedMiles: document.getElementById('re-routed-miles-error'),
   startMeterReading: document.getElementById('start-meter-reading-error'),
   endMeterReading: document.getElementById('end-meter-reading-error')
 };
 
 const daily = {
   date: document.getElementById('daily-date'),
+  payPeriodStart: document.getElementById('pay-period-start'),
+  payPeriodEnd: document.getElementById('pay-period-end'),
   completedLoads: document.getElementById('daily-completed-loads'),
   rejects: document.getElementById('daily-rejects'),
   grossBarrels: document.getElementById('daily-gross-barrels'),
   loadedMiles: document.getElementById('daily-loaded-miles'),
+  reRoutedMiles: document.getElementById('daily-re-routed-miles'),
+  totalMilesIncludingReRoute: document.getElementById('daily-total-miles-including-re-route'),
   barrelsOffloaded: document.getElementById('daily-barrels-offloaded'),
   differenceGross: document.getElementById('daily-difference-gross'),
   completedPay: document.getElementById('daily-completed-pay'),
@@ -136,7 +149,16 @@ const daily = {
   waitPay: document.getElementById('daily-wait-pay'),
   perDiemPay: document.getElementById('daily-per-diem-pay'),
   sleeperPay: document.getElementById('daily-sleeper-pay'),
+  trainerPay: document.getElementById('daily-trainer-pay'),
   totalEarnings: document.getElementById('daily-total-earnings')
+};
+
+const dashboard = {
+  totalLoadsHauled: document.getElementById('total-loads-hauled'),
+  currentWorkDate: document.getElementById('current-work-date'),
+  loadsHauledPayPeriod: document.getElementById('loads-hauled-pay-period'),
+  loadsHauledMonth: document.getElementById('loads-hauled-month'),
+  loadsHauledSelectedDate: document.getElementById('loads-hauled-selected-date')
 };
 
 const summary = {
@@ -153,6 +175,9 @@ const summary = {
   grossBarrelsHauled: document.getElementById('summary-gross-barrels-hauled'),
   differenceGross: document.getElementById('meter-difference-gross'),
   offloadStatus: document.getElementById('meter-offload-status'),
+  regularMiles: document.getElementById('summary-regular-miles'),
+  reRoutedMiles: document.getElementById('summary-re-routed-miles'),
+  totalMilesIncludingReRoute: document.getElementById('summary-total-miles-including-re-route'),
   payRange: document.getElementById('pay-range'),
   estimatedPay: document.getElementById('pay-estimated'),
   pickupTime: document.getElementById('summary-pickup-time'),
@@ -168,6 +193,7 @@ const summary = {
 const addOns = {
   perDiem: document.getElementById('per-diem-checkbox'),
   sleeperBerth: document.getElementById('sleeper-berth-checkbox'),
+  trainerPay: document.getElementById('trainer-pay-checkbox'),
   notes: document.getElementById('daily-earnings-notes')
 };
 
@@ -177,6 +203,8 @@ const review = {
   completedLoads: document.getElementById('review-completed-loads'),
   rejects: document.getElementById('review-rejects'),
   loadedMiles: document.getElementById('review-loaded-miles'),
+  reRoutedMiles: document.getElementById('review-re-routed-miles'),
+  totalMilesIncludingReRoute: document.getElementById('review-total-miles-including-re-route'),
   grossBarrels: document.getElementById('review-gross-barrels'),
   barrelsOffloaded: document.getElementById('review-barrels-offloaded'),
   differenceGross: document.getElementById('review-difference-gross'),
@@ -190,6 +218,8 @@ const review = {
   perDiemPay: document.getElementById('review-per-diem-pay'),
   sleeperApplied: document.getElementById('review-sleeper-applied'),
   sleeperPay: document.getElementById('review-sleeper-pay'),
+  trainerApplied: document.getElementById('review-trainer-applied'),
+  trainerPay: document.getElementById('review-trainer-pay'),
   totalEarnings: document.getElementById('review-total-earnings')
 };
 
@@ -203,21 +233,54 @@ const clearFormButton = document.getElementById('clear-form-button');
 const editStatus = document.getElementById('edit-status');
 const savedLoadCards = document.getElementById('saved-load-cards');
 const logCount = document.getElementById('log-count');
+const savedFilters = {
+  search: document.getElementById('saved-search'),
+  scope: document.getElementById('saved-filter-scope'),
+  date: document.getElementById('saved-filter-date')
+};
+const profileControls = {
+  driverName: document.getElementById('profile-driver-name'),
+  truckNumber: document.getElementById('profile-truck-number'),
+  trailerNumber: document.getElementById('profile-trailer-number'),
+  saveButton: document.getElementById('save-profile-button'),
+  status: document.getElementById('profile-status'),
+  summary: document.getElementById('profile-summary')
+};
 const downloadLogButton = document.getElementById('download-log-button');
 const downloadEarningsButton = document.getElementById('download-earnings-button');
-const clearLogButton = document.getElementById('clear-log-button');
+const printDailyReportButton = document.getElementById('print-daily-report-button');
+const exportBackupButton = document.getElementById('export-backup-button');
+const importBackupFile = document.getElementById('import-backup-file');
+const importMode = document.getElementById('import-mode');
+const importBackupButton = document.getElementById('import-backup-button');
+const backupStatus = document.getElementById('backup-status');
 const checkUpdatesButton = document.getElementById('check-updates-button');
+const updateNowButton = document.getElementById('update-now-button');
+const updateBanner = document.getElementById('update-banner');
 const updateStatus = document.getElementById('update-status');
 const appVersion = document.getElementById('app-version');
+const settingsAppVersion = document.getElementById('settings-app-version');
+const settingsDataVersion = document.getElementById('settings-data-version');
+const settingsUpdateState = document.getElementById('settings-update-state');
 const storageWarning = document.getElementById('storage-warning');
 const saveStatus = document.getElementById('save-status');
 
 const storageWarnings = [];
+const storageAudit = {
+  recordsBeforeMigration: 0,
+  recordsAfterMigration: 0,
+  missingIdsAdded: 0,
+  duplicateIdsRepaired: 0,
+  migrationBackupCreated: false
+};
 let savedLoads = loadSavedLoads();
 let dailyAddOns = loadDailyAddOns();
 let dailyEarningsRecords = loadDailySummaries();
+let driverProfile = loadDriverProfile();
+let appMeta = loadAppMeta();
 let editingLoadId = null;
 let pendingDuplicateRecord = null;
+let waitingServiceWorker = null;
 
 function toKey(id) {
   return id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -262,6 +325,37 @@ function setUpdateStatus(message) {
   }
 
   updateStatus.textContent = message;
+
+  if (settingsUpdateState && message) {
+    settingsUpdateState.textContent = message;
+  }
+}
+
+function setBackupStatus(message, isError = false) {
+  if (!backupStatus) {
+    return;
+  }
+
+  backupStatus.textContent = message;
+  backupStatus.classList.toggle('error', Boolean(isError));
+}
+
+function setProfileStatus(message, isError = false) {
+  if (!profileControls.status) {
+    return;
+  }
+
+  profileControls.status.textContent = message;
+  profileControls.status.className = `save-status show${isError ? ' error' : ''}`;
+}
+
+function clearProfileStatus() {
+  if (!profileControls.status) {
+    return;
+  }
+
+  profileControls.status.textContent = '';
+  profileControls.status.className = 'save-status';
 }
 
 async function clearOldAppCaches() {
@@ -289,10 +383,38 @@ async function registerServiceWorker() {
       registration.active.postMessage({ type: 'CLEAR_OLD_CACHES' });
     }
 
+    if (registration.waiting) {
+      showUpdateAvailable(registration.waiting);
+    }
+
+    registration.addEventListener('updatefound', () => {
+      const worker = registration.installing;
+
+      if (!worker) {
+        return;
+      }
+
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateAvailable(worker);
+        }
+      });
+    });
+
     return registration;
   } catch {
     return null;
   }
+}
+
+function showUpdateAvailable(worker) {
+  waitingServiceWorker = worker;
+
+  if (updateBanner) {
+    updateBanner.hidden = false;
+  }
+
+  setUpdateStatus('Update available. Tap Update Now when ready.');
 }
 
 function waitForInstallingWorker(registration) {
@@ -357,12 +479,35 @@ function waitForControllerChange(timeout = 2500) {
 async function reloadAfterServiceWorkerUpdate(registration) {
   setUpdateStatus('Update complete. Reloading...');
 
-  if (registration?.waiting) {
-    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+  const worker = registration?.waiting || waitingServiceWorker;
+
+  if (worker) {
+    worker.postMessage({ type: 'SKIP_WAITING' });
     await waitForControllerChange();
   }
 
   globalThis.location.reload();
+}
+
+async function activateWaitingUpdate() {
+  if (updateNowButton) {
+    updateNowButton.disabled = true;
+  }
+
+  try {
+    if (waitingServiceWorker) {
+      await reloadAfterServiceWorkerUpdate(null);
+      return;
+    }
+
+    await checkForUpdates();
+  } finally {
+    if (updateNowButton) {
+      setTimeout(() => {
+        updateNowButton.disabled = false;
+      }, 1600);
+    }
+  }
 }
 
 async function checkForUpdates() {
@@ -463,15 +608,120 @@ function storeJson(key, value, label) {
   }
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hashString(value) {
+  let hash = 0;
+  const text = String(value);
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
+function buildStableFallbackId(load, index, reason = 'legacy') {
+  const identityText = JSON.stringify({
+    reason,
+    index,
+    savedAt: load?.savedAt || '',
+    loadDate: load?.loadDate || '',
+    loadNumber: load?.loadNumber || '',
+    ticketNumber: load?.ticketNumber || '',
+    bolNumber: load?.bolNumber || '',
+    driverName: load?.driverName || '',
+    grossBarrels: load?.grossBarrels ?? '',
+    loadedMiles: load?.loadedMiles ?? ''
+  });
+
+  return `${reason}-${hashString(identityText)}`;
+}
+
+function createMigrationBackup(rawLoads, reason) {
+  if (storageAudit.migrationBackupCreated) {
+    return true;
+  }
+
+  const backup = {
+    format: BACKUP_FORMAT,
+    backupType: 'pre-migration-load-identity-backup',
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    createdAt: new Date().toISOString(),
+    reason,
+    storageKey: STORAGE_KEY,
+    recordCount: Array.isArray(rawLoads) ? rawLoads.length : 0,
+    loads: rawLoads
+  };
+
+  const saved = storeJson(MIGRATION_BACKUP_STORAGE_KEY, backup, 'pre-migration backup');
+  storageAudit.migrationBackupCreated = saved;
+  return saved;
+}
+
+function repairLoadIdentities(rawLoads) {
+  const seenIds = new Set();
+  let missingIdsAdded = 0;
+  let duplicateIdsRepaired = 0;
+  let needsWrite = false;
+
+  const repairedLoads = rawLoads.map((rawLoad, index) => {
+    const load = isPlainObject(rawLoad) ? { ...rawLoad } : {};
+    let id = load.id === undefined || load.id === null || String(load.id).trim() === ''
+      ? ''
+      : String(load.id);
+
+    if (!id) {
+      id = buildStableFallbackId(load, index, 'legacy-missing-id');
+      missingIdsAdded += 1;
+      needsWrite = true;
+    }
+
+    if (seenIds.has(id)) {
+      id = buildStableFallbackId(load, index, 'legacy-duplicate-id');
+      duplicateIdsRepaired += 1;
+      needsWrite = true;
+    }
+
+    while (seenIds.has(id)) {
+      id = `${id}-${hashString(`${index}-${Date.now()}-${Math.random()}`)}`;
+      duplicateIdsRepaired += 1;
+      needsWrite = true;
+    }
+
+    seenIds.add(id);
+    load.id = id;
+    return load;
+  });
+
+  storageAudit.missingIdsAdded = missingIdsAdded;
+  storageAudit.duplicateIdsRepaired = duplicateIdsRepaired;
+
+  if (needsWrite && createMigrationBackup(rawLoads, 'Missing or duplicate record IDs were repaired before saving the normalized load log.')) {
+    storeJson(STORAGE_KEY, repairedLoads.map(normalizeSavedLoad), 'load log');
+  }
+
+  return repairedLoads;
+}
+
 function loadSavedLoads() {
   const rawLoads = loadJson(STORAGE_KEY, [], 'load log', LEGACY_STORAGE_KEY);
 
   if (!Array.isArray(rawLoads)) {
     addStorageWarning('Warning: saved load log was not in the expected format. The app started with an empty load log.');
+    storageAudit.recordsBeforeMigration = 0;
+    storageAudit.recordsAfterMigration = 0;
     return [];
   }
 
-  return rawLoads.map(normalizeSavedLoad);
+  storageAudit.recordsBeforeMigration = rawLoads.length;
+  const repairedLoads = repairLoadIdentities(rawLoads);
+  const normalizedLoads = repairedLoads.map(normalizeSavedLoad);
+  storageAudit.recordsAfterMigration = countUniqueLoads(normalizedLoads);
+  return normalizedLoads;
 }
 
 function saveLoadsToStorage() {
@@ -490,9 +740,11 @@ function normalizeDailyAddOns(rawAddOns) {
     }
 
     normalized[date] = {
+      ...addOn,
       date,
       perDiem: Boolean(addOn.perDiem ?? addOn.perDiemApplied),
       sleeperBerth: Boolean(addOn.sleeperBerth ?? addOn.sleeperBerthApplied),
+      trainerPay: Boolean(addOn.trainerPay ?? addOn.trainerPayApplied),
       notes: addOn.notes || addOn.dailyEarningsNotes || ''
     };
   });
@@ -530,12 +782,136 @@ function saveDailySummariesToStorage() {
   return storeJson(EARNINGS_STORAGE_KEY, dailyEarningsRecords, 'daily summaries');
 }
 
+function normalizeDriverProfile(profile) {
+  const rawProfile = isPlainObject(profile) ? profile : {};
+
+  return {
+    ...rawProfile,
+    driverName: String(rawProfile.driverName || '').trim(),
+    truckNumber: String(rawProfile.truckNumber || '').trim(),
+    trailerNumber: String(rawProfile.trailerNumber || '').trim(),
+    updatedAt: rawProfile.updatedAt || null
+  };
+}
+
+function loadDriverProfile() {
+  const rawProfile = loadJson(PROFILE_STORAGE_KEY, {}, 'driver profile');
+  return normalizeDriverProfile(rawProfile);
+}
+
+function saveDriverProfileToStorage() {
+  return storeJson(PROFILE_STORAGE_KEY, driverProfile, 'driver profile');
+}
+
+function loadAppMeta() {
+  const rawMeta = loadJson(META_STORAGE_KEY, {}, 'application metadata');
+
+  if (!isPlainObject(rawMeta)) {
+    return {};
+  }
+
+  return rawMeta;
+}
+
+function saveAppMeta() {
+  appMeta = {
+    ...appMeta,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    updatedAt: new Date().toISOString(),
+    storageKeys: {
+      loads: STORAGE_KEY,
+      dailyAddOns: ADD_ON_STORAGE_KEY,
+      dailySummaries: EARNINGS_STORAGE_KEY,
+      profile: PROFILE_STORAGE_KEY,
+      metadata: META_STORAGE_KEY
+    },
+    lastStorageAudit: {
+      recordsBeforeMigration: storageAudit.recordsBeforeMigration,
+      recordsAfterMigration: storageAudit.recordsAfterMigration,
+      missingIdsAdded: storageAudit.missingIdsAdded,
+      duplicateIdsRepaired: storageAudit.duplicateIdsRepaired,
+      migrationBackupCreated: storageAudit.migrationBackupCreated
+    }
+  };
+
+  return storeJson(META_STORAGE_KEY, appMeta, 'application metadata');
+}
+
 function todayLocal() {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(dateValue) {
+  if (!dateValue) {
+    return null;
+  }
+
+  const [year, month, day] = String(dateValue).split('-').map(Number);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function formatLocalDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthRange(dateValue) {
+  const date = parseLocalDate(dateValue);
+
+  if (!date) {
+    return { start: '', end: '' };
+  }
+
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+  return {
+    start: formatLocalDate(start),
+    end: formatLocalDate(end)
+  };
+}
+
+function getCompanyPayPeriodRange(dateValue) {
+  const date = parseLocalDate(dateValue);
+
+  if (!date) {
+    return { start: '', end: '' };
+  }
+
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  const startDay = day <= 15 ? 1 : 16;
+  const endDay = day <= 15 ? 15 : new Date(year, month + 1, 0).getDate();
+
+  return {
+    start: formatLocalDate(new Date(year, month, startDay)),
+    end: formatLocalDate(new Date(year, month, endDay))
+  };
+}
+
+function isDateInRange(dateValue, startDate, endDate) {
+  if (!dateValue || !startDate || !endDate) {
+    return false;
+  }
+
+  return dateValue >= startDate && dateValue <= endDate;
 }
 
 function readValue(id) {
@@ -553,6 +929,19 @@ function isFiniteNumber(value) {
 
 function valueOrZero(value) {
   return isFiniteNumber(value) ? value : 0;
+}
+
+function numberOrNull(value) {
+  if (isFiniteNumber(value)) {
+    return value;
+  }
+
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const number = Number(value);
+  return isFiniteNumber(number) ? number : null;
 }
 
 function isCompleted(load) {
@@ -630,6 +1019,24 @@ function calculatePaidWaitMinutes(timeOnLocationMinutes) {
   return isFiniteNumber(timeOnLocationMinutes)
     ? Math.max(0, timeOnLocationMinutes - WAIT_GRACE_MINUTES)
     : 0;
+}
+
+function calculateStopWaitBreakdown(values) {
+  // Wait pay only uses the time spent at each stop after arrival, with the first hour free at each stop.
+  const pickupStopDurationMinutes = durationBetween(values.arrivedPickupTime, values.loadedTime);
+  const unloadStopDurationMinutes = durationBetween(values.arrivedDropoffTime, values.completedTime);
+  const paidPickupWaitMinutes = calculatePaidWaitMinutes(pickupStopDurationMinutes);
+  const paidDropoffWaitMinutes = calculatePaidWaitMinutes(unloadStopDurationMinutes);
+  const totalPaidWaitMinutes = paidPickupWaitMinutes + paidDropoffWaitMinutes;
+
+  return {
+    pickupTimeMinutes: pickupStopDurationMinutes,
+    dropoffTimeMinutes: unloadStopDurationMinutes,
+    paidPickupWaitMinutes,
+    paidDropoffWaitMinutes,
+    totalPaidWaitMinutes,
+    waitPay: calculateWaitPay(totalPaidWaitMinutes)
+  };
 }
 
 function calculateWaitPay(totalPaidWaitMinutes) {
@@ -713,15 +1120,13 @@ function calculateDerived(values) {
   const differenceVsGrossBarrels = isFiniteNumber(barrelsOffloaded) && isFiniteNumber(values.grossBarrels)
     ? barrelsOffloaded - values.grossBarrels
     : null;
+  const regularMiles = valueOrZero(values.loadedMiles);
+  const reRoutedMiles = valueOrZero(values.reRoutedMiles);
+  const totalMilesIncludingReRoute = regularMiles + reRoutedMiles;
   const payMatch = getLoadedMilesPay(values.loadedMiles);
   const estimatedPay = isReject(values) ? REJECT_PAY : payMatch.rate;
-  const pickupTimeMinutes = durationBetween(values.arrivedPickupTime, values.loadedTime);
-  const dropoffTimeMinutes = durationBetween(values.arrivedDropoffTime, values.completedTime);
-  const paidPickupWaitMinutes = calculatePaidWaitMinutes(pickupTimeMinutes);
-  const paidDropoffWaitMinutes = calculatePaidWaitMinutes(dropoffTimeMinutes);
-  const totalPaidWaitMinutes = paidPickupWaitMinutes + paidDropoffWaitMinutes;
-  const waitPay = calculateWaitPay(totalPaidWaitMinutes);
-  const estimatedEntryPay = estimatedPay + waitPay;
+  const stopWait = calculateStopWaitBreakdown(values);
+  const estimatedEntryPay = estimatedPay + stopWait.waitPay;
 
   return {
     waterBarrels,
@@ -734,18 +1139,21 @@ function calculateDerived(values) {
     barrelsOffloaded,
     differenceVsGrossBarrels,
     offloadStatus: getOffloadStatus(differenceVsGrossBarrels),
+    regularMiles,
+    reRoutedMiles,
+    totalMilesIncludingReRoute,
     matchedPayRange: isReject(values) ? 'Reject pay' : payMatch.rangeLabel,
     loadedMilesPayRate: isReject(values) ? 0 : payMatch.rate,
     estimatedPay,
     estimatedEntryPay,
     paySource: isReject(values) ? 'Reject' : 'Automatic',
-    pickupTimeMinutes,
+    pickupTimeMinutes: stopWait.pickupTimeMinutes,
     travelTimeMinutes: durationBetween(values.loadedTime, values.arrivedDropoffTime),
-    dropoffTimeMinutes,
-    paidPickupWaitMinutes,
-    paidDropoffWaitMinutes,
-    totalPaidWaitMinutes,
-    waitPay,
+    dropoffTimeMinutes: stopWait.dropoffTimeMinutes,
+    paidPickupWaitMinutes: stopWait.paidPickupWaitMinutes,
+    paidDropoffWaitMinutes: stopWait.paidDropoffWaitMinutes,
+    totalPaidWaitMinutes: stopWait.totalPaidWaitMinutes,
+    waitPay: stopWait.waitPay,
     cycleTimeMinutes: durationBetween(values.arrivedPickupTime, values.completedTime),
     firstPickupMinutes: parseTimeToMinutes(values.arrivedPickupTime),
     completedTimelineMinutes: timelineEndMinutes(values.arrivedPickupTime, values.completedTime)
@@ -753,39 +1161,43 @@ function calculateDerived(values) {
 }
 
 function normalizeSavedLoad(load) {
+  const rawLoad = isPlainObject(load) ? load : {};
   const normalized = {
-    id: load.id || `${load.savedAt || Date.now()}-${Math.random().toString(16).slice(2)}`,
-    savedAt: load.savedAt || new Date().toISOString(),
-    updatedAt: load.updatedAt || null,
-    driverName: load.driverName || '',
-    truckNumber: load.truckNumber || '',
-    trailerNumber: load.trailerNumber || '',
-    emptyTruckWeight: isFiniteNumber(load.emptyTruckWeight) ? load.emptyTruckWeight : null,
-    loadDate: load.loadDate || '',
-    loadNumber: load.loadNumber || '',
-    ticketNumber: load.ticketNumber || '',
-    bolNumber: load.bolNumber || '',
-    loadStatus: load.loadStatus || COMPLETED_STATUS,
-    productType: load.productType || '',
-    pickupLocation: load.pickupLocation || '',
-    dropoffLocation: load.dropoffLocation || '',
-    grossBarrels: isFiniteNumber(load.grossBarrels) ? load.grossBarrels : 0,
-    netBarrels: isFiniteNumber(load.netBarrels) ? load.netBarrels : null,
-    apiGravity: isFiniteNumber(load.apiGravity) ? load.apiGravity : null,
-    bswPercentage: isFiniteNumber(load.bswPercentage) ? load.bswPercentage : null,
-    loadedMiles: isFiniteNumber(load.loadedMiles) ? load.loadedMiles : null,
-    notes: load.notes || '',
-    rejectReason: load.rejectReason || '',
-    arrivedPickupTime: load.arrivedPickupTime || '',
-    loadedTime: load.loadedTime || '',
-    arrivedDropoffTime: load.arrivedDropoffTime || '',
-    completedTime: load.completedTime || '',
-    startMeterReading: isFiniteNumber(load.startMeterReading) ? load.startMeterReading : null,
-    endMeterReading: isFiniteNumber(load.endMeterReading) ? load.endMeterReading : null,
-    jotformConfirmationNumber: load.jotformConfirmationNumber || ''
+    ...rawLoad,
+    id: rawLoad.id || `${rawLoad.savedAt || Date.now()}-${Math.random().toString(16).slice(2)}`,
+    savedAt: rawLoad.savedAt || new Date().toISOString(),
+    updatedAt: rawLoad.updatedAt || null,
+    dataSchemaVersion: rawLoad.dataSchemaVersion || DATA_SCHEMA_VERSION,
+    driverName: rawLoad.driverName || '',
+    truckNumber: rawLoad.truckNumber || '',
+    trailerNumber: rawLoad.trailerNumber || '',
+    emptyTruckWeight: numberOrNull(rawLoad.emptyTruckWeight),
+    loadDate: rawLoad.loadDate || '',
+    loadNumber: rawLoad.loadNumber || '',
+    ticketNumber: rawLoad.ticketNumber || '',
+    bolNumber: rawLoad.bolNumber || '',
+    loadStatus: rawLoad.loadStatus || COMPLETED_STATUS,
+    productType: rawLoad.productType || '',
+    pickupLocation: rawLoad.pickupLocation || '',
+    dropoffLocation: rawLoad.dropoffLocation || '',
+    grossBarrels: numberOrNull(rawLoad.grossBarrels) ?? 0,
+    netBarrels: numberOrNull(rawLoad.netBarrels),
+    apiGravity: numberOrNull(rawLoad.apiGravity),
+    bswPercentage: numberOrNull(rawLoad.bswPercentage),
+    loadedMiles: numberOrNull(rawLoad.loadedMiles),
+    reRoutedMiles: numberOrNull(rawLoad.reRoutedMiles ?? rawLoad.reroutedMiles) ?? 0,
+    notes: rawLoad.notes || '',
+    rejectReason: rawLoad.rejectReason || '',
+    arrivedPickupTime: rawLoad.arrivedPickupTime || '',
+    loadedTime: rawLoad.loadedTime || '',
+    arrivedDropoffTime: rawLoad.arrivedDropoffTime || '',
+    completedTime: rawLoad.completedTime || '',
+    startMeterReading: numberOrNull(rawLoad.startMeterReading),
+    endMeterReading: numberOrNull(rawLoad.endMeterReading),
+    jotformConfirmationNumber: rawLoad.jotformConfirmationNumber || ''
   };
 
-  return { ...normalized, ...calculateDerived(normalized) };
+  return { ...normalized, ...calculateDerived(normalized), dataSchemaVersion: DATA_SCHEMA_VERSION };
 }
 
 function storeLoads() {
@@ -806,6 +1218,7 @@ function getDailyAddOn(date) {
     date,
     perDiem: Boolean(addOn.perDiem),
     sleeperBerth: Boolean(addOn.sleeperBerth),
+    trainerPay: Boolean(addOn.trainerPay),
     notes: addOn.notes || ''
   };
 }
@@ -818,13 +1231,15 @@ function saveDailyAddOnFromControls() {
   }
 
   const addOn = {
+    ...getDailyAddOn(date),
     date,
     perDiem: addOns.perDiem.checked,
     sleeperBerth: addOns.sleeperBerth.checked,
+    trainerPay: addOns.trainerPay.checked,
     notes: addOns.notes.value.trim()
   };
 
-  if (!addOn.perDiem && !addOn.sleeperBerth && !addOn.notes) {
+  if (!addOn.perDiem && !addOn.sleeperBerth && !addOn.trainerPay && !addOn.notes) {
     delete dailyAddOns[date];
   } else {
     dailyAddOns[date] = addOn;
@@ -838,6 +1253,7 @@ function applyDailyAddOnsToControls() {
   const addOn = getDailyAddOn(daily.date.value);
   addOns.perDiem.checked = addOn.perDiem;
   addOns.sleeperBerth.checked = addOn.sleeperBerth;
+  addOns.trainerPay.checked = addOn.trainerPay;
   addOns.notes.value = addOn.notes;
 }
 
@@ -852,8 +1268,75 @@ function average(records, key) {
   return usable.length > 0 ? sum(usable, key) / usable.length : null;
 }
 
+function getUniqueSavedLoads(records = savedLoads) {
+  const seenIds = new Set();
+
+  return records.filter((load) => {
+    if (!isPlainObject(load) || !load.id) {
+      return false;
+    }
+
+    const id = String(load.id);
+
+    if (seenIds.has(id)) {
+      return false;
+    }
+
+    seenIds.add(id);
+    return true;
+  });
+}
+
+function countUniqueLoads(records = savedLoads) {
+  return getUniqueSavedLoads(records).length;
+}
+
+function getLoadsForDate(date) {
+  return getUniqueSavedLoads().filter((load) => load.loadDate === date);
+}
+
+function getLoadsForRange(startDate, endDate) {
+  return getUniqueSavedLoads().filter((load) => isDateInRange(load.loadDate, startDate, endDate));
+}
+
+function getCompanyPayPeriodLoads(dateValue) {
+  const range = getCompanyPayPeriodRange(dateValue);
+  return getLoadsForRange(range.start, range.end);
+}
+
+function getPayPeriodEarningsSummary(dateValue) {
+  const records = getCompanyPayPeriodLoads(dateValue);
+  const dates = new Set(records.map((load) => load.loadDate).filter(Boolean));
+  const dailySummaries = [...dates].map((date) => getDailyEarningsSummary(date));
+  const completedRecords = records.filter(isCompleted);
+  const rejectRecords = records.filter(isReject);
+
+  return {
+    ...getCompanyPayPeriodRange(dateValue),
+    loadRecordCount: records.length,
+    completedLoadCount: completedRecords.length,
+    rejectCount: rejectRecords.length,
+    totalLoadedMiles: sum(records, 'loadedMiles'),
+    totalReRoutedMiles: sum(records, 'reRoutedMiles'),
+    totalMilesIncludingReRoute: sum(records, 'totalMilesIncludingReRoute'),
+    totalGrossBarrels: sum(completedRecords, 'grossBarrels'),
+    totalBarrelsOffloaded: sum(records, 'barrelsOffloaded'),
+    totalDifferenceVsGrossBarrels: sum(records, 'differenceVsGrossBarrels'),
+    completedLoadPay: sum(completedRecords, 'estimatedPay'),
+    rejectPay: sum(rejectRecords, 'estimatedPay'),
+    totalPaidPickupWaitMinutes: sum(records, 'paidPickupWaitMinutes'),
+    totalPaidDropoffWaitMinutes: sum(records, 'paidDropoffWaitMinutes'),
+    totalPaidWaitMinutes: sum(records, 'totalPaidWaitMinutes'),
+    totalWaitPay: sum(records, 'waitPay'),
+    perDiemPay: sum(dailySummaries, 'perDiemPay'),
+    sleeperBerthPay: sum(dailySummaries, 'sleeperBerthPay'),
+    trainerPay: sum(dailySummaries, 'trainerPay'),
+    totalEstimatedEarnings: sum(dailySummaries, 'totalEstimatedDailyEarnings')
+  };
+}
+
 function getDailyEarningsSummary(date) {
-  const records = savedLoads.filter((load) => load.loadDate === date);
+  const records = getLoadsForDate(date);
   const completedRecords = records.filter(isCompleted);
   const rejectRecords = records.filter(isReject);
   const addOn = getDailyAddOn(date);
@@ -864,14 +1347,20 @@ function getDailyEarningsSummary(date) {
   const totalPaidWaitMinutes = totalPaidPickupWaitMinutes + totalPaidDropoffWaitMinutes;
   const totalWaitPay = sum(records, 'waitPay');
   const totalEstimatedEntryPay = sum(records, 'estimatedEntryPay');
+  const totalLoadedMiles = sum(records, 'loadedMiles');
+  const totalReRoutedMiles = sum(records, 'reRoutedMiles');
   const perDiemPay = addOn.perDiem ? PER_DIEM_PAY : 0;
   const sleeperBerthPay = addOn.sleeperBerth ? SLEEPER_BERTH_PAY : 0;
+  const trainerPay = addOn.trainerPay ? TRAINER_PAY : 0;
 
   return {
     date,
+    loadRecordCount: records.length,
     completedLoadCount: completedRecords.length,
     rejectCount: rejectRecords.length,
-    totalLoadedMiles: sum(records, 'loadedMiles'),
+    totalLoadedMiles,
+    totalReRoutedMiles,
+    totalMilesIncludingReRoute: totalLoadedMiles + totalReRoutedMiles,
     totalGrossBarrels: sum(completedRecords, 'grossBarrels'),
     totalNetBarrels: sum(completedRecords, 'netBarrels'),
     totalBarrelsOffloaded: sum(records, 'barrelsOffloaded'),
@@ -887,7 +1376,9 @@ function getDailyEarningsSummary(date) {
     perDiemPay,
     sleeperBerthApplied: addOn.sleeperBerth,
     sleeperBerthPay,
-    totalEstimatedDailyEarnings: totalEstimatedEntryPay + perDiemPay + sleeperBerthPay,
+    trainerPayApplied: addOn.trainerPay,
+    trainerPay,
+    totalEstimatedDailyEarnings: totalEstimatedEntryPay + perDiemPay + sleeperBerthPay + trainerPay,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
     averageGrossBarrels: completedRecords.length > 0 ? sum(completedRecords, 'grossBarrels') / completedRecords.length : 0,
     averageNetBarrels: average(completedRecords, 'netBarrels') || 0,
@@ -900,7 +1391,11 @@ function updateDailyEarningsRecord(date) {
     return null;
   }
 
-  const summary = getDailyEarningsSummary(date);
+  const summary = {
+    ...(isPlainObject(dailyEarningsRecords[date]) ? dailyEarningsRecords[date] : {}),
+    ...getDailyEarningsSummary(date)
+  };
+
   dailyEarningsRecords[date] = summary;
   storeEarningsRecords();
   return summary;
@@ -936,6 +1431,9 @@ function renderSummary() {
   summary.grossBarrelsHauled.textContent = isFiniteNumber(values.grossBarrels) ? formatBarrels(values.grossBarrels) : '-';
   summary.differenceGross.textContent = isFiniteNumber(derived.differenceVsGrossBarrels) ? formatBarrels(derived.differenceVsGrossBarrels) : '-';
   summary.offloadStatus.textContent = derived.offloadStatus;
+  summary.regularMiles.textContent = formatMiles(derived.regularMiles);
+  summary.reRoutedMiles.textContent = formatMiles(derived.reRoutedMiles);
+  summary.totalMilesIncludingReRoute.textContent = formatMiles(derived.totalMilesIncludingReRoute);
   summary.payRange.textContent = derived.matchedPayRange;
   summary.estimatedPay.textContent = formatMoney(derived.estimatedPay);
   summary.pickupTime.textContent = formatDuration(derived.pickupTimeMinutes);
@@ -948,15 +1446,44 @@ function renderSummary() {
   summary.cycleTime.textContent = formatDuration(derived.cycleTimeMinutes);
 }
 
-function updateDailySummary() {
-  const selectedDate = daily.date.value;
-  const dayRecords = savedLoads.filter((load) => load.loadDate === selectedDate);
-  const summaryRecord = updateDailyEarningsRecord(selectedDate);
+function summarizeLoadsForDates(records) {
+  const uniqueRecords = getUniqueSavedLoads(records);
+  const dates = new Set(uniqueRecords.map((load) => load.loadDate).filter(Boolean));
+  const summaries = [...dates].map((date) => getDailyEarningsSummary(date));
 
-  daily.completedLoads.textContent = String(summaryRecord.completedLoadCount);
-  daily.rejects.textContent = String(summaryRecord.rejectCount);
+  return {
+    loadCount: uniqueRecords.length,
+    totalGrossBarrels: sum(uniqueRecords.filter(isCompleted), 'grossBarrels'),
+    totalMileage: sum(uniqueRecords, 'totalMilesIncludingReRoute'),
+    totalPaidWaitMinutes: sum(uniqueRecords, 'totalPaidWaitMinutes'),
+    loadEarnings: sum(uniqueRecords, 'estimatedPay'),
+    waitEarnings: sum(uniqueRecords, 'waitPay'),
+    trainerPay: sum(summaries, 'trainerPay'),
+    totalEarnings: sum(summaries, 'totalEstimatedDailyEarnings')
+  };
+}
+
+function updateDashboardStats(summaryRecord) {
+  const selectedDate = daily.date.value || todayLocal();
+  const monthRange = getMonthRange(selectedDate);
+  const payPeriodRange = getCompanyPayPeriodRange(selectedDate);
+  daily.payPeriodStart.value = payPeriodRange.start;
+  daily.payPeriodEnd.value = payPeriodRange.end;
+
+  const payPeriodRecords = getLoadsForRange(payPeriodRange.start, payPeriodRange.end);
+  const selectedDateRecords = getLoadsForDate(selectedDate);
+
+  dashboard.totalLoadsHauled.textContent = String(countUniqueLoads());
+  dashboard.currentWorkDate.textContent = selectedDate || '-';
+  dashboard.loadsHauledPayPeriod.textContent = String(payPeriodRecords.length);
+  dashboard.loadsHauledMonth.textContent = String(getLoadsForRange(monthRange.start, monthRange.end).length);
+  dashboard.loadsHauledSelectedDate.textContent = String(selectedDateRecords.length);
+
+  const selectedDateSummary = summarizeLoadsForDates(selectedDateRecords);
   daily.grossBarrels.textContent = formatBarrels(summaryRecord.totalGrossBarrels);
   daily.loadedMiles.textContent = formatMiles(summaryRecord.totalLoadedMiles);
+  daily.reRoutedMiles.textContent = formatMiles(summaryRecord.totalReRoutedMiles);
+  daily.totalMilesIncludingReRoute.textContent = formatMiles(summaryRecord.totalMilesIncludingReRoute);
   daily.barrelsOffloaded.textContent = formatBarrels(summaryRecord.totalBarrelsOffloaded);
   daily.differenceGross.textContent = formatBarrels(summaryRecord.totalDifferenceVsGrossBarrels);
   daily.completedPay.textContent = formatMoney(summaryRecord.completedLoadPay);
@@ -967,13 +1494,28 @@ function updateDailySummary() {
   daily.waitPay.textContent = formatMoney(summaryRecord.totalWaitPay);
   daily.perDiemPay.textContent = formatMoney(summaryRecord.perDiemPay);
   daily.sleeperPay.textContent = formatMoney(summaryRecord.sleeperBerthPay);
+  daily.trainerPay.textContent = formatMoney(summaryRecord.trainerPay);
   daily.totalEarnings.textContent = formatMoney(summaryRecord.totalEstimatedDailyEarnings);
+
+  return selectedDateSummary;
+}
+
+function updateDailySummary() {
+  const selectedDate = daily.date.value || fields.loadDate.value || todayLocal();
+  daily.date.value = selectedDate;
+  const summaryRecord = updateDailyEarningsRecord(selectedDate) || getDailyEarningsSummary(selectedDate);
+
+  daily.completedLoads.textContent = String(summaryRecord.completedLoadCount);
+  daily.rejects.textContent = String(summaryRecord.rejectCount);
+  updateDashboardStats(summaryRecord);
 
   review.dateLabel.textContent = selectedDate || '-';
   review.date.textContent = selectedDate || '-';
   review.completedLoads.textContent = String(summaryRecord.completedLoadCount);
   review.rejects.textContent = String(summaryRecord.rejectCount);
   review.loadedMiles.textContent = formatMiles(summaryRecord.totalLoadedMiles);
+  review.reRoutedMiles.textContent = formatMiles(summaryRecord.totalReRoutedMiles);
+  review.totalMilesIncludingReRoute.textContent = formatMiles(summaryRecord.totalMilesIncludingReRoute);
   review.grossBarrels.textContent = formatBarrels(summaryRecord.totalGrossBarrels);
   review.barrelsOffloaded.textContent = formatBarrels(summaryRecord.totalBarrelsOffloaded);
   review.differenceGross.textContent = formatBarrels(summaryRecord.totalDifferenceVsGrossBarrels);
@@ -987,16 +1529,63 @@ function updateDailySummary() {
   review.perDiemPay.textContent = formatMoney(summaryRecord.perDiemPay);
   review.sleeperApplied.textContent = summaryRecord.sleeperBerthApplied ? 'Yes' : 'No';
   review.sleeperPay.textContent = formatMoney(summaryRecord.sleeperBerthPay);
+  review.trainerApplied.textContent = summaryRecord.trainerPayApplied ? 'Yes' : 'No';
+  review.trainerPay.textContent = formatMoney(summaryRecord.trainerPay);
   review.totalEarnings.textContent = formatMoney(summaryRecord.totalEstimatedDailyEarnings);
 
-  renderSavedLoads(dayRecords);
+  renderSavedLoads();
 }
 
 function renderDailyPanels() {
   updateDailySummary();
 }
 
-function renderSavedLoads(records = savedLoads.filter((load) => load.loadDate === daily.date.value)) {
+function getSavedFilterRecords() {
+  const scope = savedFilters.scope?.value || 'selected-date';
+  const query = String(savedFilters.search?.value || '').trim().toLowerCase();
+  let records = getUniqueSavedLoads();
+
+  if (scope === 'selected-date') {
+    records = records.filter((load) => load.loadDate === daily.date.value);
+  }
+
+  if (scope === 'date') {
+    records = records.filter((load) => load.loadDate === savedFilters.date.value);
+  }
+
+  if (scope === 'pay-period') {
+    const range = getCompanyPayPeriodRange(daily.date.value);
+    records = records.filter((load) => isDateInRange(load.loadDate, range.start, range.end));
+  }
+
+  if (scope === 'month') {
+    const range = getMonthRange(daily.date.value);
+    records = records.filter((load) => isDateInRange(load.loadDate, range.start, range.end));
+  }
+
+  if (query) {
+    records = records.filter((load) => [
+      load.loadDate,
+      load.loadNumber,
+      load.ticketNumber,
+      load.bolNumber,
+      load.driverName,
+      load.truckNumber,
+      load.trailerNumber,
+      load.pickupLocation,
+      load.dropoffLocation,
+      load.productType,
+      load.notes
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }
+
+  return records.sort((left, right) => (
+    String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
+    || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
+  ));
+}
+
+function renderSavedLoads(records = getSavedFilterRecords()) {
   renderSavedLoadCards(records);
 }
 
@@ -1004,33 +1593,43 @@ function renderSavedLoadCards(records) {
   logCount.textContent = `${records.length} ${records.length === 1 ? 'load' : 'loads'}`;
 
   if (records.length === 0) {
-    savedLoadCards.innerHTML = '<article class="empty-card">No saved loads for this date yet.</article>';
+    savedLoadCards.innerHTML = '<article class="empty-card">No saved loads match the current filter.</article>';
     return;
   }
 
   savedLoadCards.innerHTML = records.map((load) => `
-    <article class="load-card">
+    <article class="load-card" data-load-id="${escapeHtml(load.id)}">
       <div class="load-card-header">
         <div class="load-title">
           <strong>${escapeHtml(load.loadNumber || 'No load number')} | ${escapeHtml(load.loadStatus || '-')}</strong>
+          <span class="load-route">${escapeHtml(load.loadDate || 'No date')} | ${escapeHtml(load.driverName || 'No driver')} | Truck ${escapeHtml(load.truckNumber || '-')} | Trailer ${escapeHtml(load.trailerNumber || '-')}</span>
           <span class="load-route">${escapeHtml(load.pickupLocation || 'Pickup')} &rarr; ${escapeHtml(load.dropoffLocation || 'Drop off')}</span>
           <span class="load-route">Ticket ${escapeHtml(load.ticketNumber || '-')} | BOL ${escapeHtml(load.bolNumber || '-')}</span>
         </div>
         <div class="load-actions">
+          <button class="small-button" type="button" data-action="open" data-id="${escapeHtml(load.id)}">Open</button>
           <button class="small-button" type="button" data-action="edit" data-id="${escapeHtml(load.id)}">Edit</button>
+          <button class="small-button" type="button" data-action="duplicate" data-id="${escapeHtml(load.id)}">Duplicate</button>
+          <button class="small-button" type="button" data-action="print" data-id="${escapeHtml(load.id)}">Print</button>
+          <button class="small-button" type="button" data-action="export" data-id="${escapeHtml(load.id)}">Export</button>
           <button class="small-button danger" type="button" data-action="delete" data-id="${escapeHtml(load.id)}">Delete</button>
         </div>
       </div>
       <div class="load-chip-grid">
+        ${loadChip('Work date', load.loadDate || '-')}
         ${loadChip('Gross barrels', formatBarrels(load.grossBarrels))}
-        ${loadChip('Loaded miles', formatMiles(load.loadedMiles))}
+        ${loadChip('Regular Miles', formatMiles(load.regularMiles))}
+        ${loadChip('Re-routed Miles', formatMiles(load.reRoutedMiles))}
+        ${loadChip('Total Miles Including Re-route', formatMiles(load.totalMilesIncludingReRoute))}
         ${loadChip('Offloaded', formatBarrels(load.barrelsOffloaded))}
         ${loadChip('Diff vs gross', formatBarrels(load.differenceVsGrossBarrels))}
         ${loadChip('Offload status', load.offloadStatus)}
         ${loadChip('Base pay', formatMoney(load.estimatedPay))}
-        ${loadChip('Pickup time', formatDuration(load.pickupTimeMinutes))}
-        ${loadChip('Drop-off time', formatDuration(load.dropoffTimeMinutes))}
-        ${loadChip('Paid wait time', formatDuration(load.totalPaidWaitMinutes))}
+        ${loadChip('Load site duration', formatDuration(load.pickupTimeMinutes))}
+        ${loadChip('Load wait time', formatDuration(load.paidPickupWaitMinutes))}
+        ${loadChip('Unload site duration', formatDuration(load.dropoffTimeMinutes))}
+        ${loadChip('Unload wait time', formatDuration(load.paidDropoffWaitMinutes))}
+        ${loadChip('Total paid wait time', formatDuration(load.totalPaidWaitMinutes))}
         ${loadChip('Wait pay', formatMoney(load.waitPay))}
         ${loadChip('Estimated total pay', formatMoney(load.estimatedEntryPay))}
         ${loadChip('Cycle time', formatDuration(load.cycleTimeMinutes))}
@@ -1042,6 +1641,9 @@ function renderSavedLoadCards(records) {
           ${detailItem('Truck number', load.truckNumber)}
           ${detailItem('Trailer number', load.trailerNumber)}
           ${detailItem('Product type', load.productType)}
+          ${detailItem('Regular Miles', formatMiles(load.regularMiles))}
+          ${detailItem('Re-routed Miles', formatMiles(load.reRoutedMiles))}
+          ${detailItem('Total Miles Including Re-route', formatMiles(load.totalMilesIncludingReRoute))}
           ${detailItem('API gravity', formatNumber(load.apiGravity, 1))}
           ${detailItem('BS&W percentage', formatPercent(load.bswPercentage))}
           ${detailItem('Estimated load weight', formatWeight(load.estimatedTotalLoadWeight))}
@@ -1057,10 +1659,10 @@ function renderSavedLoadCards(records) {
           ${detailItem('Loaded / picked up', load.loadedTime || '-')}
           ${detailItem('Arrived at drop off', load.arrivedDropoffTime || '-')}
           ${detailItem('Dropped off / completed', load.completedTime || '-')}
-          ${detailItem('Pickup time', formatDuration(load.pickupTimeMinutes))}
-          ${detailItem('Paid pickup wait time', formatDuration(load.paidPickupWaitMinutes))}
-          ${detailItem('Drop-off time', formatDuration(load.dropoffTimeMinutes))}
-          ${detailItem('Paid drop-off wait time', formatDuration(load.paidDropoffWaitMinutes))}
+          ${detailItem('Load site duration', formatDuration(load.pickupTimeMinutes))}
+          ${detailItem('Load wait time', formatDuration(load.paidPickupWaitMinutes))}
+          ${detailItem('Unload site duration', formatDuration(load.dropoffTimeMinutes))}
+          ${detailItem('Unload wait time', formatDuration(load.paidDropoffWaitMinutes))}
           ${detailItem('Total paid wait time', formatDuration(load.totalPaidWaitMinutes))}
           ${detailItem('Wait pay', formatMoney(load.waitPay))}
           ${detailItem('Estimated total pay', formatMoney(load.estimatedEntryPay))}
@@ -1083,6 +1685,99 @@ function detailItem(label, value, isFull = false) {
       <strong>${escapeHtml(value || '-')}</strong>
     </div>
   `;
+}
+
+function applyProfileToControls() {
+  profileControls.driverName.value = driverProfile.driverName || '';
+  profileControls.truckNumber.value = driverProfile.truckNumber || '';
+  profileControls.trailerNumber.value = driverProfile.trailerNumber || '';
+  renderProfileSummary();
+}
+
+function renderProfileSummary() {
+  const hasProfile = driverProfile.driverName && driverProfile.truckNumber && driverProfile.trailerNumber;
+
+  if (!profileControls.summary) {
+    return;
+  }
+
+  profileControls.summary.textContent = hasProfile
+    ? `${driverProfile.driverName} | Truck: ${driverProfile.truckNumber} | Trailer: ${driverProfile.trailerNumber}`
+    : 'No saved profile';
+}
+
+function applyProfileToNewLoad() {
+  if (editingLoadId) {
+    return;
+  }
+
+  fields.driverName.value = driverProfile.driverName || '';
+  fields.truckNumber.value = driverProfile.truckNumber || '';
+  fields.trailerNumber.value = driverProfile.trailerNumber || '';
+}
+
+function readProfileValues() {
+  return {
+    driverName: profileControls.driverName.value.trim(),
+    truckNumber: profileControls.truckNumber.value.trim(),
+    trailerNumber: profileControls.trailerNumber.value.trim()
+  };
+}
+
+function validateProfile(profile) {
+  const missingFields = [];
+
+  if (!profile.driverName) {
+    missingFields.push('driver name');
+  }
+
+  if (!profile.truckNumber) {
+    missingFields.push('truck number');
+  }
+
+  if (!profile.trailerNumber) {
+    missingFields.push('trailer number');
+  }
+
+  if (missingFields.length > 0) {
+    return `Enter ${missingFields.join(', ')} before saving the profile.`;
+  }
+
+  const tooLong = Object.entries(profile).find(([, value]) => value.length > 60);
+
+  if (tooLong) {
+    return 'Profile fields must be 60 characters or fewer.';
+  }
+
+  return '';
+}
+
+function saveDriverProfile() {
+  clearProfileStatus();
+  const nextProfile = {
+    ...driverProfile,
+    ...readProfileValues(),
+    updatedAt: new Date().toISOString()
+  };
+  const profileError = validateProfile(nextProfile);
+
+  if (profileError) {
+    setProfileStatus(profileError, true);
+    return;
+  }
+
+  const previousProfile = driverProfile;
+  driverProfile = normalizeDriverProfile(nextProfile);
+
+  if (!saveDriverProfileToStorage()) {
+    driverProfile = previousProfile;
+    setProfileStatus('Profile could not be saved. Current load records were not changed.', true);
+    return;
+  }
+
+  renderProfileSummary();
+  saveAppMeta();
+  setProfileStatus('Profile saved. New loads will use this driver and equipment.');
 }
 
 function setFieldError(fieldKey, message) {
@@ -1145,6 +1840,11 @@ function validate(values) {
   if (values.loadedMiles !== null && (!isFiniteNumber(values.loadedMiles) || values.loadedMiles < 0)) {
     messages.push('Loaded miles must be 0 or greater.');
     setFieldError('loadedMiles', 'Enter loaded miles of 0 or greater, or leave it blank.');
+  }
+
+  if (values.reRoutedMiles !== null && (!isFiniteNumber(values.reRoutedMiles) || values.reRoutedMiles < 0)) {
+    messages.push('Re-routed Miles must be 0 or greater.');
+    setFieldError('reRoutedMiles', 'Enter re-routed miles of 0 or greater, or leave it blank.');
   }
 
   if (values.startMeterReading !== null && (!isFiniteNumber(values.startMeterReading) || values.startMeterReading < 0)) {
@@ -1287,6 +1987,7 @@ function clearForm() {
   exitEditMode();
   fields.loadDate.value = daily.date.value || todayLocal();
   fields.loadStatus.value = COMPLETED_STATUS;
+  applyProfileToNewLoad();
   applyDailyAddOnsToControls();
   renderSummary();
 }
@@ -1352,14 +2053,167 @@ function deleteLoadEntry(loadId) {
   }
 }
 
-function clearSavedLog() {
-  savedLoads = [];
-  storeLoads();
-  refreshAllDailyEarningsRecords();
+function getLoadById(loadId) {
+  return savedLoads.find((item) => item.id === loadId) || null;
+}
+
+function openLoadDetails(loadId, button) {
+  const card = button?.closest ? button.closest('.load-card') : null;
+  const details = card?.querySelector ? card.querySelector('.load-details') : null;
+
+  if (details) {
+    details.open = true;
+    details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
+  loadEntryForEdit(loadId);
+}
+
+function duplicateLoadEntry(loadId) {
+  const load = getLoadById(loadId);
+
+  if (!load) {
+    return;
+  }
+
   hideDuplicateWarning();
-  exitEditMode();
+  clearValidation();
+  clearSaveMessage();
+  editingLoadId = null;
+  saveLoadButton.textContent = 'Save Load';
+  editStatus.textContent = `Duplicating ${load.loadNumber || load.ticketNumber || 'saved load'}`;
+
+  fieldIds.forEach((id) => {
+    const key = toKey(id);
+    const field = fields[key];
+
+    if (field) {
+      field.value = load[key] === null || load[key] === undefined ? '' : load[key];
+    }
+  });
+
+  daily.date.value = load.loadDate || daily.date.value;
+  applyDailyAddOnsToControls();
   renderSummary();
   updateDailySummary();
+  showSaveMessage('Duplicated load loaded into the form. Review it, then tap Save Load to create a new record.');
+
+  if (form.scrollIntoView) {
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function buildLoadReportMarkup(load, dailySummary = null) {
+  const summaryRecord = dailySummary || getDailyEarningsSummary(load.loadDate);
+  const rows = [
+    ['Driver name', load.driverName],
+    ['Truck number', load.truckNumber],
+    ['Trailer number', load.trailerNumber],
+    ['Work date', load.loadDate],
+    ['Load number', load.loadNumber],
+    ['Ticket number', load.ticketNumber],
+    ['BOL number', load.bolNumber],
+    ['Pickup location', load.pickupLocation],
+    ['Delivery location', load.dropoffLocation],
+    ['Gross barrels', formatBarrels(load.grossBarrels)],
+    ['Regular miles', formatMiles(load.regularMiles)],
+    ['Re-routed miles', formatMiles(load.reRoutedMiles)],
+    ['Total miles', formatMiles(load.totalMilesIncludingReRoute)],
+    ['Load earnings', formatMoney(load.estimatedPay)],
+    ['Wait-time earnings', formatMoney(load.waitPay)],
+    ['Total load pay', formatMoney(load.estimatedEntryPay)],
+    ['Daily trainer pay', formatMoney(summaryRecord.trainerPay)],
+    ['Daily total earnings', formatMoney(summaryRecord.totalEstimatedDailyEarnings)],
+    ['Notes', load.notes || '-']
+  ];
+
+  return rows.map(([label, value]) => `
+    <div class="print-row">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || '-')}</strong>
+    </div>
+  `).join('');
+}
+
+function openPrintWindow(title, bodyMarkup) {
+  const printWindow = globalThis.open ? globalThis.open('', '_blank', 'noopener,noreferrer') : null;
+
+  if (!printWindow || !printWindow.document) {
+    globalThis.print?.();
+    return;
+  }
+
+  printWindow.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #17202a; }
+          h1 { margin: 0 0 6px; font-size: 24px; }
+          .muted { color: #5f6c7b; margin: 0 0 18px; }
+          .print-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+          .print-row { border: 1px solid #d8e1e8; border-radius: 8px; padding: 10px; display: grid; gap: 5px; }
+          .print-row span { color: #5f6c7b; font-size: 12px; font-weight: 700; }
+          .print-row strong { font-size: 15px; overflow-wrap: anywhere; }
+          @media print { body { margin: 16px; } }
+        </style>
+      </head>
+      <body>
+        ${bodyMarkup}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+function printLoadEntry(loadId) {
+  const load = getLoadById(loadId);
+
+  if (!load) {
+    return;
+  }
+
+  openPrintWindow(
+    `Oilfield Load ${load.loadNumber || load.ticketNumber || ''}`.trim(),
+    `
+      <h1>Oilfield Load Report</h1>
+      <p class="muted">Generated ${new Date().toLocaleString()}</p>
+      <div class="print-grid">${buildLoadReportMarkup(load)}</div>
+    `
+  );
+}
+
+function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function exportLoadEntry(loadId) {
+  const load = getLoadById(loadId);
+
+  if (!load) {
+    return;
+  }
+
+  downloadJson(`oilfield-load-${load.loadDate || 'undated'}-${load.loadNumber || load.id}.json`, {
+    format: `${BACKUP_FORMAT}-single-load`,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    load
+  });
 }
 
 function handleSavedCardAction(event) {
@@ -1369,8 +2223,24 @@ function handleSavedCardAction(event) {
     return;
   }
 
+  if (button.dataset.action === 'open') {
+    openLoadDetails(button.dataset.id, button);
+  }
+
   if (button.dataset.action === 'edit') {
     loadEntryForEdit(button.dataset.id);
+  }
+
+  if (button.dataset.action === 'duplicate') {
+    duplicateLoadEntry(button.dataset.id);
+  }
+
+  if (button.dataset.action === 'print') {
+    printLoadEntry(button.dataset.id);
+  }
+
+  if (button.dataset.action === 'export') {
+    exportLoadEntry(button.dataset.id);
   }
 
   if (button.dataset.action === 'delete') {
@@ -1383,6 +2253,10 @@ function handleSelectedDateChange() {
 
   if (!editingLoadId) {
     fields.loadDate.value = daily.date.value;
+  }
+
+  if (savedFilters.date && (!savedFilters.date.value || savedFilters.scope?.value === 'selected-date')) {
+    savedFilters.date.value = daily.date.value;
   }
 
   renderSummary();
@@ -1402,6 +2276,17 @@ function handleAddOnChange() {
   saveDailyAddOnFromControls();
   refreshAllDailyEarningsRecords();
   updateDailySummary();
+}
+
+function handlePayPeriodChange() {
+  const range = getCompanyPayPeriodRange(daily.date.value || todayLocal());
+  daily.payPeriodStart.value = range.start;
+  daily.payPeriodEnd.value = range.end;
+  updateDailySummary();
+}
+
+function handleSavedFiltersChange() {
+  renderSavedLoads();
 }
 
 function handleFormInput(event) {
@@ -1458,7 +2343,9 @@ function downloadLoadLog() {
     'Net barrels',
     'API gravity',
     'BS&W percentage',
-    'Loaded miles',
+    'Regular miles',
+    'Re-routed miles',
+    'Total miles including re-route',
     'Matched pay range',
     'Loaded miles pay rate',
     'Estimated pay',
@@ -1481,66 +2368,74 @@ function downloadLoadLog() {
     'Loaded / picked up time',
     'Arrived at drop off time',
     'Dropped off / completed time',
-    'Pickup time',
-    'Paid pickup wait time',
-    'Drop-off time',
-    'Paid drop-off wait time',
+    'Load site duration',
+    'Load wait time',
+    'Unload site duration',
+    'Unload wait time',
     'Total paid wait time',
     'Wait pay',
+    'Daily trainer pay',
     'Estimated total pay',
     'Total cycle time',
     'Notes'
   ];
 
-  const rows = savedLoads.map((load) => [
-    load.loadDate,
-    load.loadNumber,
-    load.ticketNumber,
-    load.bolNumber,
-    load.loadStatus,
-    load.driverName,
-    load.truckNumber,
-    load.trailerNumber,
-    load.pickupLocation,
-    load.dropoffLocation,
-    load.productType,
-    formatCsvNumber(load.grossBarrels),
-    formatCsvNumber(load.netBarrels),
-    formatCsvNumber(load.apiGravity, 1),
-    formatCsvNumber(load.bswPercentage),
-    formatCsvNumber(load.loadedMiles, 1),
-    load.matchedPayRange,
-    formatCsvNumber(load.loadedMilesPayRate),
-    formatCsvNumber(load.estimatedPay),
-    load.paySource,
-    formatCsvNumber(load.waterBarrels),
-    formatCsvNumber(load.oilBarrels),
-    formatCsvNumber(load.crudeWeightPerBarrel, 1),
-    isFiniteNumber(load.estimatedOilWeight) ? Math.round(load.estimatedOilWeight) : '',
-    isFiniteNumber(load.estimatedWaterWeight) ? Math.round(load.estimatedWaterWeight) : '',
-    isFiniteNumber(load.estimatedTotalLoadWeight) ? Math.round(load.estimatedTotalLoadWeight) : '',
-    formatCsvNumber(load.emptyTruckWeight, 0),
-    isFiniteNumber(load.estimatedGrossTruckWeight) ? Math.round(load.estimatedGrossTruckWeight) : '',
-    formatCsvNumber(load.startMeterReading),
-    formatCsvNumber(load.endMeterReading),
-    formatCsvNumber(load.barrelsOffloaded),
-    formatCsvNumber(load.differenceVsGrossBarrels),
-    load.offloadStatus,
-    load.jotformConfirmationNumber,
-    load.arrivedPickupTime,
-    load.loadedTime,
-    load.arrivedDropoffTime,
-    load.completedTime,
-    formatDuration(load.pickupTimeMinutes),
-    formatDuration(load.paidPickupWaitMinutes),
-    formatDuration(load.dropoffTimeMinutes),
-    formatDuration(load.paidDropoffWaitMinutes),
-    formatDuration(load.totalPaidWaitMinutes),
-    formatCsvNumber(load.waitPay),
-    formatCsvNumber(load.estimatedEntryPay),
-    formatDuration(load.cycleTimeMinutes),
-    load.notes
-  ]);
+  const rows = getUniqueSavedLoads(savedLoads).map((load) => {
+    const dailyRecord = getDailyEarningsSummary(load.loadDate);
+
+    return [
+      load.loadDate,
+      load.loadNumber,
+      load.ticketNumber,
+      load.bolNumber,
+      load.loadStatus,
+      load.driverName,
+      load.truckNumber,
+      load.trailerNumber,
+      load.pickupLocation,
+      load.dropoffLocation,
+      load.productType,
+      formatCsvNumber(load.grossBarrels),
+      formatCsvNumber(load.netBarrels),
+      formatCsvNumber(load.apiGravity, 1),
+      formatCsvNumber(load.bswPercentage),
+      formatCsvNumber(load.regularMiles, 1),
+      formatCsvNumber(load.reRoutedMiles, 1),
+      formatCsvNumber(load.totalMilesIncludingReRoute, 1),
+      load.matchedPayRange,
+      formatCsvNumber(load.loadedMilesPayRate),
+      formatCsvNumber(load.estimatedPay),
+      load.paySource,
+      formatCsvNumber(load.waterBarrels),
+      formatCsvNumber(load.oilBarrels),
+      formatCsvNumber(load.crudeWeightPerBarrel, 1),
+      isFiniteNumber(load.estimatedOilWeight) ? Math.round(load.estimatedOilWeight) : '',
+      isFiniteNumber(load.estimatedWaterWeight) ? Math.round(load.estimatedWaterWeight) : '',
+      isFiniteNumber(load.estimatedTotalLoadWeight) ? Math.round(load.estimatedTotalLoadWeight) : '',
+      formatCsvNumber(load.emptyTruckWeight, 0),
+      isFiniteNumber(load.estimatedGrossTruckWeight) ? Math.round(load.estimatedGrossTruckWeight) : '',
+      formatCsvNumber(load.startMeterReading),
+      formatCsvNumber(load.endMeterReading),
+      formatCsvNumber(load.barrelsOffloaded),
+      formatCsvNumber(load.differenceVsGrossBarrels),
+      load.offloadStatus,
+      load.jotformConfirmationNumber,
+      load.arrivedPickupTime,
+      load.loadedTime,
+      load.arrivedDropoffTime,
+      load.completedTime,
+      formatDuration(load.pickupTimeMinutes),
+      formatDuration(load.paidPickupWaitMinutes),
+      formatDuration(load.dropoffTimeMinutes),
+      formatDuration(load.paidDropoffWaitMinutes),
+      formatDuration(load.totalPaidWaitMinutes),
+      formatCsvNumber(load.waitPay),
+      formatCsvNumber(dailyRecord.trainerPay),
+      formatCsvNumber(load.estimatedEntryPay),
+      formatDuration(load.cycleTimeMinutes),
+      load.notes
+    ];
+  });
 
   downloadCsv(`personal-oilfield-load-log-${todayLocal()}.csv`, headers, rows);
 }
@@ -1560,22 +2455,27 @@ function downloadDailyEarningsSummary() {
   refreshAllDailyEarningsRecords();
   const headers = [
     'Date',
+    'Total loads hauled',
     'Completed load count',
     'Reject count',
-    'Total loaded miles',
+    'Regular miles',
+    'Total re-routed miles',
+    'Total miles including re-route',
     'Total gross barrels',
     'Total barrels offloaded',
     'Total difference vs gross barrels',
     'Total completed load pay',
     'Total reject pay',
-    'Total paid pickup wait time',
-    'Total paid drop-off wait time',
+    'Total load wait time',
+    'Total unload wait time',
     'Total paid wait time',
     'Total wait pay',
     'Per diem applied',
     'Per diem amount',
     'Sleeper berth applied',
     'Sleeper berth amount',
+    'Trainer pay applied',
+    'Trainer pay amount',
     'Total estimated daily earnings',
     'Daily earnings notes'
   ];
@@ -1585,9 +2485,12 @@ function downloadDailyEarningsSummary() {
 
     return [
       record.date,
+      record.loadRecordCount,
       record.completedLoadCount,
       record.rejectCount,
       formatCsvNumber(record.totalLoadedMiles, 1),
+      formatCsvNumber(record.totalReRoutedMiles, 1),
+      formatCsvNumber(record.totalMilesIncludingReRoute, 1),
       formatCsvNumber(record.totalGrossBarrels),
       formatCsvNumber(record.totalBarrelsOffloaded),
       formatCsvNumber(record.totalDifferenceVsGrossBarrels),
@@ -1601,12 +2504,347 @@ function downloadDailyEarningsSummary() {
       formatCsvNumber(record.perDiemPay),
       record.sleeperBerthApplied ? 'Yes' : 'No',
       formatCsvNumber(record.sleeperBerthPay),
+      record.trainerPayApplied ? 'Yes' : 'No',
+      formatCsvNumber(record.trainerPay),
       formatCsvNumber(record.totalEstimatedDailyEarnings),
       record.notes
     ];
   });
 
   downloadCsv(`personal-oilfield-daily-earnings-${todayLocal()}.csv`, headers, rows);
+}
+
+function getTrackerSnapshot() {
+  refreshAllDailyEarningsRecords();
+  saveAppMeta();
+
+  return {
+    format: BACKUP_FORMAT,
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    recordCount: countUniqueLoads(),
+    storageKeys: {
+      loads: STORAGE_KEY,
+      dailyAddOns: ADD_ON_STORAGE_KEY,
+      dailySummaries: EARNINGS_STORAGE_KEY,
+      profile: PROFILE_STORAGE_KEY,
+      metadata: META_STORAGE_KEY
+    },
+    data: {
+      loads: getUniqueSavedLoads(savedLoads),
+      dailyAddOns,
+      dailySummaries: dailyEarningsRecords,
+      profile: driverProfile,
+      metadata: appMeta
+    }
+  };
+}
+
+function exportJsonBackup() {
+  const snapshot = getTrackerSnapshot();
+  downloadJson(`personal-oilfield-load-tracker-backup-${todayLocal()}.json`, snapshot);
+  setBackupStatus(`Exported JSON backup with ${snapshot.recordCount} ${snapshot.recordCount === 1 ? 'record' : 'records'}.`);
+}
+
+function normalizeImportedLoadList(rawLoads) {
+  if (!Array.isArray(rawLoads)) {
+    throw new Error('Backup file does not contain a load record list.');
+  }
+
+  const seenIds = new Set();
+  const duplicateIds = [];
+  const loads = [];
+
+  rawLoads.forEach((rawLoad, index) => {
+    if (!isPlainObject(rawLoad)) {
+      throw new Error('Backup file contains a load record that is not an object.');
+    }
+
+    const normalized = normalizeSavedLoad({
+      ...rawLoad,
+      id: rawLoad.id || buildStableFallbackId(rawLoad, index, 'import-missing-id')
+    });
+
+    if (seenIds.has(normalized.id)) {
+      duplicateIds.push(normalized.id);
+      return;
+    }
+
+    seenIds.add(normalized.id);
+    loads.push(normalized);
+  });
+
+  return { loads, duplicateIds };
+}
+
+function normalizeImportedAddOns(rawAddOns) {
+  if (rawAddOns === undefined || rawAddOns === null) {
+    return {};
+  }
+
+  if (!isPlainObject(rawAddOns) && !Array.isArray(rawAddOns)) {
+    throw new Error('Backup daily add-ons are not in a usable format.');
+  }
+
+  return normalizeDailyAddOns(rawAddOns);
+}
+
+function normalizeImportedSummaries(rawSummaries) {
+  if (rawSummaries === undefined || rawSummaries === null) {
+    return {};
+  }
+
+  if (!isPlainObject(rawSummaries)) {
+    throw new Error('Backup daily summaries are not in a usable format.');
+  }
+
+  return rawSummaries;
+}
+
+function parseBackupText(text) {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('Choose a valid JSON backup file.');
+  }
+
+  const data = parsed?.data || parsed;
+  const rawLoads = Array.isArray(parsed) ? parsed : (data.loads || (data.load ? [data.load] : undefined));
+  const normalizedLoads = normalizeImportedLoadList(rawLoads);
+
+  return {
+    format: parsed.format || 'legacy-json',
+    appVersion: parsed.appVersion || '',
+    dataSchemaVersion: parsed.dataSchemaVersion || 1,
+    loads: normalizedLoads.loads,
+    skippedDuplicateIds: normalizedLoads.duplicateIds,
+    dailyAddOns: normalizeImportedAddOns(data.dailyAddOns || data.addOns || {}),
+    dailySummaries: normalizeImportedSummaries(data.dailySummaries || data.earnings || {}),
+    profile: normalizeDriverProfile(data.profile || {}),
+    metadata: isPlainObject(data.metadata) ? data.metadata : {}
+  };
+}
+
+function mergeImportedAddOns(currentAddOns, importedAddOns) {
+  const merged = { ...currentAddOns };
+
+  Object.entries(importedAddOns).forEach(([date, addOn]) => {
+    if (!merged[date]) {
+      merged[date] = addOn;
+    }
+  });
+
+  return merged;
+}
+
+function mergeImportedProfile(currentProfile, importedProfile) {
+  return normalizeDriverProfile({
+    ...importedProfile,
+    ...currentProfile,
+    driverName: currentProfile.driverName || importedProfile.driverName || '',
+    truckNumber: currentProfile.truckNumber || importedProfile.truckNumber || '',
+    trailerNumber: currentProfile.trailerNumber || importedProfile.trailerNumber || ''
+  });
+}
+
+function buildImportedState(imported, mode) {
+  if (mode === 'replace') {
+    return {
+      loads: imported.loads,
+      dailyAddOns: imported.dailyAddOns,
+      dailySummaries: imported.dailySummaries,
+      profile: imported.profile,
+      metadata: {
+        ...imported.metadata,
+        importedAt: new Date().toISOString(),
+        importMode: mode
+      },
+      stats: {
+        importedCount: imported.loads.length,
+        skippedCount: imported.skippedDuplicateIds.length,
+        replacedCount: countUniqueLoads()
+      }
+    };
+  }
+
+  const currentById = new Map(getUniqueSavedLoads().map((load) => [load.id, load]));
+  const newLoads = [];
+  let skippedCount = imported.skippedDuplicateIds.length;
+
+  imported.loads.forEach((load) => {
+    if (currentById.has(load.id)) {
+      skippedCount += 1;
+      return;
+    }
+
+    newLoads.push(load);
+  });
+
+  return {
+    loads: [...newLoads, ...getUniqueSavedLoads()],
+    dailyAddOns: mergeImportedAddOns(dailyAddOns, imported.dailyAddOns),
+    dailySummaries: {
+      ...imported.dailySummaries,
+      ...dailyEarningsRecords
+    },
+    profile: mergeImportedProfile(driverProfile, imported.profile),
+    metadata: {
+      ...appMeta,
+      lastImport: {
+        importedAt: new Date().toISOString(),
+        importMode: mode,
+        importedCount: newLoads.length,
+        skippedDuplicateCount: skippedCount
+      }
+    },
+    stats: {
+      importedCount: newLoads.length,
+      skippedCount,
+      replacedCount: 0
+    }
+  };
+}
+
+function commitImportedState(nextState) {
+  const previousState = {
+    loads: savedLoads,
+    dailyAddOns,
+    dailyEarningsRecords,
+    driverProfile,
+    appMeta
+  };
+  const previousStorage = {
+    [STORAGE_KEY]: localStorage.getItem(STORAGE_KEY),
+    [ADD_ON_STORAGE_KEY]: localStorage.getItem(ADD_ON_STORAGE_KEY),
+    [EARNINGS_STORAGE_KEY]: localStorage.getItem(EARNINGS_STORAGE_KEY),
+    [PROFILE_STORAGE_KEY]: localStorage.getItem(PROFILE_STORAGE_KEY),
+    [META_STORAGE_KEY]: localStorage.getItem(META_STORAGE_KEY)
+  };
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState.loads));
+    localStorage.setItem(ADD_ON_STORAGE_KEY, JSON.stringify(nextState.dailyAddOns));
+    localStorage.setItem(EARNINGS_STORAGE_KEY, JSON.stringify(nextState.dailySummaries));
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextState.profile));
+    localStorage.setItem(META_STORAGE_KEY, JSON.stringify(nextState.metadata));
+  } catch {
+    Object.entries(previousStorage).forEach(([key, value]) => {
+      try {
+        if (value !== null) {
+          localStorage.setItem(key, value);
+        }
+      } catch {
+        addStorageWarning(`Warning: ${key} could not be restored after a failed import. Check the latest JSON backup before closing the app.`);
+      }
+    });
+
+    savedLoads = previousState.loads;
+    dailyAddOns = previousState.dailyAddOns;
+    dailyEarningsRecords = previousState.dailyEarningsRecords;
+    driverProfile = previousState.driverProfile;
+    appMeta = previousState.appMeta;
+    return false;
+  }
+
+  savedLoads = nextState.loads.map(normalizeSavedLoad);
+  dailyAddOns = normalizeDailyAddOns(nextState.dailyAddOns);
+  dailyEarningsRecords = nextState.dailySummaries;
+  driverProfile = normalizeDriverProfile(nextState.profile);
+  appMeta = isPlainObject(nextState.metadata) ? nextState.metadata : {};
+  refreshAllDailyEarningsRecords();
+  applyProfileToControls();
+  applyDailyAddOnsToControls();
+  renderSummary();
+  updateDailySummary();
+  saveAppMeta();
+  return true;
+}
+
+function importJsonBackup() {
+  const file = importBackupFile?.files?.[0];
+
+  if (!file) {
+    setBackupStatus('Choose a JSON backup file before importing.', true);
+    return;
+  }
+
+  const mode = importMode?.value || 'merge';
+
+  if (mode === 'replace') {
+    const confirmed = typeof globalThis.confirm === 'function'
+      ? globalThis.confirm(`Replace current tracker data? This will replace ${countUniqueLoads()} current saved load records only after the backup file is validated.`)
+      : false;
+
+    if (!confirmed) {
+      setBackupStatus('Import canceled. Current records were not changed.');
+      return;
+    }
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    try {
+      const imported = parseBackupText(String(reader.result || ''));
+      const nextState = buildImportedState(imported, mode);
+      const committed = commitImportedState(nextState);
+
+      if (!committed) {
+        setBackupStatus('Import failed while saving. Current records were restored.', true);
+        return;
+      }
+
+      const action = mode === 'replace' ? 'Replaced' : 'Imported';
+      setBackupStatus(`${action} ${nextState.stats.importedCount} ${nextState.stats.importedCount === 1 ? 'record' : 'records'}. Skipped ${nextState.stats.skippedCount} duplicate ${nextState.stats.skippedCount === 1 ? 'record' : 'records'}. Current total: ${countUniqueLoads()}.`);
+    } catch (error) {
+      setBackupStatus(`${error.message} Current records were not changed.`, true);
+    }
+  };
+
+  reader.onerror = () => {
+    setBackupStatus('Backup file could not be read. Current records were not changed.', true);
+  };
+
+  reader.readAsText(file);
+}
+
+function printDailyReport() {
+  const date = daily.date.value;
+  const record = getDailyEarningsSummary(date);
+  const firstLoad = getLoadsForDate(date)[0] || {};
+  const rows = [
+    ['Driver name', firstLoad.driverName || driverProfile.driverName || ''],
+    ['Truck number', firstLoad.truckNumber || driverProfile.truckNumber || ''],
+    ['Trailer number', firstLoad.trailerNumber || driverProfile.trailerNumber || ''],
+    ['Work date', date],
+    ['Total loads hauled', record.loadRecordCount],
+    ['Load earnings', formatMoney(record.completedLoadPay + record.rejectPay)],
+    ['Wait-time earnings', formatMoney(record.totalWaitPay)],
+    ['Trainer pay', formatMoney(record.trainerPay)],
+    ['Total earnings', formatMoney(record.totalEstimatedDailyEarnings)],
+    ['Total gross barrels', formatBarrels(record.totalGrossBarrels)],
+    ['Total mileage', formatMiles(record.totalMilesIncludingReRoute)],
+    ['Total wait time', formatDuration(record.totalPaidWaitMinutes)],
+    ['Notes', record.notes || '-']
+  ];
+  const markup = rows.map(([label, value]) => `
+    <div class="print-row">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || '-')}</strong>
+    </div>
+  `).join('');
+
+  openPrintWindow(
+    `Oilfield Daily Report ${date || ''}`.trim(),
+    `
+      <h1>Oilfield Daily Earnings Report</h1>
+      <p class="muted">Generated ${new Date().toLocaleString()}</p>
+      <div class="print-grid">${markup}</div>
+    `
+  );
 }
 
 function escapeHtml(value) {
@@ -1624,13 +2862,26 @@ function initialize() {
     appVersion.textContent = APP_VERSION;
   }
 
+  if (settingsAppVersion) {
+    settingsAppVersion.textContent = APP_VERSION;
+  }
+
+  if (settingsDataVersion) {
+    settingsDataVersion.textContent = String(DATA_SCHEMA_VERSION);
+  }
+
   daily.date.value = daily.date.value || today;
+  const initialPayPeriod = getCompanyPayPeriodRange(daily.date.value);
+  daily.payPeriodStart.value = initialPayPeriod.start;
+  daily.payPeriodEnd.value = initialPayPeriod.end;
+  savedFilters.date.value = savedFilters.date.value || daily.date.value;
   fields.loadDate.value = fields.loadDate.value || daily.date.value;
   fields.loadStatus.value = fields.loadStatus.value || COMPLETED_STATUS;
-  saveLoadsToStorage();
-  saveDailyAddOnsToStorage();
+  applyProfileToControls();
+  applyProfileToNewLoad();
   applyDailyAddOnsToControls();
   refreshAllDailyEarningsRecords();
+  saveAppMeta();
   renderStorageWarning();
   renderSummary();
   updateDailySummary();
@@ -1642,6 +2893,14 @@ form.addEventListener('input', handleFormInput);
 form.addEventListener('change', handleFormInput);
 daily.date.addEventListener('input', handleSelectedDateChange);
 daily.date.addEventListener('change', handleSelectedDateChange);
+daily.payPeriodStart.addEventListener('input', handlePayPeriodChange);
+daily.payPeriodStart.addEventListener('change', handlePayPeriodChange);
+daily.payPeriodEnd.addEventListener('input', handlePayPeriodChange);
+daily.payPeriodEnd.addEventListener('change', handlePayPeriodChange);
+Object.values(savedFilters).forEach((field) => {
+  field.addEventListener('input', handleSavedFiltersChange);
+  field.addEventListener('change', handleSavedFiltersChange);
+});
 Object.values(addOns).forEach((field) => {
   field.addEventListener('input', handleAddOnChange);
   field.addEventListener('change', handleAddOnChange);
@@ -1654,9 +2913,13 @@ saveAnywayButton.addEventListener('click', () => {
 cancelDuplicateButton.addEventListener('click', hideDuplicateWarning);
 clearFormButton.addEventListener('click', clearForm);
 savedLoadCards.addEventListener('click', handleSavedCardAction);
+profileControls.saveButton.addEventListener('click', saveDriverProfile);
 downloadLogButton.addEventListener('click', downloadLoadLog);
 downloadEarningsButton.addEventListener('click', downloadDailyEarningsSummary);
-clearLogButton.addEventListener('click', clearSavedLog);
+printDailyReportButton.addEventListener('click', printDailyReport);
+exportBackupButton.addEventListener('click', exportJsonBackup);
+importBackupButton.addEventListener('click', importJsonBackup);
 checkUpdatesButton.addEventListener('click', checkForUpdates);
+updateNowButton.addEventListener('click', activateWaitingUpdate);
 
 initialize();
