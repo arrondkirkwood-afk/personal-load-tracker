@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.5";
+const APP_VERSION = "1.3.6";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;

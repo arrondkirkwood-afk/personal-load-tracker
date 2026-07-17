@@ -1,15 +1,16 @@
-const APP_VERSION = '1.3.5';
+const APP_VERSION = '1.3.6';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const APP_FILES = [
   './',
   './index.html',
+  './repair.html',
   './manifest.json',
-  './manifest.json?v=1.3.5',
+  './manifest.json?v=1.3.6',
   './style.css',
-  './style.css?v=1.3.5',
+  './style.css?v=1.3.6',
   './script.js',
-  './script.js?v=1.3.5',
+  './script.js?v=1.3.6',
   './service-worker.js',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -63,7 +64,7 @@ self.addEventListener('fetch', (event) => {
 
   const shouldBypassHttpCache = request.mode === 'navigate'
     || ['script', 'style', 'manifest'].includes(request.destination)
-    || ['/', '/personal-load-tracker/', '/personal-load-tracker/index.html'].includes(url.pathname);
+    || ['/', '/personal-load-tracker/', '/personal-load-tracker/index.html', '/personal-load-tracker/repair.html'].includes(url.pathname);
   let networkRequest = request;
 
   if (shouldBypassHttpCache) {
