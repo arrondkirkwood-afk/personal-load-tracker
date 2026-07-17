@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.2";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -429,6 +429,7 @@ let pendingCommitMode = 'save';
 let isSaving = false;
 let draftSaveTimer = null;
 let waitingServiceWorker = null;
+let firebaseStartupInProgress = false;
 const cloudSync = {
   enabled: false,
   app: null,
@@ -688,7 +689,8 @@ function updateAuthUi() {
 
   if (authControls.signInButton) {
     authControls.signInButton.hidden = signedIn;
-    authControls.signInButton.disabled = !cloudSync.enabled && cloudSync.authReady;
+    authControls.signInButton.disabled = !isBrowserOnline() || (!cloudSync.enabled && !cloudSync.authReady);
+    authControls.signInButton.textContent = cloudSync.enabled ? 'Sign In' : (cloudSync.authReady ? 'Reconnect and Sign In' : 'Connecting...');
   }
 
   if (authControls.signOutButton) {
@@ -889,6 +891,8 @@ async function loadFirebaseModules() {
 
   return {
     initializeApp: appModule.initializeApp,
+    getApp: appModule.getApp,
+    getApps: appModule.getApps,
     initializeAuth: authModule.initializeAuth,
     getAuth: authModule.getAuth,
     signInWithEmailAndPassword: authModule.signInWithEmailAndPassword,
@@ -920,9 +924,16 @@ function getCapacitorAuthPersistence() {
 }
 
 async function initializeFirebaseSync() {
+  if (firebaseStartupInProgress) {
+    return;
+  }
+
+  firebaseStartupInProgress = true;
+
   if (!canStartFirebase()) {
     cloudSync.authReady = true;
     updateAuthUi();
+    firebaseStartupInProgress = false;
     return;
   }
 
@@ -934,7 +945,9 @@ async function initializeFirebaseSync() {
       APP_RUNTIME.isCapacitor ? 20000 : 45000,
       'Firebase SDK load timed out.'
     );
-    cloudSync.app = cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
+    cloudSync.app = cloudSync.sdk.getApps?.().length
+      ? cloudSync.sdk.getApp()
+      : cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
     cloudSync.auth = APP_RUNTIME.isCapacitor && cloudSync.sdk.initializeAuth
       ? cloudSync.sdk.initializeAuth(cloudSync.app, { persistence: getCapacitorAuthPersistence() })
       : cloudSync.sdk.getAuth(cloudSync.app);
@@ -973,9 +986,11 @@ async function initializeFirebaseSync() {
     cloudSync.lastError = 'Firebase sync could not start.';
     const startupMessage = String(error?.message || '').includes('timed out')
       ? 'Firebase files did not load in time. Check the device internet connection, then run the app again.'
-      : 'Firebase sync could not start. Local records are still available.';
+      : 'Cloud login could not start. Local records are still available. Check your connection, then tap Reconnect and Sign In.';
     setAuthError(startupMessage, true);
     updateAuthUi();
+  } finally {
+    firebaseStartupInProgress = false;
   }
 }
 
@@ -1254,8 +1269,13 @@ async function handleSignIn(event) {
   event.preventDefault();
 
   if (!cloudSync.enabled || !cloudSync.auth) {
-    setAuthError('Firebase sync is not ready. Local records are still available.', true);
-    return;
+    setAuthError('Reconnecting to cloud login...');
+    await initializeFirebaseSync();
+
+    if (!cloudSync.enabled || !cloudSync.auth) {
+      setAuthError('Cloud login is still not ready. Local records are safe on this device. Check your connection, then try again.', true);
+      return;
+    }
   }
 
   const email = authControls.email?.value.trim() || '';
