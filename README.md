@@ -131,7 +131,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version on the native development branch: `1.3.6`, cache name `personal-oilfield-load-tracker-v1.3.6`.
+Current app version and cache version on the native development branch: `1.3.7`, cache name `personal-oilfield-load-tracker-v1.3.7`.
 
 To update the app:
 

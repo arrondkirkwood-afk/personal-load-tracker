@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.6";
+const APP_VERSION = "1.3.7";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -20,6 +20,7 @@ const BACKUP_FORMAT = 'personal-oilfield-load-tracker-backup';
 const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
+const FIRESTORE_BATCH_WRITE_LIMIT = 450;
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyC68MPQAa0nsAX-Wq2WSfO09H1kI6P4kaA",
   authDomain: "arrond-oilfield-load-tracker.firebaseapp.com",
@@ -712,7 +713,7 @@ function updateAuthUi() {
 
   if (authControls.signInButton) {
     authControls.signInButton.hidden = signedIn;
-    authControls.signInButton.disabled = !isBrowserOnline() || (!cloudSync.enabled && !cloudSync.authReady);
+    authControls.signInButton.disabled = !cloudSync.enabled && !cloudSync.authReady;
     authControls.signInButton.textContent = cloudSync.enabled ? 'Sign In' : (cloudSync.authReady ? 'Reconnect and Sign In' : 'Connecting...');
   }
 
@@ -923,6 +924,7 @@ async function loadFirebaseModules() {
     onAuthStateChanged: authModule.onAuthStateChanged,
     setPersistence: authModule.setPersistence,
     browserLocalPersistence: authModule.browserLocalPersistence,
+    browserSessionPersistence: authModule.browserSessionPersistence,
     indexedDBLocalPersistence: authModule.indexedDBLocalPersistence,
     inMemoryPersistence: authModule.inMemoryPersistence,
     getFirestore: firestoreModule.getFirestore,
@@ -938,12 +940,44 @@ async function loadFirebaseModules() {
   };
 }
 
-function getCapacitorAuthPersistence() {
+function getAuthPersistenceCandidates() {
   return [
     cloudSync.sdk.indexedDBLocalPersistence,
     cloudSync.sdk.browserLocalPersistence,
+    cloudSync.sdk.browserSessionPersistence,
     cloudSync.sdk.inMemoryPersistence
   ].filter(Boolean);
+}
+
+function initializeFirebaseAuthInstance() {
+  if (cloudSync.sdk.initializeAuth) {
+    try {
+      return cloudSync.sdk.initializeAuth(cloudSync.app, {
+        persistence: getAuthPersistenceCandidates()
+      });
+    } catch {
+      // Firebase Auth may already be initialized if an older cached shell ran first.
+    }
+  }
+
+  return cloudSync.sdk.getAuth(cloudSync.app);
+}
+
+async function applyBestAuthPersistence() {
+  if (!cloudSync.sdk.setPersistence || !cloudSync.auth) {
+    return;
+  }
+
+  for (const persistence of getAuthPersistenceCandidates()) {
+    try {
+      await cloudSync.sdk.setPersistence(cloudSync.auth, persistence);
+      return;
+    } catch {
+      // Try the next persistence option. iOS can reject one storage layer while another works.
+    }
+  }
+
+  setAuthError('Sign-in can work for this open app session, but iOS may not remember it after closing. Local records are still protected.', true);
 }
 
 async function initializeFirebaseSync() {
@@ -971,21 +1005,10 @@ async function initializeFirebaseSync() {
     cloudSync.app = cloudSync.sdk.getApps?.().length
       ? cloudSync.sdk.getApp()
       : cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
-    cloudSync.auth = APP_RUNTIME.isCapacitor && cloudSync.sdk.initializeAuth
-      ? cloudSync.sdk.initializeAuth(cloudSync.app, { persistence: getCapacitorAuthPersistence() })
-      : cloudSync.sdk.getAuth(cloudSync.app);
+    cloudSync.auth = initializeFirebaseAuthInstance();
     cloudSync.db = cloudSync.sdk.getFirestore(cloudSync.app);
     cloudSync.enabled = true;
-
-    if (!APP_RUNTIME.isCapacitor) {
-      await cloudSync.sdk.setPersistence(cloudSync.auth, cloudSync.sdk.browserLocalPersistence).catch(() => {
-        setAuthError('Sign-in can still work, but this browser may not remember the session as reliably.', true);
-      });
-    }
-
-    await cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db).catch(() => {
-      setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
-    });
+    cloudSync.lastError = '';
 
     const authReadyFallbackTimer = startAuthReadyFallbackTimer();
 
@@ -1000,6 +1023,20 @@ async function initializeFirebaseSync() {
         handleFirebaseAuthError();
       }
     );
+
+    updateAuthUi();
+
+    applyBestAuthPersistence().catch(() => {
+      setAuthError('Sign-in can work, but this browser may not remember the session as reliably. Local records are still protected.', true);
+    });
+
+    withTimeout(
+      cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db),
+      6000,
+      'Firebase offline cache setup timed out.'
+    ).catch(() => {
+      setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
+    });
 
     globalThis.addEventListener?.('online', updateSyncStatusFromState);
     globalThis.addEventListener?.('offline', updateSyncStatusFromState);
@@ -1327,6 +1364,26 @@ function handleCloudStateChanged() {
 function getFriendlyAuthError(error) {
   const code = error?.code || '';
 
+  if (code.includes('unauthorized-domain')) {
+    return 'Firebase rejected this web address. Add this GitHub Pages domain to Firebase Authentication authorized domains, then try again.';
+  }
+
+  if (code.includes('operation-not-allowed')) {
+    return 'Firebase email/password sign-in is not enabled for this project.';
+  }
+
+  if (code.includes('invalid-api-key') || code.includes('app-deleted')) {
+    return 'Firebase project settings could not be used by this app.';
+  }
+
+  if (code.includes('user-disabled')) {
+    return 'This Firebase user account is disabled.';
+  }
+
+  if (code.includes('invalid-email')) {
+    return 'Enter a valid email address.';
+  }
+
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
     return 'Email or password did not match.';
   }
@@ -1339,7 +1396,7 @@ function getFriendlyAuthError(error) {
     return 'Could not reach Firebase. Check the connection and try again.';
   }
 
-  return 'Sign-in failed. Check the email and password, then try again.';
+  return `Sign-in failed${code ? ` (${code})` : ''}. Check the email and password, then try again.`;
 }
 
 function mergeLoadRecords(primaryLoads, secondaryLoads) {
@@ -1600,10 +1657,11 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
     .then(() => {
       cloudSync.lastError = '';
     })
-    .catch(() => {
-      cloudSync.lastError = failureMessage;
+    .catch((error) => {
+      const detail = getFriendlyErrorDetail(error, failureMessage);
+      cloudSync.lastError = detail;
       markLocalChangesPending(failureMessage);
-      setAuthError(`${failureMessage} Local records were still saved on this device.`, true);
+      setAuthError(`${failureMessage} ${detail}. Local records were still saved on this device.`, true);
     })
     .finally(() => {
       cloudSync.pendingWrites = Math.max(0, cloudSync.pendingWrites - 1);
@@ -1686,6 +1744,40 @@ function syncSettingsToCloud(extra = {}) {
   ), 'Settings could not be synced to Firebase yet.');
 }
 
+function createCloudBatchWriter(limit = FIRESTORE_BATCH_WRITE_LIMIT) {
+  let batch = cloudSync.sdk.writeBatch(cloudSync.db);
+  let operationCount = 0;
+
+  async function commitCurrentBatch() {
+    if (operationCount === 0) {
+      return;
+    }
+
+    await batch.commit();
+    batch = cloudSync.sdk.writeBatch(cloudSync.db);
+    operationCount = 0;
+  }
+
+  async function addOperation(callback) {
+    callback(batch);
+    operationCount += 1;
+
+    if (operationCount >= limit) {
+      await commitCurrentBatch();
+    }
+  }
+
+  return {
+    set: (documentRef, payload, options) => addOperation((currentBatch) => {
+      currentBatch.set(documentRef, payload, options);
+    }),
+    delete: (documentRef) => addOperation((currentBatch) => {
+      currentBatch.delete(documentRef);
+    }),
+    commit: commitCurrentBatch
+  };
+}
+
 function syncCurrentDateToCloud(date) {
   if (!isCloudSignedIn() || !date) {
     return;
@@ -1701,57 +1793,57 @@ function syncImportedStateToCloud(nextState, mode) {
   }
 
   queueCloudWrite(async () => {
-    const batch = cloudSync.sdk.writeBatch(cloudSync.db);
+    const batch = createCloudBatchWriter();
     const nextLoadIds = new Set(nextState.loads.map((load) => String(load.id)));
     const nextAddOnDates = new Set(Object.keys(nextState.dailyAddOns || {}));
     const nextSummaryDates = new Set(Object.keys(nextState.dailySummaries || {}));
 
-    nextState.loads.forEach((load) => {
-      batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
-    });
+    for (const load of nextState.loads) {
+      await batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
+    }
 
-    Object.keys(nextState.dailyAddOns || {}).forEach((date) => {
-      batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), sanitizeForFirestore({
+    for (const date of Object.keys(nextState.dailyAddOns || {})) {
+      await batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), sanitizeForFirestore({
         ...nextState.dailyAddOns[date],
         date,
         cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
       }), { merge: true });
-    });
+    }
 
-    Object.keys(nextState.dailySummaries || {}).forEach((date) => {
-      batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
+    for (const date of Object.keys(nextState.dailySummaries || {})) {
+      await batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
         ...nextState.dailySummaries[date],
         date,
         cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
       }), { merge: true });
-    });
+    }
 
-    batch.set(cloudDocument('profile', 'current'), sanitizeForFirestore({
+    await batch.set(cloudDocument('profile', 'current'), sanitizeForFirestore({
       ...nextState.profile,
       cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
     }), { merge: true });
-    batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+    await batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
       lastImport: nextState.metadata?.lastImport || { importedAt: new Date().toISOString(), importMode: mode }
     }), { merge: true });
 
     if (mode === 'replace') {
-      cloudSync.state.loads.forEach((load) => {
+      for (const load of cloudSync.state.loads) {
         if (!nextLoadIds.has(String(load.id))) {
-          batch.delete(cloudDocument('loads', toCloudDocumentId(load.id)));
+          await batch.delete(cloudDocument('loads', toCloudDocumentId(load.id)));
         }
-      });
+      }
 
-      Object.keys(cloudSync.state.dailyAddOns || {}).forEach((date) => {
+      for (const date of Object.keys(cloudSync.state.dailyAddOns || {})) {
         if (!nextAddOnDates.has(date)) {
-          batch.delete(cloudDocument('dailyAddOns', toCloudDocumentId(date)));
+          await batch.delete(cloudDocument('dailyAddOns', toCloudDocumentId(date)));
         }
-      });
+      }
 
-      Object.keys(cloudSync.state.dailySummaries || {}).forEach((date) => {
+      for (const date of Object.keys(cloudSync.state.dailySummaries || {})) {
         if (!nextSummaryDates.has(date)) {
-          batch.delete(cloudDocument('dailySummaries', toCloudDocumentId(date)));
+          await batch.delete(cloudDocument('dailySummaries', toCloudDocumentId(date)));
         }
-      });
+      }
     }
 
     await batch.commit();
@@ -1766,22 +1858,22 @@ function syncAllCurrentDataToCloud() {
 
   queueCloudWrite(async () => {
     refreshAllDailyEarningsRecords();
-    const batch = cloudSync.sdk.writeBatch(cloudSync.db);
+    const batch = createCloudBatchWriter();
 
-    getUniqueSavedLoads(savedLoads).forEach((load) => {
-      batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
-    });
+    for (const load of getUniqueSavedLoads(savedLoads)) {
+      await batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
+    }
 
-    Object.keys(dailyAddOns || {}).forEach((date) => {
-      batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), buildCloudAddOnPayload(date), { merge: true });
-    });
+    for (const date of Object.keys(dailyAddOns || {})) {
+      await batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), buildCloudAddOnPayload(date), { merge: true });
+    }
 
-    Object.keys(dailyEarningsRecords || {}).forEach((date) => {
-      batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), buildCloudSummaryPayload(date), { merge: true });
-    });
+    for (const date of Object.keys(dailyEarningsRecords || {})) {
+      await batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), buildCloudSummaryPayload(date), { merge: true });
+    }
 
-    batch.set(cloudDocument('profile', 'current'), buildCloudProfilePayload(), { merge: true });
-    batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+    await batch.set(cloudDocument('profile', 'current'), buildCloudProfilePayload(), { merge: true });
+    await batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
       manualSyncAt: new Date().toISOString()
     }), { merge: true });
 
@@ -1891,7 +1983,7 @@ async function migrateLocalDataToFirebase() {
   }
 
   const { byId, byFingerprint } = getCloudDuplicateMaps();
-  const batch = cloudSync.sdk.writeBatch(cloudSync.db);
+  const batch = createCloudBatchWriter();
   const stats = {
     examinedCount: localLoads.length,
     uploadedCount: 0,
@@ -1900,7 +1992,7 @@ async function migrateLocalDataToFirebase() {
   };
 
   try {
-    localLoads.forEach((load) => {
+    for (const load of localLoads) {
       const fingerprint = buildLoadFingerprint(load);
       const cloudById = byId.get(String(load.id));
       const cloudByFingerprint = byFingerprint.get(fingerprint);
@@ -1908,50 +2000,50 @@ async function migrateLocalDataToFirebase() {
       if (cloudById && getLoadComparableTime(cloudById) >= getLoadComparableTime(load)) {
         stats.skippedCount += 1;
         stats.newerCloudCount += getLoadComparableTime(cloudById) > getLoadComparableTime(load) ? 1 : 0;
-        return;
+        continue;
       }
 
       if (!cloudById && cloudByFingerprint) {
         stats.skippedCount += 1;
-        return;
+        continue;
       }
 
-      batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload({
+      await batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload({
         ...load,
         migrationFingerprint: fingerprint
       }), { merge: true });
       stats.uploadedCount += 1;
-    });
+    }
 
     const addOns = normalizeDailyAddOns(localState.dailyAddOns || {});
-    Object.keys(addOns).forEach((date) => {
-      batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), sanitizeForFirestore({
+    for (const date of Object.keys(addOns)) {
+      await batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), sanitizeForFirestore({
         ...addOns[date],
         date,
         appVersion: APP_VERSION,
         dataSchemaVersion: DATA_SCHEMA_VERSION,
         cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
       }), { merge: true });
-    });
+    }
 
     const summaries = isPlainObject(localState.dailySummaries) ? localState.dailySummaries : {};
-    Object.keys(summaries).forEach((date) => {
-      batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
+    for (const date of Object.keys(summaries)) {
+      await batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
         ...summaries[date],
         date,
         appVersion: APP_VERSION,
         dataSchemaVersion: DATA_SCHEMA_VERSION,
         cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
       }), { merge: true });
-    });
+    }
 
-    batch.set(cloudDocument('profile', 'current'), sanitizeForFirestore({
+    await batch.set(cloudDocument('profile', 'current'), sanitizeForFirestore({
       ...normalizeDriverProfile(localState.profile || {}),
       appVersion: APP_VERSION,
       dataSchemaVersion: DATA_SCHEMA_VERSION,
       cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
     }), { merge: true });
-    batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+    await batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
       cloudAuthoritative: true,
       migrationVersion: CLOUD_MIGRATION_VERSION
     }), { merge: true });

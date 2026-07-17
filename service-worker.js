@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.6';
+const APP_VERSION = '1.3.7';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const APP_FILES = [
@@ -6,11 +6,11 @@ const APP_FILES = [
   './index.html',
   './repair.html',
   './manifest.json',
-  './manifest.json?v=1.3.6',
+  './manifest.json?v=1.3.7',
   './style.css',
-  './style.css?v=1.3.6',
+  './style.css?v=1.3.7',
   './script.js',
-  './script.js?v=1.3.6',
+  './script.js?v=1.3.7',
   './service-worker.js',
   './icons/icon.svg',
   './icons/icon-192.png',
