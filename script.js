@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.3.1";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -931,7 +931,7 @@ async function initializeFirebaseSync() {
   try {
     cloudSync.sdk = await withTimeout(
       loadFirebaseModules(),
-      APP_RUNTIME.isCapacitor ? 12000 : 20000,
+      APP_RUNTIME.isCapacitor ? 20000 : 45000,
       'Firebase SDK load timed out.'
     );
     cloudSync.app = cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
@@ -940,6 +940,16 @@ async function initializeFirebaseSync() {
       : cloudSync.sdk.getAuth(cloudSync.app);
     cloudSync.db = cloudSync.sdk.getFirestore(cloudSync.app);
     cloudSync.enabled = true;
+
+    if (!APP_RUNTIME.isCapacitor) {
+      await cloudSync.sdk.setPersistence(cloudSync.auth, cloudSync.sdk.browserLocalPersistence).catch(() => {
+        setAuthError('Sign-in can still work, but this browser may not remember the session as reliably.', true);
+      });
+    }
+
+    await cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db).catch(() => {
+      setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
+    });
 
     const authReadyFallbackTimer = startAuthReadyFallbackTimer();
 
@@ -955,16 +965,6 @@ async function initializeFirebaseSync() {
       }
     );
 
-    if (!APP_RUNTIME.isCapacitor) {
-      cloudSync.sdk.setPersistence(cloudSync.auth, cloudSync.sdk.browserLocalPersistence).catch(() => {
-        setAuthError('Sign-in can still work, but this browser may not remember the session as reliably.', true);
-      });
-    }
-
-    cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db).catch(() => {
-      setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
-    });
-
     globalThis.addEventListener?.('online', updateSyncStatusFromState);
     globalThis.addEventListener?.('offline', updateSyncStatusFromState);
   } catch (error) {
@@ -972,7 +972,7 @@ async function initializeFirebaseSync() {
     cloudSync.authReady = true;
     cloudSync.lastError = 'Firebase sync could not start.';
     const startupMessage = String(error?.message || '').includes('timed out')
-      ? 'Firebase files did not load in the simulator. Check the simulator internet connection, then run the app again.'
+      ? 'Firebase files did not load in time. Check the device internet connection, then run the app again.'
       : 'Firebase sync could not start. Local records are still available.';
     setAuthError(startupMessage, true);
     updateAuthUi();
