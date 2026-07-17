@@ -277,7 +277,7 @@ assert.ok(backup.data.settings, 'backup includes app settings');
 assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup includes favorite routes');
 assert.ok(!script.includes('localStorage.clear'), 'app code does not clear localStorage');
 assert.ok(!script.includes('indexedDB.deleteDatabase'), 'app code does not delete IndexedDB');
-assert.ok(repairHtml.includes('index.html?v=1.3.8'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.3.9'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');

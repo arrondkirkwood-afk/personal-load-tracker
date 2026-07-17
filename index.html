@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.3.8">
+  <link rel="manifest" href="manifest.json?v=1.3.9">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.3.8">
+  <link rel="stylesheet" href="style.css?v=1.3.9">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.3.8</strong></span>
+          <span>Version <strong id="app-version">1.3.9</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -630,7 +630,7 @@
                   </label>
                 </div>
                 <div class="button-row auth-actions">
-                  <button class="button primary" id="sign-in-button" type="submit">Sign In</button>
+                  <button class="button primary" id="sign-in-button" type="button">Sign In</button>
                   <button class="button ghost" id="sign-out-button" type="button" hidden>Sign Out</button>
                 </div>
               </form>
@@ -661,7 +661,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list">
-              <span>Application version</span><strong id="settings-app-version">1.3.8</strong>
+              <span>Application version</span><strong id="settings-app-version">1.3.9</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -781,52 +781,24 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.3.8&updated=' + Date.now());
+            window.location.replace('index.html?v=1.3.9&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.3.8&updated=' + Date.now());
+            window.location.replace('index.html?v=1.3.9&updated=' + Date.now());
           });
       }
 
       window.personalLoadTrackerSafeRepair = repairAppFiles;
       window.personalLoadTrackerSafeActivateView = activateView;
 
-      function handleSafeAppTap(event) {
-        var element = event.target;
-
-        while (element && element !== document) {
-          if (element.getAttribute && element.getAttribute('data-view-target')) {
-            if (event.type === 'touchend') {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-            }
-
-            activateView(element.getAttribute('data-view-target'));
-            break;
-          }
-
-          if (element.id === 'check-updates-button' || element.id === 'update-now-button') {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            repairAppFiles();
-            break;
-          }
-
-          element = element.parentNode;
-        }
-      }
-
-      function handleSafeAuthSubmit(event) {
-        var form = event.target && event.target.id === 'auth-form' ? event.target : null;
+      function runSafeAuthSubmit(event) {
         var authError = document.getElementById('auth-error');
         var attempts = 0;
 
-        if (!form) {
-          return;
+        if (event) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
         }
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
 
         function trySubmit() {
           attempts += 1;
@@ -852,6 +824,46 @@
         trySubmit();
       }
 
+      function handleSafeAppTap(event) {
+        var element = event.target;
+
+        while (element && element !== document) {
+          if (element.id === 'sign-in-button') {
+            runSafeAuthSubmit(event);
+            break;
+          }
+
+          if (element.getAttribute && element.getAttribute('data-view-target')) {
+            if (event.type === 'touchend') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+
+            activateView(element.getAttribute('data-view-target'));
+            break;
+          }
+
+          if (element.id === 'check-updates-button' || element.id === 'update-now-button') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            repairAppFiles();
+            break;
+          }
+
+          element = element.parentNode;
+        }
+      }
+
+      function handleSafeAuthSubmit(event) {
+        var form = event.target && event.target.id === 'auth-form' ? event.target : null;
+
+        if (!form) {
+          return;
+        }
+
+        runSafeAuthSubmit(event);
+      }
+
       document.addEventListener('click', handleSafeAppTap, true);
       document.addEventListener('touchend', handleSafeAppTap, true);
       document.addEventListener('submit', handleSafeAuthSubmit, true);
@@ -861,6 +873,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.3.8"></script>
+  <script src="script.js?v=1.3.9"></script>
 </body>
 </html>
