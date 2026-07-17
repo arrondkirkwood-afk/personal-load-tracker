@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.3.9">
+  <link rel="manifest" href="manifest.json?v=1.4.1">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.3.9">
+  <link rel="stylesheet" href="style.css?v=1.4.1">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.3.9</strong></span>
+          <span>Version <strong id="app-version">1.4.1</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -661,7 +661,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list">
-              <span>Application version</span><strong id="settings-app-version">1.3.9</strong>
+              <span>Application version</span><strong id="settings-app-version">1.4.1</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -781,15 +781,179 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.3.9&updated=' + Date.now());
+            window.location.replace('index.html?v=1.4.1&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.3.9&updated=' + Date.now());
+            window.location.replace('index.html?v=1.4.1&updated=' + Date.now());
           });
       }
 
       window.personalLoadTrackerSafeRepair = repairAppFiles;
       window.personalLoadTrackerSafeActivateView = activateView;
+      var firebaseFallbackInProgress = false;
+      var firebaseFallbackConfig = {
+        apiKey: "AIzaSyC68MPQAa0nsAX-Wq2WSfO09H1kI6P4kaA",
+        authDomain: "arrond-oilfield-load-tracker.firebaseapp.com",
+        projectId: "arrond-oilfield-load-tracker",
+        storageBucket: "arrond-oilfield-load-tracker.firebasestorage.app",
+        messagingSenderId: "82334123608",
+        appId: "1:82334123608:web:6c6f208d3411eef9cc6c2d"
+      };
+
+      window.addEventListener('error', function (event) {
+        var authError = document.getElementById('auth-error');
+        var serviceWorkerState = document.getElementById('settings-service-worker-state');
+        var message = event && event.message ? event.message : 'Unknown startup error';
+
+        if (authError) {
+          authError.textContent = 'App startup error: ' + message;
+        }
+
+        if (serviceWorkerState) {
+          serviceWorkerState.textContent = 'Startup error';
+        }
+      });
+
+      window.addEventListener('unhandledrejection', function (event) {
+        var authError = document.getElementById('auth-error');
+        var reason = event && event.reason ? event.reason : {};
+        var message = reason.message || String(reason || 'Unknown startup error');
+
+        if (authError) {
+          authError.textContent = 'App startup error: ' + message;
+        }
+      });
+
+      function setFallbackText(id, text) {
+        var element = document.getElementById(id);
+
+        if (element) {
+          element.textContent = text;
+        }
+      }
+
+      function getFallbackAuthMessage(error) {
+        var code = error && error.code ? error.code : '';
+
+        if (code.indexOf('invalid-credential') !== -1 || code.indexOf('wrong-password') !== -1 || code.indexOf('user-not-found') !== -1) {
+          return 'Email or password did not match.';
+        }
+
+        if (code.indexOf('too-many-requests') !== -1) {
+          return 'Too many attempts. Wait a bit and try again.';
+        }
+
+        if (code.indexOf('network') !== -1) {
+          return 'Could not reach Firebase. Check your connection or hotspot and try again.';
+        }
+
+        if (code.indexOf('unauthorized-domain') !== -1) {
+          return 'Firebase rejected this app address. Check authorized domains in Firebase.';
+        }
+
+        return 'Sign-in failed' + (code ? ' (' + code + ')' : '') + '.';
+      }
+
+      function runFallbackFirebaseLogin() {
+        var authError = document.getElementById('auth-error');
+        var emailInput = document.getElementById('auth-email');
+        var passwordInput = document.getElementById('auth-password');
+        var signInButton = document.getElementById('sign-in-button');
+        var email = emailInput && emailInput.value ? emailInput.value.trim() : '';
+        var password = passwordInput && passwordInput.value ? passwordInput.value : '';
+        var sdkBase = 'https://www.gstatic.com/firebasejs/10.12.5';
+
+        if (firebaseFallbackInProgress) {
+          return;
+        }
+
+        if (!email || !password) {
+          if (authError) {
+            authError.textContent = 'Enter the Firebase email and password.';
+          }
+          return;
+        }
+
+        firebaseFallbackInProgress = true;
+        if (signInButton) {
+          signInButton.disabled = true;
+        }
+        if (authError) {
+          authError.textContent = 'Signing in through Firebase...';
+        }
+        setFallbackText('auth-status', 'Signing in...');
+        setFallbackText('settings-sync-state', 'Connecting');
+
+        Promise.all([
+          import(sdkBase + '/firebase-app.js'),
+          import(sdkBase + '/firebase-auth.js')
+        ])
+          .then(function (modules) {
+            var appModule = modules[0];
+            var authModule = modules[1];
+            var app = appModule.getApps && appModule.getApps().length
+              ? appModule.getApp()
+              : appModule.initializeApp(firebaseFallbackConfig);
+            var auth = authModule.getAuth(app);
+            var persistences = [
+              authModule.indexedDBLocalPersistence,
+              authModule.browserLocalPersistence,
+              authModule.browserSessionPersistence,
+              authModule.inMemoryPersistence
+            ].filter(Boolean);
+
+            function tryPersistence(index) {
+              if (!authModule.setPersistence || index >= persistences.length) {
+                return Promise.resolve();
+              }
+
+              return authModule.setPersistence(auth, persistences[index]).catch(function () {
+                return tryPersistence(index + 1);
+              });
+            }
+
+            return tryPersistence(0).then(function () {
+              return authModule.signInWithEmailAndPassword(auth, email, password);
+            });
+          })
+          .then(function (credential) {
+            if (passwordInput) {
+              passwordInput.value = '';
+            }
+
+            setFallbackText('auth-status', 'Signed in');
+            setFallbackText('signed-in-email', credential && credential.user && credential.user.email ? credential.user.email : email);
+            setFallbackText('settings-sync-state', 'Connecting');
+            if (authError) {
+              authError.textContent = 'Signed in. Reloading sync...';
+            }
+
+            window.setTimeout(function () {
+              window.location.replace('index.html?v=1.4.1&signed-in=' + Date.now());
+            }, 700);
+          })
+          .catch(function (error) {
+            if (authError) {
+              authError.textContent = getFallbackAuthMessage(error);
+            }
+            setFallbackText('auth-status', 'Sign in required');
+            setFallbackText('settings-sync-state', 'Sign in required');
+          })
+          .finally(function () {
+            firebaseFallbackInProgress = false;
+            if (signInButton) {
+              signInButton.disabled = false;
+            }
+          });
+      }
+
+      window.personalLoadTrackerSubmitLogin = function (event) {
+        if (event && event.preventDefault) {
+          event.preventDefault();
+        }
+
+        runFallbackFirebaseLogin();
+      };
 
       function runSafeAuthSubmit(event) {
         var authError = document.getElementById('auth-error');
@@ -808,7 +972,7 @@
             return;
           }
 
-          if (attempts < 12) {
+          if (attempts < 5) {
             if (authError) {
               authError.textContent = 'Cloud login is loading. Trying again...';
             }
@@ -816,9 +980,7 @@
             return;
           }
 
-          if (authError) {
-            authError.textContent = 'Cloud login did not finish loading. Refresh the app files and try again.';
-          }
+          runFallbackFirebaseLogin();
         }
 
         trySubmit();
@@ -873,6 +1035,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.3.9"></script>
+  <script src="script.js?v=1.4.1"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.9";
+const APP_VERSION = "1.4.1";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -1503,7 +1503,7 @@ function clearAuthReadyFallbackTimer(timerId) {
 }
 
 async function handleSignIn(event) {
-  event.preventDefault();
+  event?.preventDefault?.();
 
   if (!cloudSync.enabled || !cloudSync.auth) {
     setAuthError('Reconnecting to cloud login...');
@@ -1556,6 +1556,8 @@ async function handleSignIn(event) {
     }
   }
 }
+
+globalThis.personalLoadTrackerSubmitLogin = handleSignIn;
 
 async function handleSignOut() {
   if (!cloudSync.enabled || !cloudSync.auth) {
@@ -5641,19 +5643,19 @@ function initialize() {
   initializeFirebaseSync();
 }
 
-form.addEventListener('submit', saveLoad);
-form.addEventListener('input', handleFormInput);
-form.addEventListener('change', handleFormInput);
+form?.addEventListener('submit', saveLoad);
+form?.addEventListener('input', handleFormInput);
+form?.addEventListener('change', handleFormInput);
 navButtons.forEach((button) => button.addEventListener('click', handleNavigationClick));
-daily.date.addEventListener('input', handleSelectedDateChange);
-daily.date.addEventListener('change', handleSelectedDateChange);
-daily.payPeriodStart.addEventListener('input', handlePayPeriodChange);
-daily.payPeriodStart.addEventListener('change', handlePayPeriodChange);
-daily.payPeriodEnd.addEventListener('input', handlePayPeriodChange);
-daily.payPeriodEnd.addEventListener('change', handlePayPeriodChange);
+daily.date?.addEventListener('input', handleSelectedDateChange);
+daily.date?.addEventListener('change', handleSelectedDateChange);
+daily.payPeriodStart?.addEventListener('input', handlePayPeriodChange);
+daily.payPeriodStart?.addEventListener('change', handlePayPeriodChange);
+daily.payPeriodEnd?.addEventListener('input', handlePayPeriodChange);
+daily.payPeriodEnd?.addEventListener('change', handlePayPeriodChange);
 Object.values(savedFilters).forEach((field) => {
-  field.addEventListener('input', handleSavedFiltersChange);
-  field.addEventListener('change', handleSavedFiltersChange);
+  field?.addEventListener('input', handleSavedFiltersChange);
+  field?.addEventListener('change', handleSavedFiltersChange);
 });
 Object.values(extraSavedFilters).forEach((field) => {
   field?.addEventListener('input', handleSavedFiltersChange);
@@ -5666,16 +5668,16 @@ Object.values(reportControls).forEach((field) => {
   }
 });
 Object.values(addOns).forEach((field) => {
-  field.addEventListener('input', handleAddOnChange);
-  field.addEventListener('change', handleAddOnChange);
+  field?.addEventListener('input', handleAddOnChange);
+  field?.addEventListener('change', handleAddOnChange);
 });
-saveAnywayButton.addEventListener('click', () => {
+saveAnywayButton?.addEventListener('click', () => {
   if (pendingDuplicateRecord) {
     commitLoadRecord(pendingDuplicateRecord, { startNext: pendingCommitMode === 'next' });
   }
 });
-cancelDuplicateButton.addEventListener('click', hideDuplicateWarning);
-clearFormButton.addEventListener('click', clearForm);
+cancelDuplicateButton?.addEventListener('click', hideDuplicateWarning);
+clearFormButton?.addEventListener('click', clearForm);
 saveNextButton?.addEventListener('click', saveAndStartNextLoad);
 saveDraftButton?.addEventListener('click', () => saveDraftNow('Draft saved.'));
 continueDraftButton?.addEventListener('click', () => {
@@ -5685,8 +5687,8 @@ continueDraftButton?.addEventListener('click', () => {
     activateView('new-load');
   }
 });
-savedLoadCards.addEventListener('click', handleSavedCardAction);
-profileControls.saveButton.addEventListener('click', saveDriverProfile);
+savedLoadCards?.addEventListener('click', handleSavedCardAction);
+profileControls.saveButton?.addEventListener('click', saveDriverProfile);
 paySettingsControls.saveButton?.addEventListener('click', savePaySettingsFromControls);
 favoriteRouteControls.saveButton?.addEventListener('click', saveFavoriteRouteFromControls);
 favoriteRouteControls.select?.addEventListener('change', () => applyFavoriteRoute(favoriteRouteControls.select.value));
@@ -5698,19 +5700,17 @@ favoriteRouteControls.list?.addEventListener('click', (event) => {
   }
 });
 manualSyncButton?.addEventListener('click', syncAllCurrentDataToCloud);
-downloadLogButton.addEventListener('click', downloadLoadLog);
-downloadEarningsButton.addEventListener('click', downloadDailyEarningsSummary);
-printDailyReportButton.addEventListener('click', printDailyReport);
-exportBackupButton.addEventListener('click', exportJsonBackup);
-importBackupButton.addEventListener('click', importJsonBackup);
-checkUpdatesButton.addEventListener('click', checkForUpdates);
-updateNowButton.addEventListener('click', activateWaitingUpdate);
+downloadLogButton?.addEventListener('click', downloadLoadLog);
+downloadEarningsButton?.addEventListener('click', downloadDailyEarningsSummary);
+printDailyReportButton?.addEventListener('click', printDailyReport);
+exportBackupButton?.addEventListener('click', exportJsonBackup);
+importBackupButton?.addEventListener('click', importJsonBackup);
+checkUpdatesButton?.addEventListener('click', checkForUpdates);
+updateNowButton?.addEventListener('click', activateWaitingUpdate);
 authControls.form?.addEventListener('submit', handleSignIn);
 authControls.signInButton?.addEventListener('click', handleSignIn);
 authControls.signOutButton?.addEventListener('click', handleSignOut);
 authControls.downloadBeforeMigrationButton?.addEventListener('click', downloadBackupBeforeMigration);
 authControls.startMigrationButton?.addEventListener('click', migrateLocalDataToFirebase);
 globalThis.addEventListener?.('beforeunload', warnBeforeLeavingUnsaved);
-globalThis.personalLoadTrackerSubmitLogin = handleSignIn;
-
 initialize();
