@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.7";
+const APP_VERSION = "1.3.8";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -5710,5 +5710,6 @@ authControls.signOutButton?.addEventListener('click', handleSignOut);
 authControls.downloadBeforeMigrationButton?.addEventListener('click', downloadBackupBeforeMigration);
 authControls.startMigrationButton?.addEventListener('click', migrateLocalDataToFirebase);
 globalThis.addEventListener?.('beforeunload', warnBeforeLeavingUnsaved);
+globalThis.personalLoadTrackerSubmitLogin = handleSignIn;
 
 initialize();
