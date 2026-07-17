@@ -169,6 +169,15 @@ assert.strictEqual(derived({
   completedTime: '21:00'
 }).totalPaidWaitMinutes, 0, 'driving time is not counted as wait time');
 
+const weightCheck = derived({
+  grossBarrels: 100,
+  bswPercentage: 1,
+  apiGravity: 40,
+  emptyTruckWeight: 28000
+});
+assert.ok(weightCheck.estimatedTotalLoadWeight > 28000, 'estimated load weight is calculated');
+assert.ok(weightCheck.estimatedGrossTruckWeight > weightCheck.estimatedTotalLoadWeight, 'gross truck weight includes empty truck weight');
+
 function assertPayPeriod(date, start, end, message) {
   const range = context.getCompanyPayPeriodRange(date);
   assert.strictEqual(range.start, start, `${message}: start`);

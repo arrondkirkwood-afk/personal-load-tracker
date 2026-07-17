@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.4";
+const APP_VERSION = "1.3.5";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -335,6 +335,8 @@ const saveNextButton = document.getElementById('save-next-button');
 const saveDraftButton = document.getElementById('save-draft-button');
 const entryEquipmentSummary = document.getElementById('entry-equipment-summary');
 const reviewRoutePreview = document.getElementById('review-route-preview');
+const reviewTotalWeight = document.getElementById('review-total-weight');
+const reviewGrossTruckWeight = document.getElementById('review-gross-truck-weight');
 const appViews = typeof document.querySelectorAll === 'function'
   ? [...document.querySelectorAll('.app-view')]
   : [];
@@ -3680,6 +3682,8 @@ function renderSummary() {
   summary.waterWeight.textContent = isFiniteNumber(derived.estimatedWaterWeight) ? formatWeight(derived.estimatedWaterWeight) : noLoadText;
   summary.totalWeight.textContent = isFiniteNumber(derived.estimatedTotalLoadWeight) ? formatWeight(derived.estimatedTotalLoadWeight) : noLoadText;
   summary.grossTruckWeight.textContent = isFiniteNumber(derived.estimatedGrossTruckWeight) ? formatWeight(derived.estimatedGrossTruckWeight) : '-';
+  setElementText(reviewTotalWeight, isFiniteNumber(derived.estimatedTotalLoadWeight) ? formatWeight(derived.estimatedTotalLoadWeight) : noLoadText);
+  setElementText(reviewGrossTruckWeight, isFiniteNumber(derived.estimatedGrossTruckWeight) ? formatWeight(derived.estimatedGrossTruckWeight) : '-');
   summary.startMeterReading.textContent = isFiniteNumber(values.startMeterReading) ? formatNumber(values.startMeterReading) : '-';
   summary.endMeterReading.textContent = isFiniteNumber(values.endMeterReading) ? formatNumber(values.endMeterReading) : '-';
   summary.barrelsOffloaded.textContent = isFiniteNumber(derived.barrelsOffloaded) ? formatBarrels(derived.barrelsOffloaded) : '-';

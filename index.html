@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.3.4">
+  <link rel="manifest" href="manifest.json?v=1.3.5">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.3.4">
+  <link rel="stylesheet" href="style.css?v=1.3.5">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.3.4</strong></span>
+          <span>Version <strong id="app-version">1.3.5</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -155,11 +155,6 @@
                     <span>Trailer number</span>
                     <input id="trailer-number" type="text" autocomplete="off">
                   </label>
-                  <label for="empty-truck-weight">
-                    <span>Empty truck/trailer weight</span>
-                    <input id="empty-truck-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="empty-truck-weight-error">
-                    <small id="empty-truck-weight-error" class="field-error"></small>
-                  </label>
                 </div>
               </details>
             </div>
@@ -242,6 +237,21 @@
                   <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
                   <small id="loaded-miles-error" class="field-error"></small>
                 </label>
+                <label for="empty-truck-weight">
+                  <span>Empty truck/trailer weight</span>
+                  <input id="empty-truck-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="empty-truck-weight-error">
+                  <small id="empty-truck-weight-error" class="field-error"></small>
+                </label>
+                <label for="api-gravity">
+                  <span>API gravity</span>
+                  <input id="api-gravity" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="api-gravity-error">
+                  <small id="api-gravity-error" class="field-error"></small>
+                </label>
+                <label for="bsw-percentage">
+                  <span>BS&amp;W / water percentage</span>
+                  <input id="bsw-percentage" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-describedby="bsw-percentage-error">
+                  <small id="bsw-percentage-error" class="field-error"></small>
+                </label>
               </div>
               <div class="calculated-strip">
                 <article><span>Start reading</span><strong id="summary-start-meter-reading">-</strong></article>
@@ -253,6 +263,8 @@
                 <article><span>Regular miles</span><strong id="summary-regular-miles">0.0 mi</strong></article>
                 <article><span>Re-routed miles</span><strong id="summary-re-routed-miles">0.0 mi</strong></article>
                 <article><span>Total miles</span><strong id="summary-total-miles-including-re-route">0.0 mi</strong></article>
+                <article><span>Estimated load weight</span><strong id="summary-total-weight">-</strong></article>
+                <article><span>Estimated gross truck weight</span><strong id="summary-gross-truck-weight">-</strong></article>
               </div>
             </div>
 
@@ -348,16 +360,6 @@
                   <input id="re-routed-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="re-routed-miles-error">
                   <small id="re-routed-miles-error" class="field-error"></small>
                 </label>
-                <label for="api-gravity">
-                  <span>API gravity</span>
-                  <input id="api-gravity" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="api-gravity-error">
-                  <small id="api-gravity-error" class="field-error"></small>
-                </label>
-                <label for="bsw-percentage">
-                  <span>BS&amp;W / water percentage</span>
-                  <input id="bsw-percentage" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-describedby="bsw-percentage-error">
-                  <small id="bsw-percentage-error" class="field-error"></small>
-                </label>
                 <label class="full-width" for="notes">
                   <span>Load notes</span>
                   <textarea id="notes" rows="3" placeholder="Optional load notes"></textarea>
@@ -379,6 +381,8 @@
                 <article><span>Pay range</span><strong id="pay-range">0 miles</strong></article>
                 <article><span>Base or reject pay</span><strong id="pay-estimated">$0.00</strong></article>
                 <article><span>Total estimated load pay</span><strong id="pay-entry-total">$0.00</strong></article>
+                <article><span>Load weight</span><strong id="review-total-weight">-</strong></article>
+                <article><span>Gross truck weight</span><strong id="review-gross-truck-weight">-</strong></article>
               </div>
               <details class="advanced-calculations">
                 <summary>Advanced load calculations</summary>
@@ -388,8 +392,6 @@
                   <div class="result-row"><span>Crude weight per barrel</span><strong id="summary-crude-weight">-</strong></div>
                   <div class="result-row"><span>Estimated oil weight</span><strong id="summary-oil-weight">-</strong></div>
                   <div class="result-row"><span>Estimated water weight</span><strong id="summary-water-weight">-</strong></div>
-                  <div class="result-row"><span>Estimated total load weight</span><strong id="summary-total-weight">-</strong></div>
-                  <div class="result-row"><span>Estimated gross truck weight</span><strong id="summary-gross-truck-weight">-</strong></div>
                 </div>
               </details>
               <p class="pay-disclaimer">Wait pay and estimated earnings are for personal verification only and may not match official payroll.</p>
@@ -659,7 +661,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list">
-                <span>Application version</span><strong id="settings-app-version">1.3.4</strong>
+              <span>Application version</span><strong id="settings-app-version">1.3.5</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -779,10 +781,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.3.4&updated=' + Date.now());
+            window.location.replace('index.html?v=1.3.5&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.3.4&updated=' + Date.now());
+            window.location.replace('index.html?v=1.3.5&updated=' + Date.now());
           });
       }
 
@@ -814,6 +816,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.3.4"></script>
+  <script src="script.js?v=1.3.5"></script>
 </body>
 </html>
