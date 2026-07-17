@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Oilfield Load Tracker</title>
   <meta name="theme-color" content="#12343b">
+  <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json?v=1.3.4">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.3.4">
 </head>
 <body>
   <main class="app">
@@ -21,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.3.3</strong></span>
+          <span>Version <strong id="app-version">1.3.4</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -658,7 +659,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list">
-                <span>Application version</span><strong id="settings-app-version">1.3.3</strong>
+                <span>Application version</span><strong id="settings-app-version">1.3.4</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -725,6 +726,94 @@
     </section>
   </main>
 
-  <script src="script.js"></script>
+  <script>
+    (function () {
+      var cachePrefix = 'personal-oilfield-load-tracker-';
+
+      function activateView(viewName) {
+        var views = document.querySelectorAll('.app-view');
+        var buttons = document.querySelectorAll('[data-view-target]');
+
+        for (var index = 0; index < views.length; index += 1) {
+          views[index].classList.toggle('active', views[index].getAttribute('data-view') === viewName);
+        }
+
+        for (var buttonIndex = 0; buttonIndex < buttons.length; buttonIndex += 1) {
+          buttons[buttonIndex].classList.toggle('active', buttons[buttonIndex].getAttribute('data-view-target') === viewName);
+        }
+
+        if (window.scrollTo) {
+          window.scrollTo(0, 0);
+        }
+      }
+
+      function deleteAppFileCaches() {
+        if (!window.caches || !caches.keys) {
+          return Promise.resolve();
+        }
+
+        return caches.keys().then(function (cacheNames) {
+          return Promise.all(cacheNames
+            .filter(function (cacheName) { return cacheName.indexOf(cachePrefix) === 0; })
+            .map(function (cacheName) { return caches.delete(cacheName); }));
+        });
+      }
+
+      function repairAppFiles() {
+        var updateStatus = document.getElementById('update-status');
+
+        if (updateStatus) {
+          updateStatus.textContent = 'Refreshing app files... saved records are not being cleared.';
+        }
+
+        return deleteAppFileCaches()
+          .then(function () {
+            if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistrations) {
+              return null;
+            }
+
+            return navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(registrations.map(function (registration) {
+                return registration.update ? registration.update().catch(function () { return null; }) : null;
+              }));
+            });
+          })
+          .then(function () {
+            window.location.replace('index.html?v=1.3.4&updated=' + Date.now());
+          })
+          .catch(function () {
+            window.location.replace('index.html?v=1.3.4&updated=' + Date.now());
+          });
+      }
+
+      window.personalLoadTrackerSafeRepair = repairAppFiles;
+      window.personalLoadTrackerSafeActivateView = activateView;
+
+      document.addEventListener('click', function (event) {
+        var element = event.target;
+
+        while (element && element !== document) {
+          if (element.getAttribute && element.getAttribute('data-view-target')) {
+            activateView(element.getAttribute('data-view-target'));
+            break;
+          }
+
+          if (element.id === 'check-updates-button' || element.id === 'update-now-button') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            repairAppFiles();
+            break;
+          }
+
+          element = element.parentNode;
+        }
+      }, true);
+
+      if (window.location.search.indexOf('repair=1') !== -1) {
+        repairAppFiles();
+      }
+    }());
+  </script>
+  <script src="script.js?v=1.3.4"></script>
 </body>
 </html>
