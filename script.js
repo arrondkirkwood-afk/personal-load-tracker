@@ -1,12 +1,16 @@
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.3.0";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
+const APP_RUNTIME = detectAppRuntime();
 const STORAGE_KEY = 'personalOilfieldLoadTracker.loads';
 const ADD_ON_STORAGE_KEY = 'personalOilfieldLoadTracker.dailyAddOns';
 const EARNINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.dailySummaries';
 const PROFILE_STORAGE_KEY = 'personalOilfieldLoadTracker.profile';
 const META_STORAGE_KEY = 'personalOilfieldLoadTracker.meta';
+const SETTINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.settings';
+const FAVORITE_ROUTES_STORAGE_KEY = 'personalOilfieldLoadTracker.favoriteRoutes';
+const DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.currentDraft';
 const MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.preMigrationBackup.v2';
 const FIREBASE_MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.firebaseMigrationSafetyBackup.v3';
 const LEGACY_STORAGE_KEY = 'personalOilfieldLoadTrackerLog';
@@ -23,17 +27,50 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "82334123608",
   appId: "1:82334123608:web:6c6f208d3411eef9cc6c2d"
 };
+
+function detectAppRuntime() {
+  const protocol = globalThis.location?.protocol || '';
+  const capacitor = globalThis.Capacitor;
+  const capacitorPlatform = typeof capacitor?.getPlatform === 'function' ? capacitor.getPlatform() : '';
+  const capacitorNative = typeof capacitor?.isNativePlatform === 'function' ? capacitor.isNativePlatform() : false;
+  const isCapacitor = capacitorNative
+    || capacitorPlatform === 'ios'
+    || capacitorPlatform === 'android'
+    || protocol === 'capacitor:'
+    || protocol === 'ionic:';
+  const isFileProtocol = protocol === 'file:';
+
+  return {
+    name: isCapacitor ? 'capacitor-ios' : (isFileProtocol ? 'local-file' : 'web'),
+    isCapacitor,
+    isFileProtocol,
+    serviceWorkerEnabled: !isCapacitor && !isFileProtocol
+  };
+}
+
+function canUseServiceWorkerRuntime() {
+  return APP_RUNTIME.serviceWorkerEnabled;
+}
+
+function getNativeUpdateMessage() {
+  return APP_RUNTIME.isCapacitor
+    ? 'Native app updates come through the installed iOS app build.'
+    : 'If update does not appear, close and reopen the app.';
+}
+
 const COMPLETED_STATUS = 'Completed Load';
 const REJECT_STATUS = 'Reject';
-const REJECT_PAY = 20;
-const PER_DIEM_PAY = 50;
-const SLEEPER_BERTH_PAY = 60;
-const TRAINER_PAY = 50;
-const WAIT_PAY_RATE = 24;
+const DEFAULT_PAY_SETTINGS = {
+  rejectPay: 20,
+  perDiemPay: 50,
+  sleeperBerthPay: 60,
+  trainerPay: 50,
+  waitPayRate: 24
+};
 const WAIT_GRACE_MINUTES = 60;
 const NO_RATE_FOUND_LABEL = 'No rate found — enter manually';
 
-const loadedMilesPayScale = [
+const DEFAULT_LOADED_MILES_PAY_SCALE = [
   { min: 1, max: 5, rate: 49.93 },
   { min: 6, max: 10, rate: 51.41 },
   { min: 11, max: 15, rate: 52.97 },
@@ -172,6 +209,15 @@ const dashboard = {
   loadsHauledSelectedDate: document.getElementById('loads-hauled-selected-date')
 };
 
+const payPeriodSummary = {
+  totalEarnings: document.getElementById('pay-period-total-earnings'),
+  trainerPay: document.getElementById('pay-period-trainer-pay'),
+  perDiemPay: document.getElementById('pay-period-per-diem-pay'),
+  sleeperPay: document.getElementById('pay-period-sleeper-pay'),
+  rejectPay: document.getElementById('pay-period-reject-pay'),
+  waitPay: document.getElementById('pay-period-wait-pay')
+};
+
 const summary = {
   waterBarrels: document.getElementById('summary-water-barrels'),
   oilBarrels: document.getElementById('summary-oil-barrels'),
@@ -274,8 +320,66 @@ const settingsAppVersion = document.getElementById('settings-app-version');
 const settingsDataVersion = document.getElementById('settings-data-version');
 const settingsUpdateState = document.getElementById('settings-update-state');
 const settingsSyncState = document.getElementById('settings-sync-state');
+const settingsMigrationState = document.getElementById('settings-migration-state');
+const settingsServiceWorkerState = document.getElementById('settings-service-worker-state');
+const settingsLastSync = document.getElementById('settings-last-sync');
+const settingsPendingWrites = document.getElementById('settings-pending-writes');
 const storageWarning = document.getElementById('storage-warning');
 const saveStatus = document.getElementById('save-status');
+const draftStatus = document.getElementById('draft-status');
+const headerRecordCount = document.getElementById('header-record-count');
+const recentLoadList = document.getElementById('recent-load-list');
+const continueDraftButton = document.getElementById('continue-draft-button');
+const saveNextButton = document.getElementById('save-next-button');
+const saveDraftButton = document.getElementById('save-draft-button');
+const entryEquipmentSummary = document.getElementById('entry-equipment-summary');
+const reviewRoutePreview = document.getElementById('review-route-preview');
+const appViews = typeof document.querySelectorAll === 'function'
+  ? [...document.querySelectorAll('.app-view')]
+  : [];
+const navButtons = typeof document.querySelectorAll === 'function'
+  ? [...document.querySelectorAll('[data-view-target]')]
+  : [];
+const extraSavedFilters = {
+  pickup: document.getElementById('saved-pickup-filter'),
+  dropoff: document.getElementById('saved-dropoff-filter'),
+  ticket: document.getElementById('saved-ticket-filter'),
+  sort: document.getElementById('saved-sort-order')
+};
+const reportControls = {
+  mode: document.getElementById('report-range-mode'),
+  start: document.getElementById('report-start-date'),
+  end: document.getElementById('report-end-date'),
+  summaryGrid: document.getElementById('report-summary-grid')
+};
+const paySettingsControls = {
+  waitRate: document.getElementById('settings-wait-rate'),
+  perDiemRate: document.getElementById('settings-per-diem-rate'),
+  sleeperRate: document.getElementById('settings-sleeper-rate'),
+  rejectRate: document.getElementById('settings-reject-rate'),
+  trainerRate: document.getElementById('settings-trainer-rate'),
+  loadedMilesEditor: document.getElementById('loaded-mile-pay-editor'),
+  saveButton: document.getElementById('save-pay-settings-button'),
+  status: document.getElementById('pay-settings-status'),
+  labels: {
+    perDiem: document.getElementById('per-diem-rate-label'),
+    sleeper: document.getElementById('sleeper-rate-label'),
+    trainer: document.getElementById('trainer-rate-label'),
+    reject: document.getElementById('reject-rate-label')
+  }
+};
+const favoriteRouteControls = {
+  select: document.getElementById('route-preset-select'),
+  name: document.getElementById('favorite-route-name'),
+  pickup: document.getElementById('favorite-pickup-location'),
+  dropoff: document.getElementById('favorite-dropoff-location'),
+  mileage: document.getElementById('favorite-route-mileage'),
+  product: document.getElementById('favorite-product-type'),
+  saveButton: document.getElementById('save-favorite-route-button'),
+  list: document.getElementById('favorite-route-list'),
+  status: document.getElementById('favorite-route-status')
+};
+const manualSyncButton = document.getElementById('manual-sync-button');
 const authControls = {
   form: document.getElementById('auth-form'),
   email: document.getElementById('auth-email'),
@@ -308,15 +412,22 @@ let dailyAddOns = loadDailyAddOns();
 let dailyEarningsRecords = loadDailySummaries();
 let driverProfile = loadDriverProfile();
 let appMeta = loadAppMeta();
+let appSettings = loadAppSettings();
+let favoriteRoutes = loadFavoriteRoutes();
 let localStartupSnapshot = cloneTrackerState({
   loads: savedLoads,
   dailyAddOns,
   dailySummaries: dailyEarningsRecords,
   profile: driverProfile,
-  metadata: appMeta
+  metadata: appMeta,
+  settings: appSettings,
+  favoriteRoutes
 });
 let editingLoadId = null;
 let pendingDuplicateRecord = null;
+let pendingCommitMode = 'save';
+let isSaving = false;
+let draftSaveTimer = null;
 let waitingServiceWorker = null;
 const cloudSync = {
   enabled: false,
@@ -424,7 +535,9 @@ function cloneTrackerState(state) {
     dailyAddOns: deepClone(state.dailyAddOns || {}) || {},
     dailySummaries: deepClone(state.dailySummaries || {}) || {},
     profile: deepClone(state.profile || {}) || {},
-    metadata: deepClone(state.metadata || {}) || {}
+    metadata: deepClone(state.metadata || {}) || {},
+    settings: deepClone(state.settings || {}) || {},
+    favoriteRoutes: deepClone(state.favoriteRoutes || []) || []
   };
 }
 
@@ -561,6 +674,9 @@ function updateAuthUi() {
   setElementText(authControls.signedInEmail, signedIn ? (cloudSync.user.email || 'Signed in') : 'Not signed in');
   setElementText(authControls.cloudLoadCount, String(cloudSync.state.loads.length));
   setElementText(authControls.localLoadCount, String(getLocalSafetyLoadCount()));
+  setElementText(settingsPendingWrites, String(cloudSync.pendingWrites));
+  setElementText(settingsLastSync, appMeta.cloudSync?.lastSyncedAt || cloudSync.state.lastSnapshotAt || 'Not yet synced');
+  setElementText(settingsMigrationState, isCloudMigrationComplete() ? 'Complete' : 'Ready');
 
   if (authControls.email) {
     authControls.email.disabled = signedIn;
@@ -744,6 +860,25 @@ function canStartFirebase() {
   return Boolean(globalThis.location && authControls.form);
 }
 
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  if (typeof globalThis.setTimeout !== 'function') {
+    return promise;
+  }
+
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId && typeof globalThis.clearTimeout === 'function') {
+      globalThis.clearTimeout(timeoutId);
+    }
+  });
+}
+
 async function loadFirebaseModules() {
   const baseUrl = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}`;
   const [appModule, authModule, firestoreModule] = await Promise.all([
@@ -754,12 +889,15 @@ async function loadFirebaseModules() {
 
   return {
     initializeApp: appModule.initializeApp,
+    initializeAuth: authModule.initializeAuth,
     getAuth: authModule.getAuth,
     signInWithEmailAndPassword: authModule.signInWithEmailAndPassword,
     signOut: authModule.signOut,
     onAuthStateChanged: authModule.onAuthStateChanged,
     setPersistence: authModule.setPersistence,
     browserLocalPersistence: authModule.browserLocalPersistence,
+    indexedDBLocalPersistence: authModule.indexedDBLocalPersistence,
+    inMemoryPersistence: authModule.inMemoryPersistence,
     getFirestore: firestoreModule.getFirestore,
     enableIndexedDbPersistence: firestoreModule.enableIndexedDbPersistence,
     collection: firestoreModule.collection,
@@ -773,6 +911,14 @@ async function loadFirebaseModules() {
   };
 }
 
+function getCapacitorAuthPersistence() {
+  return [
+    cloudSync.sdk.indexedDBLocalPersistence,
+    cloudSync.sdk.browserLocalPersistence,
+    cloudSync.sdk.inMemoryPersistence
+  ].filter(Boolean);
+}
+
 async function initializeFirebaseSync() {
   if (!canStartFirebase()) {
     cloudSync.authReady = true;
@@ -783,29 +929,52 @@ async function initializeFirebaseSync() {
   setSyncStatus('Connecting');
 
   try {
-    cloudSync.sdk = await loadFirebaseModules();
+    cloudSync.sdk = await withTimeout(
+      loadFirebaseModules(),
+      APP_RUNTIME.isCapacitor ? 12000 : 20000,
+      'Firebase SDK load timed out.'
+    );
     cloudSync.app = cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
-    cloudSync.auth = cloudSync.sdk.getAuth(cloudSync.app);
+    cloudSync.auth = APP_RUNTIME.isCapacitor && cloudSync.sdk.initializeAuth
+      ? cloudSync.sdk.initializeAuth(cloudSync.app, { persistence: getCapacitorAuthPersistence() })
+      : cloudSync.sdk.getAuth(cloudSync.app);
     cloudSync.db = cloudSync.sdk.getFirestore(cloudSync.app);
     cloudSync.enabled = true;
 
-    await cloudSync.sdk.setPersistence(cloudSync.auth, cloudSync.sdk.browserLocalPersistence).catch(() => {
-      setAuthError('Sign-in can still work, but this browser may not remember the session as reliably.', true);
-    });
+    const authReadyFallbackTimer = startAuthReadyFallbackTimer();
 
-    await cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db).catch(() => {
+    cloudSync.sdk.onAuthStateChanged(
+      cloudSync.auth,
+      (user) => {
+        clearAuthReadyFallbackTimer(authReadyFallbackTimer);
+        handleFirebaseUser(user);
+      },
+      () => {
+        clearAuthReadyFallbackTimer(authReadyFallbackTimer);
+        handleFirebaseAuthError();
+      }
+    );
+
+    if (!APP_RUNTIME.isCapacitor) {
+      cloudSync.sdk.setPersistence(cloudSync.auth, cloudSync.sdk.browserLocalPersistence).catch(() => {
+        setAuthError('Sign-in can still work, but this browser may not remember the session as reliably.', true);
+      });
+    }
+
+    cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db).catch(() => {
       setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
     });
 
-    cloudSync.sdk.onAuthStateChanged(cloudSync.auth, handleFirebaseUser, handleFirebaseAuthError);
-
     globalThis.addEventListener?.('online', updateSyncStatusFromState);
     globalThis.addEventListener?.('offline', updateSyncStatusFromState);
-  } catch {
+  } catch (error) {
     cloudSync.enabled = false;
     cloudSync.authReady = true;
     cloudSync.lastError = 'Firebase sync could not start.';
-    setAuthError('Firebase sync could not start. Local records are still available.', true);
+    const startupMessage = String(error?.message || '').includes('timed out')
+      ? 'Firebase files did not load in the simulator. Check the simulator internet connection, then run the app again.'
+      : 'Firebase sync could not start. Local records are still available.';
+    setAuthError(startupMessage, true);
     updateAuthUi();
   }
 }
@@ -972,6 +1141,8 @@ function persistCurrentStateToLocalFallback() {
   storeJson(ADD_ON_STORAGE_KEY, dailyAddOns, 'daily add-ons');
   storeJson(EARNINGS_STORAGE_KEY, dailyEarningsRecords, 'daily summaries');
   storeJson(PROFILE_STORAGE_KEY, driverProfile, 'driver profile');
+  storeJson(SETTINGS_STORAGE_KEY, appSettings, 'application settings');
+  storeJson(FAVORITE_ROUTES_STORAGE_KEY, favoriteRoutes, 'favorite routes');
   saveAppMeta();
 }
 
@@ -986,9 +1157,12 @@ function applyCloudStateToApp() {
   dailyAddOns = normalizeDailyAddOns(cloudSync.state.dailyAddOns);
   dailyEarningsRecords = isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {};
   driverProfile = normalizeDriverProfile(cloudSync.state.profile || {});
+  const cloudSettings = isPlainObject(cloudSync.state.settings) ? cloudSync.state.settings : {};
+  appSettings = normalizeAppSettings(cloudSettings.appSettings || cloudSettings);
+  favoriteRoutes = normalizeFavoriteRoutes(cloudSettings.favoriteRoutes || favoriteRoutes);
   appMeta = {
     ...appMeta,
-    ...(isPlainObject(cloudSync.state.settings) ? cloudSync.state.settings : {}),
+    ...cloudSettings,
     cloudSync: {
       authoritative: true,
       uid: cloudSync.user.uid,
@@ -1000,6 +1174,8 @@ function applyCloudStateToApp() {
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
   applyDailyAddOnsToControls();
+  renderFavoriteRoutes();
+  applyPaySettingsToControls();
   renderSummary();
   updateDailySummary();
   persistCurrentStateToLocalFallback();
@@ -1013,10 +1189,14 @@ function restoreLocalSafetySnapshot() {
   dailyEarningsRecords = isPlainObject(localStartupSnapshot.dailySummaries) ? localStartupSnapshot.dailySummaries : {};
   driverProfile = normalizeDriverProfile(localStartupSnapshot.profile || {});
   appMeta = isPlainObject(localStartupSnapshot.metadata) ? localStartupSnapshot.metadata : {};
+  appSettings = normalizeAppSettings(localStartupSnapshot.settings || {});
+  favoriteRoutes = normalizeFavoriteRoutes(localStartupSnapshot.favoriteRoutes || []);
 
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
   applyDailyAddOnsToControls();
+  renderFavoriteRoutes();
+  applyPaySettingsToControls();
   renderSummary();
   updateDailySummary();
 }
@@ -1047,6 +1227,29 @@ function getFriendlyAuthError(error) {
   return 'Sign-in failed. Check the email and password, then try again.';
 }
 
+function startAuthReadyFallbackTimer() {
+  if (!APP_RUNTIME.isCapacitor || typeof globalThis.setTimeout !== 'function') {
+    return null;
+  }
+
+  return globalThis.setTimeout(() => {
+    if (cloudSync.authReady) {
+      return;
+    }
+
+    cloudSync.authReady = true;
+    cloudSync.lastError = '';
+    setAuthError('Firebase is taking longer than expected. You can still try signing in.');
+    updateAuthUi();
+  }, 12000);
+}
+
+function clearAuthReadyFallbackTimer(timerId) {
+  if (timerId && typeof globalThis.clearTimeout === 'function') {
+    globalThis.clearTimeout(timerId);
+  }
+}
+
 async function handleSignIn(event) {
   event.preventDefault();
 
@@ -1070,15 +1273,26 @@ async function handleSignIn(event) {
   }
 
   try {
-    await cloudSync.sdk.signInWithEmailAndPassword(cloudSync.auth, email, password);
+    const credential = await withTimeout(
+      cloudSync.sdk.signInWithEmailAndPassword(cloudSync.auth, email, password),
+      APP_RUNTIME.isCapacitor ? 20000 : 30000,
+      'Firebase sign-in timed out.'
+    );
 
     if (authControls.password) {
       authControls.password.value = '';
     }
 
+    if (credential?.user && !cloudSync.user) {
+      handleFirebaseUser(credential.user);
+    }
+
     setAuthError('Signed in. Checking cloud records...');
   } catch (error) {
-    setAuthError(getFriendlyAuthError(error), true);
+    const message = String(error?.message || '').includes('timed out')
+      ? 'Firebase sign-in did not answer. Check the simulator internet connection, then try again.'
+      : getFriendlyAuthError(error);
+    setAuthError(message, true);
   } finally {
     if (authControls.signInButton) {
       authControls.signInButton.disabled = false;
@@ -1158,8 +1372,14 @@ function buildCloudSettingsPayload(extra = {}) {
       dailyAddOns: ADD_ON_STORAGE_KEY,
       dailySummaries: EARNINGS_STORAGE_KEY,
       profile: PROFILE_STORAGE_KEY,
-      metadata: META_STORAGE_KEY
+      metadata: META_STORAGE_KEY,
+      settings: SETTINGS_STORAGE_KEY,
+      favoriteRoutes: FAVORITE_ROUTES_STORAGE_KEY
     },
+    appSettings,
+    payRates: appSettings.payRates,
+    loadedMilesPayScale: appSettings.loadedMilesPayScale,
+    favoriteRoutes,
     cloudAuthoritative: isCloudMigrationComplete() || appMeta.cloudSync?.authoritative === true,
     updatedAt: new Date().toISOString(),
     ...extra,
@@ -1337,6 +1557,49 @@ function syncImportedStateToCloud(nextState, mode) {
   }, 'Imported data could not be synced to Firebase yet.');
 }
 
+function syncAllCurrentDataToCloud() {
+  if (!isCloudSignedIn()) {
+    setAuthError('Sign in before syncing to Firebase.', true);
+    return;
+  }
+
+  queueCloudWrite(async () => {
+    refreshAllDailyEarningsRecords();
+    const batch = cloudSync.sdk.writeBatch(cloudSync.db);
+
+    getUniqueSavedLoads(savedLoads).forEach((load) => {
+      batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
+    });
+
+    Object.keys(dailyAddOns || {}).forEach((date) => {
+      batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), buildCloudAddOnPayload(date), { merge: true });
+    });
+
+    Object.keys(dailyEarningsRecords || {}).forEach((date) => {
+      batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), buildCloudSummaryPayload(date), { merge: true });
+    });
+
+    batch.set(cloudDocument('profile', 'current'), buildCloudProfilePayload(), { merge: true });
+    batch.set(cloudDocument('settings', 'app'), buildCloudSettingsPayload({
+      manualSyncAt: new Date().toISOString()
+    }), { merge: true });
+
+    await batch.commit();
+    appMeta = {
+      ...appMeta,
+      cloudSync: {
+        ...(appMeta.cloudSync || {}),
+        authoritative: true,
+        uid: cloudSync.user.uid,
+        email: cloudSync.user.email || '',
+        lastSyncedAt: new Date().toISOString()
+      }
+    };
+    saveAppMeta();
+    setAuthError('Sync complete.');
+  }, 'Manual sync could not finish yet.');
+}
+
 function getLocalMigrationState() {
   const startupHasLoads = countUniqueLoads(localStartupSnapshot.loads || []) > 0;
 
@@ -1345,7 +1608,9 @@ function getLocalMigrationState() {
     dailyAddOns: startupHasLoads ? localStartupSnapshot.dailyAddOns : dailyAddOns,
     dailySummaries: startupHasLoads ? localStartupSnapshot.dailySummaries : dailyEarningsRecords,
     profile: startupHasLoads ? localStartupSnapshot.profile : driverProfile,
-    metadata: startupHasLoads ? localStartupSnapshot.metadata : appMeta
+    metadata: startupHasLoads ? localStartupSnapshot.metadata : appMeta,
+    settings: startupHasLoads ? localStartupSnapshot.settings : appSettings,
+    favoriteRoutes: startupHasLoads ? localStartupSnapshot.favoriteRoutes : favoriteRoutes
   });
 }
 
@@ -1379,7 +1644,9 @@ function buildMigrationMetadata(stats, localState, verifiedCloudCount) {
       dailyAddOns: ADD_ON_STORAGE_KEY,
       dailySummaries: EARNINGS_STORAGE_KEY,
       profile: PROFILE_STORAGE_KEY,
-      metadata: META_STORAGE_KEY
+      metadata: META_STORAGE_KEY,
+      settings: SETTINGS_STORAGE_KEY,
+      favoriteRoutes: FAVORITE_ROUTES_STORAGE_KEY
     },
     cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
   });
@@ -1538,7 +1805,7 @@ function downloadBackupBeforeMigration() {
 }
 
 async function clearOldAppCaches() {
-  if (!('caches' in globalThis)) {
+  if (!canUseServiceWorkerRuntime() || !('caches' in globalThis)) {
     return;
   }
 
@@ -1551,12 +1818,20 @@ async function clearOldAppCaches() {
 }
 
 async function registerServiceWorker() {
+  if (!canUseServiceWorkerRuntime()) {
+    setUpdateStatus(getNativeUpdateMessage());
+    setElementText(settingsServiceWorkerState, 'Not used in this runtime');
+    return null;
+  }
+
   if (!('serviceWorker' in navigator)) {
+    setElementText(settingsServiceWorkerState, 'Not supported');
     return null;
   }
 
   try {
     const registration = await navigator.serviceWorker.register('./service-worker.js');
+    setElementText(settingsServiceWorkerState, 'Registered');
 
     if (registration.active) {
       registration.active.postMessage({ type: 'CLEAR_OLD_CACHES' });
@@ -1582,6 +1857,7 @@ async function registerServiceWorker() {
 
     return registration;
   } catch {
+    setElementText(settingsServiceWorkerState, 'Registration failed');
     return null;
   }
 }
@@ -1594,6 +1870,7 @@ function showUpdateAvailable(worker) {
   }
 
   setUpdateStatus('Update available. Tap Update Now when ready.');
+  setElementText(settingsServiceWorkerState, 'Update available');
 }
 
 function waitForInstallingWorker(registration) {
@@ -1633,7 +1910,7 @@ function waitForInstallingWorker(registration) {
 }
 
 function waitForControllerChange(timeout = 2500) {
-  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+  if (!canUseServiceWorkerRuntime() || !('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
     return Promise.resolve();
   }
 
@@ -1656,6 +1933,11 @@ function waitForControllerChange(timeout = 2500) {
 }
 
 async function reloadAfterServiceWorkerUpdate(registration) {
+  if (!canUseServiceWorkerRuntime()) {
+    setUpdateStatus(getNativeUpdateMessage());
+    return;
+  }
+
   setUpdateStatus('Update complete. Reloading...');
 
   const worker = registration?.waiting || waitingServiceWorker;
@@ -1697,6 +1979,11 @@ async function checkForUpdates() {
   setUpdateStatus('Checking for updates...');
 
   try {
+    if (!canUseServiceWorkerRuntime()) {
+      setUpdateStatus(getNativeUpdateMessage());
+      return;
+    }
+
     await clearOldAppCaches();
 
     if (!('serviceWorker' in navigator)) {
@@ -2003,7 +2290,10 @@ function saveAppMeta() {
       dailyAddOns: ADD_ON_STORAGE_KEY,
       dailySummaries: EARNINGS_STORAGE_KEY,
       profile: PROFILE_STORAGE_KEY,
-      metadata: META_STORAGE_KEY
+      metadata: META_STORAGE_KEY,
+      settings: SETTINGS_STORAGE_KEY,
+      favoriteRoutes: FAVORITE_ROUTES_STORAGE_KEY,
+      currentDraft: DRAFT_STORAGE_KEY
     },
     lastStorageAudit: {
       recordsBeforeMigration: storageAudit.recordsBeforeMigration,
@@ -2015,6 +2305,120 @@ function saveAppMeta() {
   };
 
   return storeJson(META_STORAGE_KEY, appMeta, 'application metadata');
+}
+
+function getDefaultSettings() {
+  return {
+    payRates: { ...DEFAULT_PAY_SETTINGS },
+    loadedMilesPayScale: DEFAULT_LOADED_MILES_PAY_SCALE.map((range) => ({ ...range })),
+    keepRouteForNextLoad: true
+  };
+}
+
+function normalizePayRate(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function normalizeLoadedMilesPayScale(rawScale) {
+  const fallback = DEFAULT_LOADED_MILES_PAY_SCALE.map((range) => ({ ...range }));
+
+  if (!Array.isArray(rawScale)) {
+    return fallback;
+  }
+
+  const normalized = rawScale
+    .map((range, index) => {
+      const fallbackRange = fallback[index] || {};
+      const min = Number(range?.min ?? fallbackRange.min);
+      const max = Number(range?.max ?? fallbackRange.max);
+      const rate = normalizePayRate(range?.rate, fallbackRange.rate ?? 0);
+
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max < min) {
+        return fallbackRange;
+      }
+
+      return { min, max, rate };
+    })
+    .filter((range) => Number.isFinite(range.min) && Number.isFinite(range.max));
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function normalizeAppSettings(rawSettings) {
+  const defaults = getDefaultSettings();
+  const raw = isPlainObject(rawSettings) ? rawSettings : {};
+  const rawRates = isPlainObject(raw.payRates) ? raw.payRates : raw;
+
+  return {
+    ...defaults,
+    ...raw,
+    payRates: {
+      rejectPay: normalizePayRate(rawRates.rejectPay, defaults.payRates.rejectPay),
+      perDiemPay: normalizePayRate(rawRates.perDiemPay, defaults.payRates.perDiemPay),
+      sleeperBerthPay: normalizePayRate(rawRates.sleeperBerthPay, defaults.payRates.sleeperBerthPay),
+      trainerPay: normalizePayRate(rawRates.trainerPay, defaults.payRates.trainerPay),
+      waitPayRate: normalizePayRate(rawRates.waitPayRate, defaults.payRates.waitPayRate)
+    },
+    loadedMilesPayScale: normalizeLoadedMilesPayScale(raw.loadedMilesPayScale),
+    keepRouteForNextLoad: raw.keepRouteForNextLoad !== false
+  };
+}
+
+function loadAppSettings() {
+  return normalizeAppSettings(loadJson(SETTINGS_STORAGE_KEY, {}, 'application settings'));
+}
+
+function saveAppSettingsToStorage() {
+  return storeJson(SETTINGS_STORAGE_KEY, appSettings, 'application settings');
+}
+
+function getPayRate(rateName) {
+  const defaults = getDefaultSettings().payRates;
+  return normalizePayRate(appSettings?.payRates?.[rateName], defaults[rateName]);
+}
+
+function getActiveLoadedMilesPayScale() {
+  return normalizeLoadedMilesPayScale(appSettings?.loadedMilesPayScale);
+}
+
+function normalizeFavoriteRoutes(rawRoutes) {
+  if (!Array.isArray(rawRoutes)) {
+    return [];
+  }
+
+  return rawRoutes
+    .map((route) => {
+      if (!isPlainObject(route)) {
+        return null;
+      }
+
+      const pickupLocation = String(route.pickupLocation || '').trim();
+      const dropoffLocation = String(route.dropoffLocation || '').trim();
+
+      if (!pickupLocation || !dropoffLocation) {
+        return null;
+      }
+
+      return {
+        id: String(route.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+        name: String(route.name || `${pickupLocation} to ${dropoffLocation}`).trim(),
+        pickupLocation,
+        dropoffLocation,
+        loadedMiles: numberOrNull(route.loadedMiles),
+        productType: String(route.productType || '').trim(),
+        updatedAt: route.updatedAt || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+}
+
+function loadFavoriteRoutes() {
+  return normalizeFavoriteRoutes(loadJson(FAVORITE_ROUTES_STORAGE_KEY, [], 'favorite routes'));
+}
+
+function saveFavoriteRoutesToStorage() {
+  return storeJson(FAVORITE_ROUTES_STORAGE_KEY, favoriteRoutes, 'favorite routes');
 }
 
 function todayLocal() {
@@ -2170,6 +2574,432 @@ function formatDuration(minutes) {
   return `${hours} hr ${mins} min`;
 }
 
+function setStatusMessage(element, message, isError = false) {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = message;
+  element.className = `save-status show${isError ? ' error' : ''}`;
+}
+
+function clearStatusMessage(element) {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = '';
+  element.className = 'save-status';
+}
+
+function formatRoute(load) {
+  const pickup = load?.pickupLocation || 'Pickup';
+  const dropoff = load?.dropoffLocation || 'Drop-off';
+  return `${pickup} -> ${dropoff}`;
+}
+
+function activateView(viewName) {
+  const nextView = viewName || 'dashboard';
+
+  appViews.forEach((view) => {
+    view.classList.toggle('active', view.dataset.view === nextView);
+  });
+
+  navButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.viewTarget === nextView);
+  });
+
+  if (nextView === 'records') {
+    renderSavedLoads();
+  }
+
+  if (nextView === 'reports') {
+    renderReportSummary();
+  }
+
+  if (nextView === 'settings') {
+    renderSettingsUi();
+  }
+}
+
+function handleNavigationClick(event) {
+  const button = event.target.closest ? event.target.closest('[data-view-target]') : null;
+
+  if (!button) {
+    return;
+  }
+
+  activateView(button.dataset.viewTarget);
+}
+
+function getNextLoadNumber(date = daily.date?.value || todayLocal()) {
+  const numbers = getLoadsForDate(date)
+    .map((load) => String(load.loadNumber || '').match(/\d+/g)?.pop())
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+  const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+  return String(nextNumber);
+}
+
+function ensureLoadNumber() {
+  if (!fields.loadNumber?.value && !editingLoadId) {
+    fields.loadNumber.value = getNextLoadNumber(fields.loadDate?.value || daily.date?.value || todayLocal());
+  }
+}
+
+function updateEquipmentSummary() {
+  const driver = fields.driverName?.value || driverProfile.driverName || 'Driver';
+  const truck = fields.truckNumber?.value || driverProfile.truckNumber || '-';
+  const trailer = fields.trailerNumber?.value || driverProfile.trailerNumber || '-';
+  const text = `${driver} · Truck ${truck} · Trailer ${trailer}`;
+
+  if (entryEquipmentSummary) {
+    entryEquipmentSummary.textContent = text;
+  }
+}
+
+function updateRateLabels() {
+  if (paySettingsControls.labels.perDiem) {
+    paySettingsControls.labels.perDiem.textContent = formatMoney(getPayRate('perDiemPay'));
+  }
+
+  if (paySettingsControls.labels.sleeper) {
+    paySettingsControls.labels.sleeper.textContent = formatMoney(getPayRate('sleeperBerthPay'));
+  }
+
+  if (paySettingsControls.labels.trainer) {
+    paySettingsControls.labels.trainer.textContent = formatMoney(getPayRate('trainerPay'));
+  }
+
+  if (paySettingsControls.labels.reject) {
+    paySettingsControls.labels.reject.textContent = formatMoney(getPayRate('rejectPay'));
+  }
+}
+
+function renderLoadedMilesPayEditor() {
+  if (!paySettingsControls.loadedMilesEditor) {
+    return;
+  }
+
+  paySettingsControls.loadedMilesEditor.innerHTML = getActiveLoadedMilesPayScale().map((range, index) => `
+    <label class="pay-scale-row" for="pay-scale-rate-${index}">
+      <span>${range.min}-${range.max} miles</span>
+      <input id="pay-scale-rate-${index}" data-pay-scale-index="${index}" type="number" inputmode="decimal" min="0" step="0.01" value="${String(range.rate)}">
+    </label>
+  `).join('');
+}
+
+function applyPaySettingsToControls() {
+  if (paySettingsControls.waitRate) {
+    paySettingsControls.waitRate.value = String(getPayRate('waitPayRate'));
+  }
+
+  if (paySettingsControls.perDiemRate) {
+    paySettingsControls.perDiemRate.value = String(getPayRate('perDiemPay'));
+  }
+
+  if (paySettingsControls.sleeperRate) {
+    paySettingsControls.sleeperRate.value = String(getPayRate('sleeperBerthPay'));
+  }
+
+  if (paySettingsControls.rejectRate) {
+    paySettingsControls.rejectRate.value = String(getPayRate('rejectPay'));
+  }
+
+  if (paySettingsControls.trainerRate) {
+    paySettingsControls.trainerRate.value = String(getPayRate('trainerPay'));
+  }
+
+  updateRateLabels();
+  renderLoadedMilesPayEditor();
+}
+
+function readLoadedMilesPayEditor() {
+  const currentScale = getActiveLoadedMilesPayScale();
+
+  if (!paySettingsControls.loadedMilesEditor || typeof paySettingsControls.loadedMilesEditor.querySelectorAll !== 'function') {
+    return currentScale;
+  }
+
+  const nextScale = currentScale.map((range) => ({ ...range }));
+  paySettingsControls.loadedMilesEditor.querySelectorAll('[data-pay-scale-index]').forEach((input) => {
+    const index = Number(input.dataset.payScaleIndex);
+
+    if (nextScale[index]) {
+      nextScale[index].rate = normalizePayRate(input.value, nextScale[index].rate);
+    }
+  });
+
+  return nextScale;
+}
+
+function savePaySettingsFromControls() {
+  const nextSettings = normalizeAppSettings({
+    ...appSettings,
+    payRates: {
+      waitPayRate: paySettingsControls.waitRate?.value,
+      perDiemPay: paySettingsControls.perDiemRate?.value,
+      sleeperBerthPay: paySettingsControls.sleeperRate?.value,
+      rejectPay: paySettingsControls.rejectRate?.value,
+      trainerPay: paySettingsControls.trainerRate?.value
+    },
+    loadedMilesPayScale: readLoadedMilesPayEditor()
+  });
+  const previousSettings = appSettings;
+
+  appSettings = nextSettings;
+
+  if (!saveAppSettingsToStorage()) {
+    appSettings = previousSettings;
+    setStatusMessage(paySettingsControls.status, 'Pay rates could not be saved. Existing records were not changed.', true);
+    return;
+  }
+
+  refreshAllDailyEarningsRecords();
+  renderSummary();
+  updateDailySummary();
+  syncSettingsToCloud();
+  setStatusMessage(paySettingsControls.status, 'Pay rates saved.');
+}
+
+function renderFavoriteRoutes() {
+  if (favoriteRouteControls.select) {
+    favoriteRouteControls.select.innerHTML = [
+      '<option value="">Manual entry</option>',
+      ...favoriteRoutes.map((route) => `<option value="${escapeHtml(route.id)}">${escapeHtml(route.name)}</option>`)
+    ].join('');
+  }
+
+  if (!favoriteRouteControls.list) {
+    return;
+  }
+
+  if (favoriteRoutes.length === 0) {
+    favoriteRouteControls.list.innerHTML = '<article class="empty-card">No favorite routes saved yet.</article>';
+    return;
+  }
+
+  favoriteRouteControls.list.innerHTML = favoriteRoutes.map((route) => `
+    <article class="favorite-route-item">
+      <div>
+        <strong>${escapeHtml(route.name)}</strong>
+        <span>${escapeHtml(route.pickupLocation)} -> ${escapeHtml(route.dropoffLocation)} · ${formatMiles(route.loadedMiles)}${route.productType ? ` · ${escapeHtml(route.productType)}` : ''}</span>
+      </div>
+      <button class="small-button danger" type="button" data-delete-route-id="${escapeHtml(route.id)}">Delete</button>
+    </article>
+  `).join('');
+}
+
+function saveFavoriteRouteFromControls() {
+  const pickupLocation = favoriteRouteControls.pickup?.value.trim() || '';
+  const dropoffLocation = favoriteRouteControls.dropoff?.value.trim() || '';
+
+  if (!pickupLocation || !dropoffLocation) {
+    setStatusMessage(favoriteRouteControls.status, 'Enter pickup and drop-off locations before saving a favorite route.', true);
+    return;
+  }
+
+  const route = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: favoriteRouteControls.name?.value.trim() || `${pickupLocation} to ${dropoffLocation}`,
+    pickupLocation,
+    dropoffLocation,
+    loadedMiles: numberOrNull(favoriteRouteControls.mileage?.value),
+    productType: favoriteRouteControls.product?.value.trim() || '',
+    updatedAt: new Date().toISOString()
+  };
+  const previousRoutes = favoriteRoutes;
+  favoriteRoutes = normalizeFavoriteRoutes([route, ...favoriteRoutes]);
+
+  if (!saveFavoriteRoutesToStorage()) {
+    favoriteRoutes = previousRoutes;
+    setStatusMessage(favoriteRouteControls.status, 'Favorite route could not be saved.', true);
+    return;
+  }
+
+  [favoriteRouteControls.name, favoriteRouteControls.pickup, favoriteRouteControls.dropoff, favoriteRouteControls.mileage, favoriteRouteControls.product].forEach((field) => {
+    if (field) {
+      field.value = '';
+    }
+  });
+  renderFavoriteRoutes();
+  syncSettingsToCloud();
+  setStatusMessage(favoriteRouteControls.status, 'Favorite route saved.');
+}
+
+function deleteFavoriteRoute(routeId) {
+  const confirmed = typeof globalThis.confirm === 'function'
+    ? globalThis.confirm('Delete this favorite route? Saved load records will not be changed.')
+    : true;
+
+  if (!confirmed) {
+    return;
+  }
+
+  favoriteRoutes = favoriteRoutes.filter((route) => route.id !== routeId);
+  saveFavoriteRoutesToStorage();
+  renderFavoriteRoutes();
+  syncSettingsToCloud();
+  setStatusMessage(favoriteRouteControls.status, 'Favorite route deleted.');
+}
+
+function applyFavoriteRoute(routeId) {
+  const route = favoriteRoutes.find((item) => item.id === routeId);
+
+  if (!route) {
+    return;
+  }
+
+  fields.pickupLocation.value = route.pickupLocation;
+  fields.dropoffLocation.value = route.dropoffLocation;
+
+  if (isFiniteNumber(route.loadedMiles)) {
+    fields.loadedMiles.value = route.loadedMiles;
+  }
+
+  if (route.productType) {
+    fields.productType.value = route.productType;
+  }
+
+  renderSummary();
+  saveDraftNow('Draft updated from favorite route.');
+}
+
+function renderSettingsUi() {
+  applyPaySettingsToControls();
+  renderFavoriteRoutes();
+  updateEquipmentSummary();
+}
+
+function getDraftPayload() {
+  return {
+    savedAt: new Date().toISOString(),
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    editingLoadId,
+    selectedDate: daily.date?.value || todayLocal(),
+    formValues: getFormValues()
+  };
+}
+
+function hasMeaningfulFormData(values = getFormValues()) {
+  return fieldIds.some((id) => {
+    const key = toKey(id);
+    const value = values[key];
+
+    if (['loadDate', 'loadStatus', 'driverName', 'truckNumber', 'trailerNumber', 'loadNumber'].includes(key)) {
+      return false;
+    }
+
+    return value !== null && value !== undefined && String(value).trim() !== '';
+  });
+}
+
+function saveDraftNow(message = 'Draft saved.') {
+  const values = getFormValues();
+
+  if (!hasMeaningfulFormData(values) && !editingLoadId) {
+    clearDraft();
+    return;
+  }
+
+  if (storeJson(DRAFT_STORAGE_KEY, getDraftPayload(), 'current load draft')) {
+    setStatusMessage(draftStatus, message);
+    updateDraftButtonState(true);
+  }
+}
+
+function scheduleDraftSave() {
+  if (draftSaveTimer && typeof globalThis.clearTimeout === 'function') {
+    globalThis.clearTimeout(draftSaveTimer);
+  }
+
+  if (typeof globalThis.setTimeout !== 'function') {
+    saveDraftNow('Draft saved.');
+    return;
+  }
+
+  draftSaveTimer = globalThis.setTimeout(() => {
+    saveDraftNow('Draft saved.');
+  }, 550);
+}
+
+function readDraft() {
+  const stored = readJsonFromStorage(DRAFT_STORAGE_KEY, 'current load draft');
+  return stored.found && isPlainObject(stored.value) ? stored.value : null;
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // Draft cleanup should never interrupt saved records.
+  }
+
+  clearStatusMessage(draftStatus);
+  updateDraftButtonState(false);
+}
+
+function updateDraftButtonState(hasDraft = Boolean(readDraft())) {
+  if (continueDraftButton) {
+    continueDraftButton.hidden = !hasDraft;
+  }
+}
+
+function applyDraft(draft) {
+  if (!draft?.formValues) {
+    return false;
+  }
+
+  fieldIds.forEach((id) => {
+    const key = toKey(id);
+    const field = fields[key];
+
+    if (field && draft.formValues[key] !== undefined) {
+      field.value = draft.formValues[key] === null ? '' : draft.formValues[key];
+    }
+  });
+
+  editingLoadId = draft.editingLoadId || null;
+  daily.date.value = draft.selectedDate || draft.formValues.loadDate || daily.date.value || todayLocal();
+
+  if (editingLoadId) {
+    saveLoadButton.textContent = 'Update Load';
+    editStatus.textContent = 'Editing saved draft';
+  } else {
+    saveLoadButton.textContent = 'Save Load';
+    editStatus.textContent = 'Draft restored';
+  }
+
+  updateEquipmentSummary();
+  applyDailyAddOnsToControls();
+  renderSummary();
+  updateDailySummary();
+  setStatusMessage(draftStatus, `Draft restored from ${new Date(draft.savedAt || Date.now()).toLocaleString()}.`);
+  return true;
+}
+
+function restoreDraftIfAvailable() {
+  const draft = readDraft();
+
+  updateDraftButtonState(Boolean(draft));
+
+  if (!draft) {
+    return;
+  }
+
+  applyDraft(draft);
+}
+
+function warnBeforeLeavingUnsaved(event) {
+  if (!hasMeaningfulFormData() || readDraft()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = '';
+}
+
 function parseTimeToMinutes(timeValue) {
   if (!timeValue) {
     return null;
@@ -2220,7 +3050,7 @@ function calculateStopWaitBreakdown(values) {
 
 function calculateWaitPay(totalPaidWaitMinutes) {
   return isFiniteNumber(totalPaidWaitMinutes)
-    ? totalPaidWaitMinutes / 60 * WAIT_PAY_RATE
+    ? totalPaidWaitMinutes / 60 * getPayRate('waitPayRate')
     : 0;
 }
 
@@ -2245,7 +3075,7 @@ function getLoadedMilesPay(loadedMiles) {
   }
 
   const milesForRate = Math.ceil(loadedMiles);
-  const match = loadedMilesPayScale.find((range) => (
+  const match = getActiveLoadedMilesPayScale().find((range) => (
     milesForRate >= range.min && milesForRate <= range.max
   ));
 
@@ -2303,7 +3133,7 @@ function calculateDerived(values) {
   const reRoutedMiles = valueOrZero(values.reRoutedMiles);
   const totalMilesIncludingReRoute = regularMiles + reRoutedMiles;
   const payMatch = getLoadedMilesPay(values.loadedMiles);
-  const estimatedPay = isReject(values) ? REJECT_PAY : payMatch.rate;
+  const estimatedPay = isReject(values) ? getPayRate('rejectPay') : payMatch.rate;
   const stopWait = calculateStopWaitBreakdown(values);
   const estimatedEntryPay = estimatedPay + stopWait.waitPay;
 
@@ -2528,9 +3358,9 @@ function getDailyEarningsSummary(date) {
   const totalEstimatedEntryPay = sum(records, 'estimatedEntryPay');
   const totalLoadedMiles = sum(records, 'loadedMiles');
   const totalReRoutedMiles = sum(records, 'reRoutedMiles');
-  const perDiemPay = addOn.perDiem ? PER_DIEM_PAY : 0;
-  const sleeperBerthPay = addOn.sleeperBerth ? SLEEPER_BERTH_PAY : 0;
-  const trainerPay = addOn.trainerPay ? TRAINER_PAY : 0;
+  const perDiemPay = addOn.perDiem ? getPayRate('perDiemPay') : 0;
+  const sleeperBerthPay = addOn.sleeperBerth ? getPayRate('sleeperBerthPay') : 0;
+  const trainerPay = addOn.trainerPay ? getPayRate('trainerPay') : 0;
 
   return {
     date,
@@ -2623,6 +3453,9 @@ function renderSummary() {
   summary.waitPay.textContent = formatMoney(derived.waitPay);
   summary.entryTotal.textContent = formatMoney(derived.estimatedEntryPay);
   summary.cycleTime.textContent = formatDuration(derived.cycleTimeMinutes);
+  setElementText(reviewRoutePreview, formatRoute(values));
+  updateEquipmentSummary();
+  updateRateLabels();
 }
 
 function summarizeLoadsForDates(records) {
@@ -2651,12 +3484,20 @@ function updateDashboardStats(summaryRecord) {
 
   const payPeriodRecords = getLoadsForRange(payPeriodRange.start, payPeriodRange.end);
   const selectedDateRecords = getLoadsForDate(selectedDate);
+  const payPeriodRecord = getPayPeriodEarningsSummary(selectedDate);
 
   dashboard.totalLoadsHauled.textContent = String(countUniqueLoads());
   dashboard.currentWorkDate.textContent = selectedDate || '-';
   dashboard.loadsHauledPayPeriod.textContent = String(payPeriodRecords.length);
   dashboard.loadsHauledMonth.textContent = String(getLoadsForRange(monthRange.start, monthRange.end).length);
   dashboard.loadsHauledSelectedDate.textContent = String(selectedDateRecords.length);
+  setElementText(headerRecordCount, `${countUniqueLoads()} ${countUniqueLoads() === 1 ? 'load' : 'loads'}`);
+  setElementText(payPeriodSummary.totalEarnings, formatMoney(payPeriodRecord.totalEstimatedEarnings));
+  setElementText(payPeriodSummary.trainerPay, formatMoney(payPeriodRecord.trainerPay));
+  setElementText(payPeriodSummary.perDiemPay, formatMoney(payPeriodRecord.perDiemPay));
+  setElementText(payPeriodSummary.sleeperPay, formatMoney(payPeriodRecord.sleeperBerthPay));
+  setElementText(payPeriodSummary.rejectPay, formatMoney(payPeriodRecord.rejectPay));
+  setElementText(payPeriodSummary.waitPay, formatMoney(payPeriodRecord.totalWaitPay));
 
   const selectedDateSummary = summarizeLoadsForDates(selectedDateRecords);
   daily.grossBarrels.textContent = formatBarrels(summaryRecord.totalGrossBarrels);
@@ -2713,6 +3554,8 @@ function updateDailySummary() {
   review.totalEarnings.textContent = formatMoney(summaryRecord.totalEstimatedDailyEarnings);
 
   renderSavedLoads();
+  renderRecentLoads();
+  renderReportSummary();
 }
 
 function renderDailyPanels() {
@@ -2722,6 +3565,9 @@ function renderDailyPanels() {
 function getSavedFilterRecords() {
   const scope = savedFilters.scope?.value || 'selected-date';
   const query = String(savedFilters.search?.value || '').trim().toLowerCase();
+  const pickupQuery = String(extraSavedFilters.pickup?.value || '').trim().toLowerCase();
+  const dropoffQuery = String(extraSavedFilters.dropoff?.value || '').trim().toLowerCase();
+  const ticketQuery = String(extraSavedFilters.ticket?.value || '').trim().toLowerCase();
   let records = getUniqueSavedLoads();
 
   if (scope === 'selected-date') {
@@ -2742,12 +3588,37 @@ function getSavedFilterRecords() {
     records = records.filter((load) => isDateInRange(load.loadDate, range.start, range.end));
   }
 
+  if (scope === 'pickup') {
+    records = records.filter((load) => String(load.pickupLocation || '').toLowerCase().includes(pickupQuery || query));
+  }
+
+  if (scope === 'dropoff') {
+    records = records.filter((load) => String(load.dropoffLocation || '').toLowerCase().includes(dropoffQuery || query));
+  }
+
+  if (scope === 'ticket') {
+    records = records.filter((load) => [
+      load.ticketNumber,
+      load.bolNumber,
+      load.jotformConfirmationNumber
+    ].some((value) => String(value || '').toLowerCase().includes(ticketQuery || query)));
+  }
+
+  if (scope === 'completed') {
+    records = records.filter(isCompleted);
+  }
+
+  if (scope === 'incomplete') {
+    records = records.filter((load) => !isCompleted(load));
+  }
+
   if (query) {
     records = records.filter((load) => [
       load.loadDate,
       load.loadNumber,
       load.ticketNumber,
       load.bolNumber,
+      load.jotformConfirmationNumber,
       load.driverName,
       load.truckNumber,
       load.trailerNumber,
@@ -2758,14 +3629,79 @@ function getSavedFilterRecords() {
     ].some((value) => String(value || '').toLowerCase().includes(query)));
   }
 
-  return records.sort((left, right) => (
-    String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
-    || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
-  ));
+  if (pickupQuery && scope !== 'pickup') {
+    records = records.filter((load) => String(load.pickupLocation || '').toLowerCase().includes(pickupQuery));
+  }
+
+  if (dropoffQuery && scope !== 'dropoff') {
+    records = records.filter((load) => String(load.dropoffLocation || '').toLowerCase().includes(dropoffQuery));
+  }
+
+  if (ticketQuery && scope !== 'ticket') {
+    records = records.filter((load) => [
+      load.ticketNumber,
+      load.bolNumber,
+      load.jotformConfirmationNumber
+    ].some((value) => String(value || '').toLowerCase().includes(ticketQuery)));
+  }
+
+  const sortOrder = extraSavedFilters.sort?.value || 'newest';
+
+  return records.sort((left, right) => {
+    if (sortOrder === 'oldest') {
+      return String(left.loadDate || '').localeCompare(String(right.loadDate || ''))
+        || String(left.savedAt || '').localeCompare(String(right.savedAt || ''));
+    }
+
+    if (sortOrder === 'load-number') {
+      return String(left.loadNumber || '').localeCompare(String(right.loadNumber || ''), undefined, { numeric: true })
+        || String(right.loadDate || '').localeCompare(String(left.loadDate || ''));
+    }
+
+    if (sortOrder === 'earnings') {
+      return valueOrZero(right.estimatedEntryPay) - valueOrZero(left.estimatedEntryPay);
+    }
+
+    return String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
+      || String(right.savedAt || '').localeCompare(String(left.savedAt || ''));
+  });
 }
 
 function renderSavedLoads(records = getSavedFilterRecords()) {
   renderSavedLoadCards(records);
+}
+
+function getRecentLoads(limit = 5) {
+  return getUniqueSavedLoads()
+    .slice()
+    .sort((left, right) => (
+      String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
+      || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
+    ))
+    .slice(0, limit);
+}
+
+function renderRecentLoads() {
+  if (!recentLoadList) {
+    return;
+  }
+
+  const records = getRecentLoads(5);
+
+  if (records.length === 0) {
+    recentLoadList.innerHTML = '<article class="empty-card">No recent loads yet.</article>';
+    return;
+  }
+
+  recentLoadList.innerHTML = records.map((load) => `
+    <article class="recent-row" data-load-id="${escapeHtml(load.id)}">
+      <div class="load-cell"><span>Load</span><strong>${escapeHtml(load.loadNumber || '-')}</strong></div>
+      <div class="load-cell route-cell"><span>Route</span><strong>${escapeHtml(formatRoute(load))}</strong></div>
+      <div class="load-cell"><span>Barrels</span><strong>${escapeHtml(formatBarrels(load.grossBarrels))}</strong></div>
+      <div class="load-cell"><span>Earnings</span><strong>${escapeHtml(formatMoney(load.estimatedEntryPay))}</strong></div>
+      <div class="load-cell"><span>Status</span><strong class="status-badge ${isCompleted(load) ? 'completed' : ''}">${escapeHtml(load.loadStatus || 'Incomplete')}</strong></div>
+    </article>
+  `).join('');
 }
 
 function renderSavedLoadCards(records) {
@@ -2778,13 +3714,14 @@ function renderSavedLoadCards(records) {
 
   savedLoadCards.innerHTML = records.map((load) => `
     <article class="load-card" data-load-id="${escapeHtml(load.id)}">
-      <div class="load-card-header">
-        <div class="load-title">
-          <strong>${escapeHtml(load.loadNumber || 'No load number')} | ${escapeHtml(load.loadStatus || '-')}</strong>
-          <span class="load-route">${escapeHtml(load.loadDate || 'No date')} | ${escapeHtml(load.driverName || 'No driver')} | Truck ${escapeHtml(load.truckNumber || '-')} | Trailer ${escapeHtml(load.trailerNumber || '-')}</span>
-          <span class="load-route">${escapeHtml(load.pickupLocation || 'Pickup')} &rarr; ${escapeHtml(load.dropoffLocation || 'Drop off')}</span>
-          <span class="load-route">Ticket ${escapeHtml(load.ticketNumber || '-')} | BOL ${escapeHtml(load.bolNumber || '-')}</span>
-        </div>
+      <div class="load-row">
+        <div class="load-cell"><span>Load</span><strong>${escapeHtml(load.loadNumber || '-')}</strong></div>
+        <div class="load-cell"><span>Date</span><strong>${escapeHtml(load.loadDate || '-')}</strong></div>
+        <div class="load-cell route-cell"><span>Route</span><strong>${escapeHtml(formatRoute(load))}</strong></div>
+        <div class="load-cell"><span>Gross</span><strong>${escapeHtml(formatBarrels(load.grossBarrels))}</strong></div>
+        <div class="load-cell"><span>Offloaded</span><strong>${escapeHtml(formatBarrels(load.barrelsOffloaded))}</strong></div>
+        <div class="load-cell"><span>Earnings</span><strong>${escapeHtml(formatMoney(load.estimatedEntryPay))}</strong></div>
+        <div class="load-cell"><span>Status</span><strong class="status-badge ${isCompleted(load) ? 'completed' : ''}">${escapeHtml(load.loadStatus || 'Incomplete')}</strong></div>
         <div class="load-actions">
           <button class="small-button" type="button" data-action="open" data-id="${escapeHtml(load.id)}">Open</button>
           <button class="small-button" type="button" data-action="edit" data-id="${escapeHtml(load.id)}">Edit</button>
@@ -2794,35 +3731,19 @@ function renderSavedLoadCards(records) {
           <button class="small-button danger" type="button" data-action="delete" data-id="${escapeHtml(load.id)}">Delete</button>
         </div>
       </div>
-      <div class="load-chip-grid">
-        ${loadChip('Work date', load.loadDate || '-')}
-        ${loadChip('Gross barrels', formatBarrels(load.grossBarrels))}
-        ${loadChip('Regular Miles', formatMiles(load.regularMiles))}
-        ${loadChip('Re-routed Miles', formatMiles(load.reRoutedMiles))}
-        ${loadChip('Total Miles Including Re-route', formatMiles(load.totalMilesIncludingReRoute))}
-        ${loadChip('Offloaded', formatBarrels(load.barrelsOffloaded))}
-        ${loadChip('Diff vs gross', formatBarrels(load.differenceVsGrossBarrels))}
-        ${loadChip('Offload status', load.offloadStatus)}
-        ${loadChip('Base pay', formatMoney(load.estimatedPay))}
-        ${loadChip('Load site duration', formatDuration(load.pickupTimeMinutes))}
-        ${loadChip('Load wait time', formatDuration(load.paidPickupWaitMinutes))}
-        ${loadChip('Unload site duration', formatDuration(load.dropoffTimeMinutes))}
-        ${loadChip('Unload wait time', formatDuration(load.paidDropoffWaitMinutes))}
-        ${loadChip('Total paid wait time', formatDuration(load.totalPaidWaitMinutes))}
-        ${loadChip('Wait pay', formatMoney(load.waitPay))}
-        ${loadChip('Estimated total pay', formatMoney(load.estimatedEntryPay))}
-        ${loadChip('Cycle time', formatDuration(load.cycleTimeMinutes))}
-      </div>
       <details class="load-details">
         <summary>Full saved record</summary>
         <div class="detail-grid">
           ${detailItem('Driver name', load.driverName)}
           ${detailItem('Truck number', load.truckNumber)}
           ${detailItem('Trailer number', load.trailerNumber)}
+          ${detailItem('Ticket number', load.ticketNumber || '-')}
+          ${detailItem('BOL number', load.bolNumber || '-')}
+          ${detailItem('Jotform number', load.jotformConfirmationNumber || '-')}
           ${detailItem('Product type', load.productType)}
-          ${detailItem('Regular Miles', formatMiles(load.regularMiles))}
-          ${detailItem('Re-routed Miles', formatMiles(load.reRoutedMiles))}
-          ${detailItem('Total Miles Including Re-route', formatMiles(load.totalMilesIncludingReRoute))}
+          ${detailItem('Regular miles', formatMiles(load.regularMiles))}
+          ${detailItem('Rerouted miles', formatMiles(load.reRoutedMiles))}
+          ${detailItem('Total miles', formatMiles(load.totalMilesIncludingReRoute))}
           ${detailItem('API gravity', formatNumber(load.apiGravity, 1))}
           ${detailItem('BS&W percentage', formatPercent(load.bswPercentage))}
           ${detailItem('Estimated load weight', formatWeight(load.estimatedTotalLoadWeight))}
@@ -2830,18 +3751,16 @@ function renderSavedLoadCards(records) {
           ${detailItem('Start meter reading', formatNumber(load.startMeterReading))}
           ${detailItem('End meter reading', formatNumber(load.endMeterReading))}
           ${detailItem('Barrels offloaded', formatBarrels(load.barrelsOffloaded))}
-          ${detailItem('Gross barrels hauled', formatBarrels(load.grossBarrels))}
           ${detailItem('Difference vs gross barrels', formatBarrels(load.differenceVsGrossBarrels))}
           ${detailItem('Offload status', load.offloadStatus)}
-          ${detailItem('Jotform confirmation number', load.jotformConfirmationNumber || '-')}
           ${detailItem('Arrived at pickup', load.arrivedPickupTime || '-')}
           ${detailItem('Loaded / picked up', load.loadedTime || '-')}
           ${detailItem('Arrived at drop off', load.arrivedDropoffTime || '-')}
           ${detailItem('Dropped off / completed', load.completedTime || '-')}
-          ${detailItem('Load site duration', formatDuration(load.pickupTimeMinutes))}
-          ${detailItem('Load wait time', formatDuration(load.paidPickupWaitMinutes))}
-          ${detailItem('Unload site duration', formatDuration(load.dropoffTimeMinutes))}
-          ${detailItem('Unload wait time', formatDuration(load.paidDropoffWaitMinutes))}
+          ${detailItem('Loading site duration', formatDuration(load.pickupTimeMinutes))}
+          ${detailItem('Loading wait time', formatDuration(load.paidPickupWaitMinutes))}
+          ${detailItem('Offloading site duration', formatDuration(load.dropoffTimeMinutes))}
+          ${detailItem('Offloading wait time', formatDuration(load.paidDropoffWaitMinutes))}
           ${detailItem('Total paid wait time', formatDuration(load.totalPaidWaitMinutes))}
           ${detailItem('Wait pay', formatMoney(load.waitPay))}
           ${detailItem('Estimated total pay', formatMoney(load.estimatedEntryPay))}
@@ -2881,8 +3800,9 @@ function renderProfileSummary() {
   }
 
   profileControls.summary.textContent = hasProfile
-    ? `${driverProfile.driverName} | Truck: ${driverProfile.truckNumber} | Trailer: ${driverProfile.trailerNumber}`
+    ? `${driverProfile.driverName} · Truck ${driverProfile.truckNumber} · Trailer ${driverProfile.trailerNumber}`
     : 'No saved profile';
+  updateEquipmentSummary();
 }
 
 function applyProfileToNewLoad() {
@@ -2893,6 +3813,7 @@ function applyProfileToNewLoad() {
   fields.driverName.value = driverProfile.driverName || '';
   fields.truckNumber.value = driverProfile.truckNumber || '';
   fields.trailerNumber.value = driverProfile.trailerNumber || '';
+  updateEquipmentSummary();
 }
 
 function readProfileValues() {
@@ -2979,6 +3900,32 @@ function clearValidation() {
   validationSummary.textContent = '';
 }
 
+function collectSoftWarnings(values) {
+  const warnings = [];
+  const pickupDuration = durationBetween(values.arrivedPickupTime, values.loadedTime);
+  const dropoffDuration = durationBetween(values.arrivedDropoffTime, values.completedTime);
+
+  if (values.arrivedPickupTime && values.loadedTime && parseTimeToMinutes(values.loadedTime) < parseTimeToMinutes(values.arrivedPickupTime)) {
+    warnings.push('Loading completion is earlier than arrival, so it will be treated as crossing midnight.');
+  }
+
+  if (values.arrivedDropoffTime && values.completedTime && parseTimeToMinutes(values.completedTime) < parseTimeToMinutes(values.arrivedDropoffTime)) {
+    warnings.push('Offloading completion is earlier than arrival, so it will be treated as crossing midnight.');
+  }
+
+  if (pickupDuration > 720 || dropoffDuration > 720) {
+    warnings.push('One stop has more than 12 hours on location. Review the times before saving.');
+  }
+
+  const payRange = getCompanyPayPeriodRange(daily.date.value || todayLocal());
+
+  if (values.loadDate && payRange.start && payRange.end && !isDateInRange(values.loadDate, payRange.start, payRange.end)) {
+    warnings.push('This work date is outside the pay period currently shown on the dashboard.');
+  }
+
+  return warnings;
+}
+
 function validate(values) {
   clearValidation();
   const messages = [];
@@ -3063,6 +4010,13 @@ function validate(values) {
     return false;
   }
 
+  const warnings = collectSoftWarnings(values);
+
+  if (warnings.length > 0) {
+    validationSummary.className = 'validation-summary show warning';
+    validationSummary.textContent = warnings[0];
+  }
+
   return true;
 }
 
@@ -3078,13 +4032,22 @@ function findLikelyDuplicate(values, excludedId = null) {
     return null;
   }
 
-  return savedLoads.find((load) => (
-    load.id !== excludedId
-    && load.loadDate === values.loadDate
-    && normalizeDuplicateValue(load.ticketNumber) === normalizeDuplicateValue(values.ticketNumber)
-    && normalizeDuplicateValue(load.bolNumber) === normalizeDuplicateValue(values.bolNumber)
-    && normalizeDuplicateValue(load.loadNumber) === normalizeDuplicateValue(values.loadNumber)
-  )) || null;
+  return savedLoads.find((load) => {
+    if (load.id === excludedId || load.loadDate !== values.loadDate) {
+      return false;
+    }
+
+    const ticketMatches = normalizeDuplicateValue(values.ticketNumber)
+      && normalizeDuplicateValue(load.ticketNumber) === normalizeDuplicateValue(values.ticketNumber);
+    const bolMatches = normalizeDuplicateValue(values.bolNumber)
+      && normalizeDuplicateValue(load.bolNumber) === normalizeDuplicateValue(values.bolNumber);
+    const jotformMatches = normalizeDuplicateValue(values.jotformConfirmationNumber)
+      && normalizeDuplicateValue(load.jotformConfirmationNumber) === normalizeDuplicateValue(values.jotformConfirmationNumber);
+    const loadNumberMatches = normalizeDuplicateValue(values.loadNumber)
+      && normalizeDuplicateValue(load.loadNumber) === normalizeDuplicateValue(values.loadNumber);
+
+    return ticketMatches || bolMatches || jotformMatches || loadNumberMatches;
+  }) || null;
 }
 
 function hideDuplicateWarning() {
@@ -3115,8 +4078,15 @@ function buildLoadRecord(values) {
   });
 }
 
-function saveLoad(event) {
-  event.preventDefault();
+function setSaveButtonsBusy(isBusy) {
+  [saveLoadButton, saveNextButton, saveDraftButton].forEach((button) => {
+    if (button) {
+      button.disabled = isBusy;
+    }
+  });
+}
+
+function queueLoadCommit(mode = 'save') {
   const values = getFormValues();
 
   if (!validate(values)) {
@@ -3126,17 +4096,38 @@ function saveLoad(event) {
 
   const record = buildLoadRecord(values);
   const duplicate = findLikelyDuplicate(values, editingLoadId);
+  pendingCommitMode = mode;
 
   if (duplicate) {
     showDuplicateWarning(record);
     return;
   }
 
-  commitLoadRecord(record);
+  commitLoadRecord(record, { startNext: mode === 'next' });
 }
 
-function commitLoadRecord(record) {
+function saveLoad(event) {
+  event.preventDefault();
+
+  if (isSaving) {
+    return;
+  }
+
+  queueLoadCommit('save');
+}
+
+function saveAndStartNextLoad() {
+  if (isSaving) {
+    return;
+  }
+
+  queueLoadCommit('next');
+}
+
+function commitLoadRecord(record, options = {}) {
   hideDuplicateWarning();
+  isSaving = true;
+  setSaveButtonsBusy(true);
 
   if (editingLoadId) {
     savedLoads = savedLoads.map((load) => (load.id === editingLoadId ? record : load));
@@ -3153,13 +4144,59 @@ function commitLoadRecord(record) {
   applyDailyAddOnsToControls();
   renderSummary();
   updateDailySummary();
-  showSaveMessage('Load saved successfully.');
+  clearDraft();
+
+  if (options.startNext) {
+    startNextLoadFrom(record);
+    showSaveMessage('Load saved. Next load is ready.');
+  } else {
+    showSaveMessage('Load saved successfully.');
+    activateView('dashboard');
+  }
+
+  isSaving = false;
+  setSaveButtonsBusy(false);
 }
 
 function exitEditMode() {
   editingLoadId = null;
   saveLoadButton.textContent = 'Save Load';
   editStatus.textContent = 'New entry';
+}
+
+function startNextLoadFrom(previousRecord) {
+  const workDate = previousRecord.loadDate || daily.date.value || todayLocal();
+  form.reset();
+  clearValidation();
+  hideDuplicateWarning();
+  exitEditMode();
+  daily.date.value = workDate;
+  fields.loadDate.value = workDate;
+  fields.loadStatus.value = COMPLETED_STATUS;
+  applyProfileToNewLoad();
+
+  if (appSettings.keepRouteForNextLoad) {
+    fields.pickupLocation.value = previousRecord.pickupLocation || '';
+    fields.dropoffLocation.value = previousRecord.dropoffLocation || '';
+    fields.productType.value = previousRecord.productType || '';
+    fields.loadedMiles.value = isFiniteNumber(previousRecord.loadedMiles) ? previousRecord.loadedMiles : '';
+  }
+
+  fields.loadNumber.value = getNextLoadNumber(workDate);
+  fields.ticketNumber.value = '';
+  fields.bolNumber.value = '';
+  fields.jotformConfirmationNumber.value = '';
+  fields.grossBarrels.value = '';
+  fields.startMeterReading.value = '';
+  fields.endMeterReading.value = '';
+  fields.arrivedPickupTime.value = '';
+  fields.loadedTime.value = '';
+  fields.arrivedDropoffTime.value = '';
+  fields.completedTime.value = '';
+  fields.notes.value = '';
+  applyDailyAddOnsToControls();
+  renderSummary();
+  activateView('new-load');
 }
 
 function clearForm() {
@@ -3171,8 +4208,10 @@ function clearForm() {
   fields.loadDate.value = daily.date.value || todayLocal();
   fields.loadStatus.value = COMPLETED_STATUS;
   applyProfileToNewLoad();
+  ensureLoadNumber();
   applyDailyAddOnsToControls();
   renderSummary();
+  clearDraft();
 }
 
 function loadEntryForEdit(loadId) {
@@ -3201,6 +4240,7 @@ function loadEntryForEdit(loadId) {
   applyDailyAddOnsToControls();
   renderSummary();
   updateDailySummary();
+  activateView('new-load');
 
   if (form.scrollIntoView) {
     form.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3279,9 +4319,22 @@ function duplicateLoadEntry(loadId) {
   });
 
   daily.date.value = load.loadDate || daily.date.value;
+  fields.loadNumber.value = getNextLoadNumber(load.loadDate || daily.date.value);
+  fields.ticketNumber.value = '';
+  fields.bolNumber.value = '';
+  fields.jotformConfirmationNumber.value = '';
+  fields.startMeterReading.value = '';
+  fields.endMeterReading.value = '';
+  fields.grossBarrels.value = '';
+  fields.arrivedPickupTime.value = '';
+  fields.loadedTime.value = '';
+  fields.arrivedDropoffTime.value = '';
+  fields.completedTime.value = '';
+  fields.notes.value = '';
   applyDailyAddOnsToControls();
   renderSummary();
   updateDailySummary();
+  activateView('new-load');
   showSaveMessage('Duplicated load loaded into the form. Review it, then tap Save Load to create a new record.');
 
   if (form.scrollIntoView) {
@@ -3438,6 +4491,7 @@ function handleSelectedDateChange() {
 
   if (!editingLoadId) {
     fields.loadDate.value = daily.date.value;
+    ensureLoadNumber();
   }
 
   if (savedFilters.date && (!savedFilters.date.value || savedFilters.scope?.value === 'selected-date')) {
@@ -3451,6 +4505,7 @@ function handleSelectedDateChange() {
 function handleLoadDateChange() {
   if (fields.loadDate.value) {
     daily.date.value = fields.loadDate.value;
+    ensureLoadNumber();
     applyDailyAddOnsToControls();
     updateDailySummary();
   }
@@ -3485,6 +4540,7 @@ function handleFormInput(event) {
   }
 
   renderSummary();
+  scheduleDraftSave();
 }
 
 function toCsvValue(value) {
@@ -3722,14 +4778,18 @@ function getTrackerSnapshot() {
       dailyAddOns: ADD_ON_STORAGE_KEY,
       dailySummaries: EARNINGS_STORAGE_KEY,
       profile: PROFILE_STORAGE_KEY,
-      metadata: META_STORAGE_KEY
+      metadata: META_STORAGE_KEY,
+      settings: SETTINGS_STORAGE_KEY,
+      favoriteRoutes: FAVORITE_ROUTES_STORAGE_KEY
     },
     data: {
       loads: getUniqueSavedLoads(savedLoads),
       dailyAddOns,
       dailySummaries: dailyEarningsRecords,
       profile: driverProfile,
-      metadata: appMeta
+      metadata: appMeta,
+      settings: appSettings,
+      favoriteRoutes
     }
   };
 }
@@ -3817,7 +4877,9 @@ function parseBackupText(text) {
     dailyAddOns: normalizeImportedAddOns(data.dailyAddOns || data.addOns || {}),
     dailySummaries: normalizeImportedSummaries(data.dailySummaries || data.earnings || {}),
     profile: normalizeDriverProfile(data.profile || {}),
-    metadata: isPlainObject(data.metadata) ? data.metadata : {}
+    metadata: isPlainObject(data.metadata) ? data.metadata : {},
+    settings: normalizeAppSettings(data.settings || {}),
+    favoriteRoutes: normalizeFavoriteRoutes(data.favoriteRoutes || [])
   };
 }
 
@@ -3850,6 +4912,8 @@ function buildImportedState(imported, mode) {
       dailyAddOns: imported.dailyAddOns,
       dailySummaries: imported.dailySummaries,
       profile: imported.profile,
+      settings: imported.settings,
+      favoriteRoutes: imported.favoriteRoutes,
       metadata: {
         ...imported.metadata,
         importedAt: new Date().toISOString(),
@@ -3884,6 +4948,15 @@ function buildImportedState(imported, mode) {
       ...dailyEarningsRecords
     },
     profile: mergeImportedProfile(driverProfile, imported.profile),
+    settings: normalizeAppSettings({
+      ...imported.settings,
+      ...appSettings,
+      payRates: {
+        ...(imported.settings?.payRates || {}),
+        ...(appSettings?.payRates || {})
+      }
+    }),
+    favoriteRoutes: normalizeFavoriteRoutes([...favoriteRoutes, ...imported.favoriteRoutes]),
     metadata: {
       ...appMeta,
       lastImport: {
@@ -3907,14 +4980,18 @@ function commitImportedState(nextState) {
     dailyAddOns,
     dailyEarningsRecords,
     driverProfile,
-    appMeta
+    appMeta,
+    appSettings,
+    favoriteRoutes
   };
   const previousStorage = {
     [STORAGE_KEY]: localStorage.getItem(STORAGE_KEY),
     [ADD_ON_STORAGE_KEY]: localStorage.getItem(ADD_ON_STORAGE_KEY),
     [EARNINGS_STORAGE_KEY]: localStorage.getItem(EARNINGS_STORAGE_KEY),
     [PROFILE_STORAGE_KEY]: localStorage.getItem(PROFILE_STORAGE_KEY),
-    [META_STORAGE_KEY]: localStorage.getItem(META_STORAGE_KEY)
+    [META_STORAGE_KEY]: localStorage.getItem(META_STORAGE_KEY),
+    [SETTINGS_STORAGE_KEY]: localStorage.getItem(SETTINGS_STORAGE_KEY),
+    [FAVORITE_ROUTES_STORAGE_KEY]: localStorage.getItem(FAVORITE_ROUTES_STORAGE_KEY)
   };
 
   try {
@@ -3923,6 +5000,8 @@ function commitImportedState(nextState) {
     localStorage.setItem(EARNINGS_STORAGE_KEY, JSON.stringify(nextState.dailySummaries));
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextState.profile));
     localStorage.setItem(META_STORAGE_KEY, JSON.stringify(nextState.metadata));
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextState.settings));
+    localStorage.setItem(FAVORITE_ROUTES_STORAGE_KEY, JSON.stringify(nextState.favoriteRoutes));
   } catch {
     Object.entries(previousStorage).forEach(([key, value]) => {
       try {
@@ -3939,6 +5018,8 @@ function commitImportedState(nextState) {
     dailyEarningsRecords = previousState.dailyEarningsRecords;
     driverProfile = previousState.driverProfile;
     appMeta = previousState.appMeta;
+    appSettings = previousState.appSettings;
+    favoriteRoutes = previousState.favoriteRoutes;
     return false;
   }
 
@@ -3947,9 +5028,13 @@ function commitImportedState(nextState) {
   dailyEarningsRecords = nextState.dailySummaries;
   driverProfile = normalizeDriverProfile(nextState.profile);
   appMeta = isPlainObject(nextState.metadata) ? nextState.metadata : {};
+  appSettings = normalizeAppSettings(nextState.settings);
+  favoriteRoutes = normalizeFavoriteRoutes(nextState.favoriteRoutes);
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
   applyDailyAddOnsToControls();
+  applyPaySettingsToControls();
+  renderFavoriteRoutes();
   renderSummary();
   updateDailySummary();
   saveAppMeta();
@@ -4046,6 +5131,118 @@ function printDailyReport() {
   );
 }
 
+function getPreviousPayPeriodRange(dateValue) {
+  const current = getCompanyPayPeriodRange(dateValue);
+  const start = parseLocalDate(current.start);
+
+  if (!start) {
+    return { start: '', end: '' };
+  }
+
+  const previousDate = new Date(start);
+  previousDate.setDate(previousDate.getDate() - 1);
+  return getCompanyPayPeriodRange(formatLocalDate(previousDate));
+}
+
+function getReportRange() {
+  const mode = reportControls.mode?.value || 'selected-date';
+  const selectedDate = daily.date.value || todayLocal();
+
+  if (mode === 'current-pay-period') {
+    return getCompanyPayPeriodRange(selectedDate);
+  }
+
+  if (mode === 'previous-pay-period') {
+    return getPreviousPayPeriodRange(selectedDate);
+  }
+
+  if (mode === 'selected-month') {
+    return getMonthRange(selectedDate);
+  }
+
+  if (mode === 'custom') {
+    return {
+      start: reportControls.start?.value || selectedDate,
+      end: reportControls.end?.value || selectedDate
+    };
+  }
+
+  return { start: selectedDate, end: selectedDate };
+}
+
+function summarizeReportRange(startDate, endDate) {
+  const records = startDate === endDate ? getLoadsForDate(startDate) : getLoadsForRange(startDate, endDate);
+  const dates = new Set(records.map((load) => load.loadDate).filter(Boolean));
+  const summaries = [...dates].map((date) => getDailyEarningsSummary(date));
+  const completedRecords = records.filter(isCompleted);
+  const rejectRecords = records.filter(isReject);
+
+  return {
+    start: startDate,
+    end: endDate,
+    loadRecordCount: records.length,
+    completedLoadCount: completedRecords.length,
+    rejectCount: rejectRecords.length,
+    totalGrossBarrels: sum(completedRecords, 'grossBarrels'),
+    totalBarrelsOffloaded: sum(records, 'barrelsOffloaded'),
+    totalLoadedMiles: sum(records, 'loadedMiles'),
+    totalReRoutedMiles: sum(records, 'reRoutedMiles'),
+    totalPaidPickupWaitMinutes: sum(records, 'paidPickupWaitMinutes'),
+    totalPaidDropoffWaitMinutes: sum(records, 'paidDropoffWaitMinutes'),
+    totalPaidWaitMinutes: sum(records, 'totalPaidWaitMinutes'),
+    totalWaitPay: sum(records, 'waitPay'),
+    trainerPay: sum(summaries, 'trainerPay'),
+    perDiemPay: sum(summaries, 'perDiemPay'),
+    sleeperBerthPay: sum(summaries, 'sleeperBerthPay'),
+    rejectPay: sum(rejectRecords, 'estimatedPay'),
+    totalEstimatedEarnings: sum(summaries, 'totalEstimatedDailyEarnings')
+  };
+}
+
+function reportMetric(label, value, isTotal = false) {
+  return `<div class="result-row${isTotal ? ' total-row' : ''}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function renderReportSummary() {
+  if (!reportControls.summaryGrid) {
+    return;
+  }
+
+  const range = getReportRange();
+
+  if (reportControls.mode?.value !== 'custom') {
+    if (reportControls.start) {
+      reportControls.start.value = range.start;
+    }
+
+    if (reportControls.end) {
+      reportControls.end.value = range.end;
+    }
+  }
+
+  const report = summarizeReportRange(range.start, range.end);
+  reportControls.summaryGrid.innerHTML = [
+    reportMetric('Report start', report.start || '-'),
+    reportMetric('Report end', report.end || '-'),
+    reportMetric('Loads hauled', String(report.loadRecordCount)),
+    reportMetric('Completed loads', String(report.completedLoadCount)),
+    reportMetric('Rejects', String(report.rejectCount)),
+    reportMetric('Gross barrels', formatBarrels(report.totalGrossBarrels)),
+    reportMetric('Offloaded barrels', formatBarrels(report.totalBarrelsOffloaded)),
+    reportMetric('Loaded miles', formatMiles(report.totalLoadedMiles)),
+    reportMetric('Rerouted miles', formatMiles(report.totalReRoutedMiles)),
+    reportMetric('Loading wait time', formatDuration(report.totalPaidPickupWaitMinutes)),
+    reportMetric('Offloading wait time', formatDuration(report.totalPaidDropoffWaitMinutes)),
+    reportMetric('Total paid wait', formatDuration(report.totalPaidWaitMinutes)),
+    reportMetric('Wait-time earnings', formatMoney(report.totalWaitPay)),
+    reportMetric('Trainer pay', formatMoney(report.trainerPay)),
+    reportMetric('Per diem', formatMoney(report.perDiemPay)),
+    reportMetric('Sleeper pay', formatMoney(report.sleeperBerthPay)),
+    reportMetric('Reject pay', formatMoney(report.rejectPay)),
+    reportMetric('Estimated total earnings', formatMoney(report.totalEstimatedEarnings), true)
+  ].join('');
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -4076,14 +5273,19 @@ function initialize() {
   savedFilters.date.value = savedFilters.date.value || daily.date.value;
   fields.loadDate.value = fields.loadDate.value || daily.date.value;
   fields.loadStatus.value = fields.loadStatus.value || COMPLETED_STATUS;
+  ensureLoadNumber();
   applyProfileToControls();
   applyProfileToNewLoad();
+  applyPaySettingsToControls();
+  renderFavoriteRoutes();
   applyDailyAddOnsToControls();
   refreshAllDailyEarningsRecords();
   saveAppMeta();
   renderStorageWarning();
   renderSummary();
   updateDailySummary();
+  restoreDraftIfAvailable();
+  activateView('dashboard');
   registerServiceWorker();
   initializeFirebaseSync();
 }
@@ -4091,6 +5293,7 @@ function initialize() {
 form.addEventListener('submit', saveLoad);
 form.addEventListener('input', handleFormInput);
 form.addEventListener('change', handleFormInput);
+navButtons.forEach((button) => button.addEventListener('click', handleNavigationClick));
 daily.date.addEventListener('input', handleSelectedDateChange);
 daily.date.addEventListener('change', handleSelectedDateChange);
 daily.payPeriodStart.addEventListener('input', handlePayPeriodChange);
@@ -4101,19 +5304,49 @@ Object.values(savedFilters).forEach((field) => {
   field.addEventListener('input', handleSavedFiltersChange);
   field.addEventListener('change', handleSavedFiltersChange);
 });
+Object.values(extraSavedFilters).forEach((field) => {
+  field?.addEventListener('input', handleSavedFiltersChange);
+  field?.addEventListener('change', handleSavedFiltersChange);
+});
+Object.values(reportControls).forEach((field) => {
+  if (field && field !== reportControls.summaryGrid) {
+    field.addEventListener('input', renderReportSummary);
+    field.addEventListener('change', renderReportSummary);
+  }
+});
 Object.values(addOns).forEach((field) => {
   field.addEventListener('input', handleAddOnChange);
   field.addEventListener('change', handleAddOnChange);
 });
 saveAnywayButton.addEventListener('click', () => {
   if (pendingDuplicateRecord) {
-    commitLoadRecord(pendingDuplicateRecord);
+    commitLoadRecord(pendingDuplicateRecord, { startNext: pendingCommitMode === 'next' });
   }
 });
 cancelDuplicateButton.addEventListener('click', hideDuplicateWarning);
 clearFormButton.addEventListener('click', clearForm);
+saveNextButton?.addEventListener('click', saveAndStartNextLoad);
+saveDraftButton?.addEventListener('click', () => saveDraftNow('Draft saved.'));
+continueDraftButton?.addEventListener('click', () => {
+  const draft = readDraft();
+
+  if (draft && applyDraft(draft)) {
+    activateView('new-load');
+  }
+});
 savedLoadCards.addEventListener('click', handleSavedCardAction);
 profileControls.saveButton.addEventListener('click', saveDriverProfile);
+paySettingsControls.saveButton?.addEventListener('click', savePaySettingsFromControls);
+favoriteRouteControls.saveButton?.addEventListener('click', saveFavoriteRouteFromControls);
+favoriteRouteControls.select?.addEventListener('change', () => applyFavoriteRoute(favoriteRouteControls.select.value));
+favoriteRouteControls.list?.addEventListener('click', (event) => {
+  const button = event.target.closest ? event.target.closest('[data-delete-route-id]') : null;
+
+  if (button) {
+    deleteFavoriteRoute(button.dataset.deleteRouteId);
+  }
+});
+manualSyncButton?.addEventListener('click', syncAllCurrentDataToCloud);
 downloadLogButton.addEventListener('click', downloadLoadLog);
 downloadEarningsButton.addEventListener('click', downloadDailyEarningsSummary);
 printDailyReportButton.addEventListener('click', printDailyReport);
@@ -4125,5 +5358,6 @@ authControls.form?.addEventListener('submit', handleSignIn);
 authControls.signOutButton?.addEventListener('click', handleSignOut);
 authControls.downloadBeforeMigrationButton?.addEventListener('click', downloadBackupBeforeMigration);
 authControls.startMigrationButton?.addEventListener('click', migrateLocalDataToFirebase);
+globalThis.addEventListener?.('beforeunload', warnBeforeLeavingUnsaved);
 
 initialize();
