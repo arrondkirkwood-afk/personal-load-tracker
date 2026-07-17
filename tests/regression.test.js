@@ -203,6 +203,9 @@ let storedLoads = saveLoadRecord();
 assert.strictEqual(storedLoads.length, 1, 'saving one load creates one stored record');
 assert.strictEqual(context.countUniqueLoads(), 1, 'total loads counts one saved record');
 assert.strictEqual(storedLoads[0].estimatedPay, 51.41, 'loaded-mile pay table default is preserved');
+assert.strictEqual(getElement('save-load-button').disabled, false, 'Firebase availability does not leave Save Load disabled');
+assert.strictEqual(getElement('sync-status').textContent, 'Local changes pending', 'local save without cloud is marked pending instead of blocked');
+assert.ok(JSON.parse(storage.get('personalOilfieldLoadTracker.meta')).cloudSync.localChangesPending, 'local pending sync marker is saved in metadata');
 
 const firstLoadId = storedLoads[0].id;
 context.loadEntryForEdit(firstLoadId);
@@ -262,5 +265,7 @@ const backup = context.getTrackerSnapshot();
 assert.strictEqual(backup.recordCount, 1, 'backup reports current record count');
 assert.ok(backup.data.settings, 'backup includes app settings');
 assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup includes favorite routes');
+assert.ok(!script.includes('localStorage.clear'), 'app code does not clear localStorage');
+assert.ok(!script.includes('indexedDB.deleteDatabase'), 'app code does not delete IndexedDB');
 
 console.log('Personal Load Tracker regression tests passed');

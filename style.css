@@ -43,6 +43,8 @@ body {
   background: var(--background);
   color: var(--text);
   letter-spacing: 0;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
 .app {
@@ -435,6 +437,7 @@ textarea.invalid {
   font: inherit;
   font-weight: 850;
   cursor: pointer;
+  touch-action: manipulation;
   transition: transform 130ms ease, box-shadow 130ms ease, border-color 130ms ease, background 130ms ease;
 }
 
@@ -497,6 +500,10 @@ textarea.invalid {
 .button-row.four,
 .backup-actions {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.form-actions {
+  scroll-margin-bottom: calc(112px + var(--safe-bottom));
 }
 
 .backup-actions {
@@ -1167,7 +1174,7 @@ textarea.invalid {
     padding:
       calc(10px + var(--safe-top))
       calc(8px + var(--safe-right))
-      calc(76px + var(--safe-bottom))
+      calc(128px + var(--safe-bottom))
       calc(8px + var(--safe-left));
   }
 
@@ -1206,6 +1213,7 @@ textarea.invalid {
     min-height: 44px;
     padding: 5px 3px;
     font-size: 0.72rem;
+    touch-action: manipulation;
   }
 
   .panel,
@@ -1265,6 +1273,27 @@ textarea.invalid {
 
   .button {
     width: 100%;
+    min-height: 46px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .load-form,
+  .reports-panel,
+  .saved-loads,
+  .settings-panel,
+  .backup-panel {
+    padding-bottom: calc(36px + var(--safe-bottom));
+  }
+
+  .form-actions,
+  .backup-actions,
+  .auth-actions {
+    margin-bottom: calc(24px + var(--safe-bottom));
   }
 }
 

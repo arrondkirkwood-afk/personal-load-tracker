@@ -1,4 +1,4 @@
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.3.3";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -19,6 +19,7 @@ const LEGACY_EARNINGS_STORAGE_KEY = 'personalOilfieldDailyEarningsRecords';
 const BACKUP_FORMAT = 'personal-oilfield-load-tracker-backup';
 const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
+const CLOUD_LISTENER_TIMEOUT_MS = 18000;
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyC68MPQAa0nsAX-Wq2WSfO09H1kI6P4kaA",
   authDomain: "arrond-oilfield-load-tracker.firebaseapp.com",
@@ -439,9 +440,11 @@ const cloudSync = {
   user: null,
   authReady: false,
   unsubscribe: [],
+  listenerTimers: [],
   pendingWrites: 0,
   lastError: '',
   applyingCloudState: false,
+  backfillQueued: false,
   source: 'local',
   state: createEmptyCloudState()
 };
@@ -616,6 +619,14 @@ function isCloudReady() {
   return Object.values(cloudSync.state.loaded).every(Boolean);
 }
 
+function hasLocalChangesPending() {
+  return Boolean(appMeta.cloudSync?.localChangesPending);
+}
+
+function getPendingSyncCount() {
+  return cloudSync.pendingWrites + (hasLocalChangesPending() ? 1 : 0);
+}
+
 function isCloudMigrationComplete() {
   const migrationVersion = Number(cloudSync.state.migration?.migrationVersion || 0);
   return migrationVersion >= CLOUD_MIGRATION_VERSION || cloudSync.state.settings?.cloudAuthoritative === true;
@@ -627,7 +638,12 @@ function getLocalSafetyLoadCount() {
 
 function updateSyncStatusFromState() {
   if (!cloudSync.enabled) {
-    setSyncStatus('Local only');
+    if (hasLocalChangesPending()) {
+      setSyncStatus('Local changes pending', 'pending');
+      return;
+    }
+
+    setSyncStatus(cloudSync.lastError ? 'Sync error' : 'Local only', cloudSync.lastError ? 'error' : '');
     return;
   }
 
@@ -637,7 +653,7 @@ function updateSyncStatusFromState() {
   }
 
   if (!cloudSync.user) {
-    setSyncStatus('Local only');
+    setSyncStatus('Sign in required', 'pending');
     return;
   }
 
@@ -656,6 +672,11 @@ function updateSyncStatusFromState() {
     return;
   }
 
+  if (hasLocalChangesPending()) {
+    setSyncStatus('Local changes pending', 'pending');
+    return;
+  }
+
   if (!isCloudReady()) {
     setSyncStatus('Connecting');
     return;
@@ -671,11 +692,11 @@ function updateSyncStatusFromState() {
 
 function updateAuthUi() {
   const signedIn = Boolean(cloudSync.user);
-  setElementText(authControls.authStatus, signedIn ? 'Signed in' : (cloudSync.authReady ? 'Not signed in' : 'Checking sign-in...'));
+  setElementText(authControls.authStatus, signedIn ? 'Signed in' : (cloudSync.authReady ? 'Sign in required' : 'Checking sign-in...'));
   setElementText(authControls.signedInEmail, signedIn ? (cloudSync.user.email || 'Signed in') : 'Not signed in');
   setElementText(authControls.cloudLoadCount, String(cloudSync.state.loads.length));
   setElementText(authControls.localLoadCount, String(getLocalSafetyLoadCount()));
-  setElementText(settingsPendingWrites, String(cloudSync.pendingWrites));
+  setElementText(settingsPendingWrites, String(getPendingSyncCount()));
   setElementText(settingsLastSync, appMeta.cloudSync?.lastSyncedAt || cloudSync.state.lastSnapshotAt || 'Not yet synced');
   setElementText(settingsMigrationState, isCloudMigrationComplete() ? 'Complete' : 'Ready');
 
@@ -1004,6 +1025,12 @@ function stopCloudListeners() {
   });
 
   cloudSync.unsubscribe = [];
+  cloudSync.listenerTimers.forEach((timerId) => {
+    if (timerId && typeof globalThis.clearTimeout === 'function') {
+      globalThis.clearTimeout(timerId);
+    }
+  });
+  cloudSync.listenerTimers = [];
 }
 
 function cloudUserPath(...segments) {
@@ -1053,37 +1080,74 @@ function handleCloudSnapshotChange(snapshot) {
   handleCloudStateChanged();
 }
 
-function handleCloudListenerError() {
-  cloudSync.lastError = 'Cloud sync error.';
-  setAuthError('Cloud sync had a problem. Local records were not changed.', true);
+function getFriendlyErrorDetail(error, fallback = 'Unknown error') {
+  const code = error?.code ? `${error.code}: ` : '';
+  const message = error?.message || fallback;
+  return `${code}${message}`;
+}
+
+function handleCloudListenerError(name, error) {
+  cloudSync.state.loaded[name] = true;
+  cloudSync.lastError = getFriendlyErrorDetail(error, 'Cloud sync error.');
+  setAuthError(`Cloud sync had a problem: ${cloudSync.lastError}. Local records were not changed.`, true);
   updateAuthUi();
 }
 
+function startCloudListenerTimeout(name) {
+  if (typeof globalThis.setTimeout !== 'function') {
+    return null;
+  }
+
+  const timerId = globalThis.setTimeout(() => {
+    if (cloudSync.state.loaded[name]) {
+      return;
+    }
+
+    cloudSync.state.loaded[name] = true;
+    cloudSync.lastError = `Timed out waiting for ${name} from Firebase.`;
+    setAuthError(`${cloudSync.lastError} Local records are still available.`, true);
+    handleCloudStateChanged();
+  }, CLOUD_LISTENER_TIMEOUT_MS);
+
+  cloudSync.listenerTimers.push(timerId);
+  return timerId;
+}
+
+function clearCloudListenerTimeout(timerId) {
+  if (timerId && typeof globalThis.clearTimeout === 'function') {
+    globalThis.clearTimeout(timerId);
+  }
+}
+
 function listenToCloudCollection(name, collectionName, mapper) {
+  const timeoutId = startCloudListenerTimeout(name);
   const unsubscribe = cloudSync.sdk.onSnapshot(
     cloudCollection(collectionName),
     { includeMetadataChanges: true },
     (snapshot) => {
+      clearCloudListenerTimeout(timeoutId);
       cloudSync.state[name] = mapper(snapshot);
       cloudSync.state.loaded[name] = true;
       handleCloudSnapshotChange(snapshot);
     },
-    handleCloudListenerError
+    (error) => handleCloudListenerError(name, error)
   );
 
   cloudSync.unsubscribe.push(unsubscribe);
 }
 
 function listenToCloudDocument(name, collectionName, documentName) {
+  const timeoutId = startCloudListenerTimeout(name);
   const unsubscribe = cloudSync.sdk.onSnapshot(
     cloudDocument(collectionName, documentName),
     { includeMetadataChanges: true },
     (snapshot) => {
+      clearCloudListenerTimeout(timeoutId);
       cloudSync.state[name] = snapshot.exists() ? normalizeCloudData(snapshot.data()) : null;
       cloudSync.state.loaded[name] = true;
       handleCloudSnapshotChange(snapshot);
     },
-    handleCloudListenerError
+    (error) => handleCloudListenerError(name, error)
   );
 
   cloudSync.unsubscribe.push(unsubscribe);
@@ -1140,15 +1204,7 @@ function shouldApplyCloudState() {
     return false;
   }
 
-  if (isCloudMigrationComplete()) {
-    return true;
-  }
-
-  if (getLocalSafetyLoadCount() === 0) {
-    return true;
-  }
-
-  return appMeta.cloudSync?.authoritative === true && appMeta.cloudSync?.uid === cloudSync.user.uid;
+  return true;
 }
 
 function persistCurrentStateToLocalFallback() {
@@ -1168,13 +1224,50 @@ function applyCloudStateToApp() {
 
   cloudSync.applyingCloudState = true;
 
-  savedLoads = cloudSync.state.loads.map(normalizeSavedLoad);
-  dailyAddOns = normalizeDailyAddOns(cloudSync.state.dailyAddOns);
-  dailyEarningsRecords = isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {};
-  driverProfile = normalizeDriverProfile(cloudSync.state.profile || {});
+  const localBeforeApply = cloneTrackerState({
+    loads: savedLoads,
+    dailyAddOns,
+    dailySummaries: dailyEarningsRecords,
+    profile: driverProfile,
+    metadata: appMeta,
+    settings: appSettings,
+    favoriteRoutes
+  });
+  const cloudLoads = cloudSync.state.loads.map(normalizeSavedLoad);
+  const shouldMergeLocalState = hasLocalChangesPending()
+    || appMeta.cloudSync?.authoritative !== true
+    || appMeta.cloudSync?.uid !== cloudSync.user.uid;
+  const localOnlyLoads = shouldMergeLocalState ? getLoadsMissingFromCloud(localBeforeApply.loads, cloudLoads) : [];
+
+  savedLoads = shouldMergeLocalState ? mergeLoadRecords(cloudLoads, localBeforeApply.loads) : cloudLoads;
+  dailyAddOns = normalizeDailyAddOns(shouldMergeLocalState
+    ? {
+      ...(cloudSync.state.dailyAddOns || {}),
+      ...(localBeforeApply.dailyAddOns || {})
+    }
+    : cloudSync.state.dailyAddOns);
+  dailyEarningsRecords = shouldMergeLocalState
+    ? {
+      ...(isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {}),
+      ...(isPlainObject(localBeforeApply.dailySummaries) ? localBeforeApply.dailySummaries : {})
+    }
+    : (isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {});
+  driverProfile = normalizeDriverProfile(shouldMergeLocalState
+    ? {
+      ...(cloudSync.state.profile || {}),
+      ...(localBeforeApply.profile || {})
+    }
+    : (cloudSync.state.profile || {}));
   const cloudSettings = isPlainObject(cloudSync.state.settings) ? cloudSync.state.settings : {};
-  appSettings = normalizeAppSettings(cloudSettings.appSettings || cloudSettings);
-  favoriteRoutes = normalizeFavoriteRoutes(cloudSettings.favoriteRoutes || favoriteRoutes);
+  appSettings = normalizeAppSettings(shouldMergeLocalState
+    ? {
+      ...(cloudSettings.appSettings || cloudSettings),
+      ...(localBeforeApply.settings || {})
+    }
+    : (cloudSettings.appSettings || cloudSettings));
+  favoriteRoutes = shouldMergeLocalState
+    ? mergeFavoriteRoutes(cloudSettings.favoriteRoutes || [], localBeforeApply.favoriteRoutes || [])
+    : normalizeFavoriteRoutes(cloudSettings.favoriteRoutes || []);
   appMeta = {
     ...appMeta,
     ...cloudSettings,
@@ -1182,7 +1275,8 @@ function applyCloudStateToApp() {
       authoritative: true,
       uid: cloudSync.user.uid,
       email: cloudSync.user.email || '',
-      lastSyncedAt: new Date().toISOString()
+      lastSyncedAt: new Date().toISOString(),
+      localChangesPending: localOnlyLoads.length > 0 || hasLocalChangesPending()
     }
   };
 
@@ -1196,6 +1290,10 @@ function applyCloudStateToApp() {
   persistCurrentStateToLocalFallback();
   cloudSync.source = 'cloud';
   cloudSync.applyingCloudState = false;
+
+  if (localOnlyLoads.length > 0 || hasLocalChangesPending()) {
+    scheduleCloudBackfill();
+  }
 }
 
 function restoreLocalSafetySnapshot() {
@@ -1240,6 +1338,86 @@ function getFriendlyAuthError(error) {
   }
 
   return 'Sign-in failed. Check the email and password, then try again.';
+}
+
+function mergeLoadRecords(primaryLoads, secondaryLoads) {
+  const byIdentity = new Map();
+
+  [...primaryLoads, ...secondaryLoads].forEach((rawLoad) => {
+    const load = normalizeSavedLoad(rawLoad);
+    const identity = load.id || load.migrationFingerprint || buildLoadFingerprint(load);
+    const existing = byIdentity.get(identity);
+
+    if (!existing || getLoadComparableTime(load) >= getLoadComparableTime(existing)) {
+      byIdentity.set(identity, load);
+    }
+  });
+
+  return [...byIdentity.values()].sort((left, right) => (
+    String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
+    || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
+  ));
+}
+
+function getLoadsMissingFromCloud(localLoads, cloudLoads) {
+  const cloudIdentities = new Set();
+
+  cloudLoads.forEach((load) => {
+    const normalized = normalizeSavedLoad(load);
+    if (normalized.id) {
+      cloudIdentities.add(`id:${normalized.id}`);
+    }
+    cloudIdentities.add(`fingerprint:${normalized.migrationFingerprint || buildLoadFingerprint(normalized)}`);
+  });
+
+  return localLoads
+    .map(normalizeSavedLoad)
+    .filter((load) => !cloudIdentities.has(`id:${load.id}`) && !cloudIdentities.has(`fingerprint:${load.migrationFingerprint || buildLoadFingerprint(load)}`));
+}
+
+function markLocalChangesPending(message = 'Local changes are saved on this device and will sync after sign-in.') {
+  appMeta = {
+    ...appMeta,
+    cloudSync: {
+      ...(appMeta.cloudSync || {}),
+      localChangesPending: true,
+      pendingSince: appMeta.cloudSync?.pendingSince || new Date().toISOString()
+    }
+  };
+  saveAppMeta();
+  setAuthError(message);
+  updateAuthUi();
+}
+
+function clearLocalChangesPending() {
+  if (!hasLocalChangesPending()) {
+    return;
+  }
+
+  appMeta = {
+    ...appMeta,
+    cloudSync: {
+      ...(appMeta.cloudSync || {}),
+      localChangesPending: false,
+      pendingSince: null,
+      lastSyncedAt: new Date().toISOString()
+    }
+  };
+  saveAppMeta();
+}
+
+function scheduleCloudBackfill() {
+  if (!isCloudSignedIn() || cloudSync.backfillQueued) {
+    return;
+  }
+
+  cloudSync.backfillQueued = true;
+  setAuthError('Local records are being synced to Firebase...');
+
+  globalThis.setTimeout?.(() => {
+    cloudSync.backfillQueued = false;
+    syncAllCurrentDataToCloud();
+  }, 0);
 }
 
 function startAuthReadyFallbackTimer() {
@@ -1329,7 +1507,7 @@ async function handleSignOut() {
 
   try {
     await cloudSync.sdk.signOut(cloudSync.auth);
-    setAuthError('Signed out. Cloud records are hidden on this device.');
+    setAuthError('Signed out. Sign in again to sync cloud records.');
   } catch {
     setAuthError('Sign out failed. Try again when the connection is available.', true);
   }
@@ -1422,6 +1600,7 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
     })
     .catch(() => {
       cloudSync.lastError = failureMessage;
+      markLocalChangesPending(failureMessage);
       setAuthError(`${failureMessage} Local records were still saved on this device.`, true);
     })
     .finally(() => {
@@ -1612,7 +1791,9 @@ function syncAllCurrentDataToCloud() {
         authoritative: true,
         uid: cloudSync.user.uid,
         email: cloudSync.user.email || '',
-        lastSyncedAt: new Date().toISOString()
+        lastSyncedAt: new Date().toISOString(),
+        localChangesPending: false,
+        pendingSince: null
       }
     };
     saveAppMeta();
@@ -2433,6 +2614,34 @@ function normalizeFavoriteRoutes(rawRoutes) {
     .filter(Boolean);
 }
 
+function mergeFavoriteRoutes(...routeLists) {
+  const byIdentity = new Map();
+
+  routeLists.forEach((routes) => {
+    (Array.isArray(routes) ? routes : []).forEach((route) => {
+      const normalized = normalizeFavoriteRoutes([route])[0];
+
+      if (!normalized) {
+        return;
+      }
+
+      const identity = normalized.id || [
+        normalized.pickupLocation,
+        normalized.dropoffLocation,
+        normalized.productType || '',
+        normalized.loadedMiles ?? ''
+      ].join('|').toLowerCase();
+      const existing = byIdentity.get(identity);
+
+      if (!existing || String(normalized.updatedAt || '') >= String(existing.updatedAt || '')) {
+        byIdentity.set(identity, normalized);
+      }
+    });
+  });
+
+  return [...byIdentity.values()];
+}
+
 function loadFavoriteRoutes() {
   return normalizeFavoriteRoutes(loadJson(FAVORITE_ROUTES_STORAGE_KEY, [], 'favorite routes'));
 }
@@ -2640,6 +2849,10 @@ function activateView(viewName) {
   if (nextView === 'settings') {
     renderSettingsUi();
   }
+
+  if (typeof globalThis.scrollTo === 'function') {
+    globalThis.setTimeout?.(() => globalThis.scrollTo(0, 0), 0);
+  }
 }
 
 function handleNavigationClick(event) {
@@ -2778,6 +2991,9 @@ function savePaySettingsFromControls() {
   refreshAllDailyEarningsRecords();
   renderSummary();
   updateDailySummary();
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Pay rates saved locally. Sign in to sync them to Firebase.');
+  }
   syncSettingsToCloud();
   setStatusMessage(paySettingsControls.status, 'Pay rates saved.');
 }
@@ -2843,6 +3059,9 @@ function saveFavoriteRouteFromControls() {
     }
   });
   renderFavoriteRoutes();
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Favorite route saved locally. Sign in to sync it to Firebase.');
+  }
   syncSettingsToCloud();
   setStatusMessage(favoriteRouteControls.status, 'Favorite route saved.');
 }
@@ -2859,6 +3078,9 @@ function deleteFavoriteRoute(routeId) {
   favoriteRoutes = favoriteRoutes.filter((route) => route.id !== routeId);
   saveFavoriteRoutesToStorage();
   renderFavoriteRoutes();
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Favorite route deleted locally. Sign in to sync the change to Firebase.');
+  }
   syncSettingsToCloud();
   setStatusMessage(favoriteRouteControls.status, 'Favorite route deleted.');
 }
@@ -3276,6 +3498,10 @@ function saveDailyAddOnFromControls() {
 
   storeAddOns();
   updateDailyEarningsRecord(date);
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Daily pay changes saved locally. Sign in to sync them to Firebase.');
+  }
+  syncCurrentDateToCloud(date);
 }
 
 function applyDailyAddOnsToControls() {
@@ -3897,6 +4123,9 @@ function saveDriverProfile() {
 
   renderProfileSummary();
   saveAppMeta();
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Profile saved locally. Sign in to sync it to Firebase.');
+  }
   syncProfileToCloud();
   syncSettingsToCloud();
   setProfileStatus('Profile saved. New loads will use this driver and equipment.');
@@ -4159,6 +4388,9 @@ function commitLoadRecord(record, options = {}) {
   daily.date.value = record.loadDate || daily.date.value;
   storeLoads();
   refreshAllDailyEarningsRecords();
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Load saved locally. Sign in to sync it to Firebase.');
+  }
   syncLoadToCloud(record);
   syncCurrentDateToCloud(record.loadDate);
   applyDailyAddOnsToControls();
@@ -4285,6 +4517,9 @@ function deleteLoadEntry(loadId) {
   savedLoads = savedLoads.filter((item) => item.id !== loadId);
   storeLoads();
   refreshAllDailyEarningsRecords();
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Load deleted locally. Sign in to sync the change to Firebase.');
+  }
   deleteCloudLoad(loadId);
   syncCurrentDateToCloud(load.loadDate);
   hideDuplicateWarning();
