@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Oilfield Load Tracker</title>
   <meta name="theme-color" content="#12343b">
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.4.2">
+  <link rel="manifest" href="manifest.json?v=1.4.3">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.4.2">
+  <link rel="stylesheet" href="style.css?v=1.4.3">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.4.2</strong></span>
+          <span>Version <strong id="app-version">1.4.3</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -253,19 +253,31 @@
                   <small id="bsw-percentage-error" class="field-error"></small>
                 </label>
               </div>
-              <div class="calculated-strip">
-                <article><span>Start reading</span><strong id="summary-start-meter-reading">-</strong></article>
-                <article><span>End reading</span><strong id="summary-end-meter-reading">-</strong></article>
+              <div class="calculated-strip measurement-primary-strip">
                 <article><span>Offloaded barrels</span><strong id="meter-barrels-offloaded">-</strong></article>
                 <article><span>Difference vs gross</span><strong id="meter-difference-gross">-</strong></article>
-                <article><span>Offload status</span><strong id="meter-offload-status">-</strong></article>
-                <article><span>Gross hauled</span><strong id="summary-gross-barrels-hauled">-</strong></article>
-                <article><span>Regular miles</span><strong id="summary-regular-miles">0.0 mi</strong></article>
-                <article><span>Re-routed miles</span><strong id="summary-re-routed-miles">0.0 mi</strong></article>
                 <article><span>Total miles</span><strong id="summary-total-miles-including-re-route">0.0 mi</strong></article>
                 <article><span>Estimated load weight</span><strong id="summary-total-weight">-</strong></article>
                 <article><span>Estimated gross truck weight</span><strong id="summary-gross-truck-weight">-</strong></article>
               </div>
+              <details class="more-calculations">
+                <summary>More Calculations</summary>
+                <div class="calculated-strip measurement-secondary-strip">
+                  <article><span>Start reading</span><strong id="summary-start-meter-reading">-</strong></article>
+                  <article><span>End reading</span><strong id="summary-end-meter-reading">-</strong></article>
+                  <article><span>Offload status</span><strong id="meter-offload-status">-</strong></article>
+                  <article><span>Gross hauled</span><strong id="summary-gross-barrels-hauled">-</strong></article>
+                  <article><span>Regular miles</span><strong id="summary-regular-miles">0.0 mi</strong></article>
+                  <article><span>Re-routed miles</span><strong id="summary-re-routed-miles">0.0 mi</strong></article>
+                </div>
+                <div class="result-grid compact-results">
+                  <div class="result-row"><span>Water barrels</span><strong id="summary-water-barrels">-</strong></div>
+                  <div class="result-row"><span>Oil barrels</span><strong id="summary-oil-barrels">-</strong></div>
+                  <div class="result-row"><span>Crude weight per barrel</span><strong id="summary-crude-weight">-</strong></div>
+                  <div class="result-row"><span>Estimated oil weight</span><strong id="summary-oil-weight">-</strong></div>
+                  <div class="result-row"><span>Estimated water weight</span><strong id="summary-water-weight">-</strong></div>
+                </div>
+              </details>
             </div>
 
             <div class="form-section">
@@ -384,16 +396,6 @@
                 <article><span>Load weight</span><strong id="review-total-weight">-</strong></article>
                 <article><span>Gross truck weight</span><strong id="review-gross-truck-weight">-</strong></article>
               </div>
-              <details class="advanced-calculations">
-                <summary>Advanced load calculations</summary>
-                <div class="result-grid compact-results">
-                  <div class="result-row"><span>Water barrels</span><strong id="summary-water-barrels">-</strong></div>
-                  <div class="result-row"><span>Oil barrels</span><strong id="summary-oil-barrels">-</strong></div>
-                  <div class="result-row"><span>Crude weight per barrel</span><strong id="summary-crude-weight">-</strong></div>
-                  <div class="result-row"><span>Estimated oil weight</span><strong id="summary-oil-weight">-</strong></div>
-                  <div class="result-row"><span>Estimated water weight</span><strong id="summary-water-weight">-</strong></div>
-                </div>
-              </details>
               <p class="pay-disclaimer">Wait pay and estimated earnings are for personal verification only and may not match official payroll.</p>
             </div>
 
@@ -660,30 +662,35 @@
 
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
-              <div class="settings-list">
-              <span>Application version</span><strong id="settings-app-version">1.4.2</strong>
+              <div class="settings-list app-info-summary-list">
+                <span>Application version</span><strong id="settings-app-version">1.4.3</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
                 <span>Update status</span><strong id="settings-update-state">Ready</strong>
-                <span>Total loads hauled</span><strong id="total-loads-hauled">0</strong>
-                <span>Current work date</span><strong id="current-work-date">-</strong>
-                <span>Loads hauled this month</span><strong id="loads-hauled-month">0</strong>
-                <span>Completed loads</span><strong id="daily-completed-loads">0</strong>
-                <span>Rejects</span><strong id="daily-rejects">0</strong>
-                <span>Total loaded miles</span><strong id="daily-loaded-miles">0.0 mi</strong>
-                <span>Total rerouted miles</span><strong id="daily-re-routed-miles">0.0 mi</strong>
-                <span>Total miles</span><strong id="daily-total-miles-including-re-route">0.0 mi</strong>
-                <span>Difference vs gross</span><strong id="daily-difference-gross">0.00 bbl</strong>
-                <span>Completed load pay</span><strong id="daily-completed-pay">$0.00</strong>
-                <span>Reject pay</span><strong id="daily-reject-pay">$0.00</strong>
-                <span>Loading wait</span><strong id="daily-paid-pickup-wait">0 hr 0 min</strong>
-                <span>Offloading wait</span><strong id="daily-paid-dropoff-wait">0 hr 0 min</strong>
-                <span>Wait pay</span><strong id="daily-wait-pay">$0.00</strong>
-                <span>Per diem pay</span><strong id="daily-per-diem-pay">$0.00</strong>
-                <span>Sleeper pay</span><strong id="daily-sleeper-pay">$0.00</strong>
-                <span>Trainer pay</span><strong id="daily-trainer-pay">$0.00</strong>
               </div>
+              <details class="diagnostics-details">
+                <summary>Current Data Diagnostics</summary>
+                <div class="settings-list diagnostics-list">
+                  <span>Total loads hauled</span><strong id="total-loads-hauled">0</strong>
+                  <span>Current work date</span><strong id="current-work-date">-</strong>
+                  <span>Loads hauled this month</span><strong id="loads-hauled-month">0</strong>
+                  <span>Completed loads</span><strong id="daily-completed-loads">0</strong>
+                  <span>Rejects</span><strong id="daily-rejects">0</strong>
+                  <span>Total loaded miles</span><strong id="daily-loaded-miles">0.0 mi</strong>
+                  <span>Total rerouted miles</span><strong id="daily-re-routed-miles">0.0 mi</strong>
+                  <span>Total miles</span><strong id="daily-total-miles-including-re-route">0.0 mi</strong>
+                  <span>Difference vs gross</span><strong id="daily-difference-gross">0.00 bbl</strong>
+                  <span>Completed load pay</span><strong id="daily-completed-pay">$0.00</strong>
+                  <span>Reject pay</span><strong id="daily-reject-pay">$0.00</strong>
+                  <span>Loading wait</span><strong id="daily-paid-pickup-wait">0 hr 0 min</strong>
+                  <span>Offloading wait</span><strong id="daily-paid-dropoff-wait">0 hr 0 min</strong>
+                  <span>Wait pay</span><strong id="daily-wait-pay">$0.00</strong>
+                  <span>Per diem pay</span><strong id="daily-per-diem-pay">$0.00</strong>
+                  <span>Sleeper pay</span><strong id="daily-sleeper-pay">$0.00</strong>
+                  <span>Trainer pay</span><strong id="daily-trainer-pay">$0.00</strong>
+                </div>
+              </details>
             </div>
           </div>
         </section>
@@ -781,10 +788,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.4.2&updated=' + Date.now());
+            window.location.replace('index.html?v=1.4.3&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.4.2&updated=' + Date.now());
+            window.location.replace('index.html?v=1.4.3&updated=' + Date.now());
           });
       }
 
@@ -820,6 +827,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.4.2"></script>
+  <script src="script.js?v=1.4.3"></script>
 </body>
 </html>

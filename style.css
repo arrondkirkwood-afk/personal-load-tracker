@@ -903,6 +903,50 @@ textarea.invalid {
   gap: 6px;
 }
 
+.record-actions-menu {
+  position: relative;
+}
+
+.record-actions-menu summary,
+.more-calculations summary,
+.diagnostics-details summary {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--accent-deep);
+  background: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 850;
+  cursor: pointer;
+  list-style: none;
+}
+
+.record-actions-menu summary::-webkit-details-marker,
+.more-calculations summary::-webkit-details-marker,
+.diagnostics-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.record-actions-menu summary::after,
+.more-calculations summary::after,
+.diagnostics-details summary::after {
+  content: " +";
+}
+
+.record-actions-menu[open] summary::after,
+.more-calculations[open] summary::after,
+.diagnostics-details[open] summary::after {
+  content: " -";
+}
+
+.record-actions-menu > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .small-button {
   min-height: 34px;
   padding: 6px 9px;
@@ -1033,6 +1077,17 @@ textarea.invalid {
 
 .cloud-list {
   margin: 12px 0;
+}
+
+.more-calculations,
+.diagnostics-details {
+  margin-top: 10px;
+}
+
+.more-calculations .calculated-strip,
+.more-calculations .result-grid,
+.diagnostics-details .settings-list {
+  margin-top: 10px;
 }
 
 .migration-panel {
@@ -1267,6 +1322,20 @@ textarea.invalid {
     justify-content: stretch;
   }
 
+  .record-actions-menu {
+    width: 100%;
+  }
+
+  .record-actions-menu summary {
+    min-height: 42px;
+    text-align: center;
+  }
+
+  .record-actions-menu > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .load-actions .small-button {
     flex: 1 1 90px;
   }
@@ -1294,6 +1363,21 @@ textarea.invalid {
   .backup-actions,
   .auth-actions {
     margin-bottom: calc(24px + var(--safe-bottom));
+  }
+
+  .form-actions {
+    position: sticky;
+    bottom: calc(76px + var(--safe-bottom));
+    z-index: 30;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 -8px 20px rgba(18, 52, 59, 0.08);
+  }
+
+  .calculation-panel {
+    margin-bottom: 10px;
   }
 }
 

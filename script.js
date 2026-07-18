@@ -1,4 +1,4 @@
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.4.3";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -21,6 +21,7 @@ const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
 const FIRESTORE_BATCH_WRITE_LIMIT = 450;
+const PENDING_DELETE_GROUPS = ['loads', 'dailyAddOns', 'favoriteRoutes'];
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyC68MPQAa0nsAX-Wq2WSfO09H1kI6P4kaA",
   authDomain: "arrond-oilfield-load-tracker.firebaseapp.com",
@@ -418,7 +419,7 @@ let dailyEarningsRecords = loadDailySummaries();
 let driverProfile = loadDriverProfile();
 let appMeta = loadAppMeta();
 let favoriteRoutes = loadFavoriteRoutes();
-let localStartupSnapshot = cloneTrackerState({
+let startupSafetySnapshot = cloneTrackerState({
   loads: savedLoads,
   dailyAddOns,
   dailySummaries: dailyEarningsRecords,
@@ -549,6 +550,197 @@ function cloneTrackerState(state) {
   };
 }
 
+function createEmptyPendingDeletes() {
+  return {
+    loads: {},
+    dailyAddOns: {},
+    favoriteRoutes: {}
+  };
+}
+
+function normalizePendingDeleteEntry(group, key, entry) {
+  const rawEntry = isPlainObject(entry) ? entry : {};
+  const normalizedKey = String(
+    rawEntry.id
+      || rawEntry.loadId
+      || rawEntry.date
+      || rawEntry.routeId
+      || key
+      || ''
+  ).trim();
+
+  if (!normalizedKey) {
+    return null;
+  }
+
+  const normalized = {
+    ...rawEntry,
+    id: normalizedKey,
+    deletedAt: rawEntry.deletedAt || new Date().toISOString(),
+    appVersion: rawEntry.appVersion || APP_VERSION
+  };
+
+  if (group === 'loads') {
+    normalized.loadId = normalizedKey;
+  }
+
+  if (group === 'dailyAddOns') {
+    normalized.date = normalizedKey;
+  }
+
+  if (group === 'favoriteRoutes') {
+    normalized.routeId = normalizedKey;
+  }
+
+  return normalized;
+}
+
+function normalizePendingDeletes(rawDeletes = {}) {
+  const normalized = createEmptyPendingDeletes();
+
+  if (!isPlainObject(rawDeletes)) {
+    return normalized;
+  }
+
+  PENDING_DELETE_GROUPS.forEach((group) => {
+    const groupDeletes = isPlainObject(rawDeletes[group]) ? rawDeletes[group] : {};
+
+    Object.entries(groupDeletes).forEach(([key, entry]) => {
+      const normalizedEntry = normalizePendingDeleteEntry(group, key, entry);
+
+      if (normalizedEntry) {
+        normalized[group][normalizedEntry.id] = normalizedEntry;
+      }
+    });
+  });
+
+  return normalized;
+}
+
+function normalizeAppMeta(rawMeta) {
+  const meta = isPlainObject(rawMeta) ? rawMeta : {};
+
+  return {
+    ...meta,
+    cloudSync: {
+      ...(isPlainObject(meta.cloudSync) ? meta.cloudSync : {}),
+      pendingDeletes: normalizePendingDeletes(meta.cloudSync?.pendingDeletes)
+    }
+  };
+}
+
+function getPendingDeletes() {
+  return normalizePendingDeletes(appMeta.cloudSync?.pendingDeletes);
+}
+
+function countPendingDeletes(pendingDeletes = getPendingDeletes()) {
+  return PENDING_DELETE_GROUPS.reduce((total, group) => (
+    total + Object.keys(pendingDeletes[group] || {}).length
+  ), 0);
+}
+
+function hasPendingDeletes() {
+  return countPendingDeletes() > 0;
+}
+
+function persistPendingDeletes(pendingDeletes) {
+  const normalized = normalizePendingDeletes(pendingDeletes);
+  appMeta = normalizeAppMeta({
+    ...appMeta,
+    cloudSync: {
+      ...(appMeta.cloudSync || {}),
+      pendingDeletes: normalized
+    }
+  });
+  saveAppMeta();
+  updateAuthUi();
+  return normalized;
+}
+
+function queuePendingDelete(group, key, details = {}) {
+  if (!PENDING_DELETE_GROUPS.includes(group) || !key) {
+    return false;
+  }
+
+  const pendingDeletes = getPendingDeletes();
+  const now = new Date().toISOString();
+  const entry = normalizePendingDeleteEntry(group, key, {
+    ...(isPlainObject(details) ? details : {}),
+    id: key,
+    deletedAt: now,
+    appVersion: APP_VERSION
+  });
+
+  if (!entry) {
+    return false;
+  }
+
+  pendingDeletes[group][entry.id] = entry;
+  appMeta = normalizeAppMeta({
+    ...appMeta,
+    cloudSync: {
+      ...(appMeta.cloudSync || {}),
+      pendingSince: appMeta.cloudSync?.pendingSince || now,
+      pendingDeletes
+    }
+  });
+  saveAppMeta();
+  updateAuthUi();
+  return true;
+}
+
+function cancelPendingDelete(group, key) {
+  if (!PENDING_DELETE_GROUPS.includes(group) || !key) {
+    return false;
+  }
+
+  const pendingDeletes = getPendingDeletes();
+
+  if (!pendingDeletes[group][key]) {
+    return false;
+  }
+
+  delete pendingDeletes[group][key];
+  persistPendingDeletes(pendingDeletes);
+  return true;
+}
+
+function clearPendingDelete(group, key) {
+  return cancelPendingDelete(group, key);
+}
+
+function isLoadTombstoned(loadOrId) {
+  const id = typeof loadOrId === 'object' ? loadOrId?.id : loadOrId;
+  return Boolean(id && getPendingDeletes().loads[String(id)]);
+}
+
+function isDailyAddOnTombstoned(date) {
+  return Boolean(date && getPendingDeletes().dailyAddOns[String(date)]);
+}
+
+function isFavoriteRouteTombstoned(routeOrId) {
+  const id = typeof routeOrId === 'object' ? routeOrId?.id : routeOrId;
+  return Boolean(id && getPendingDeletes().favoriteRoutes[String(id)]);
+}
+
+function filterTombstonedLoads(loads) {
+  return (Array.isArray(loads) ? loads : []).filter((load) => !isLoadTombstoned(load));
+}
+
+function filterTombstonedDailyAddOns(addOnsMap) {
+  if (!isPlainObject(addOnsMap)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(addOnsMap).filter(([date]) => !isDailyAddOnTombstoned(date))
+  );
+}
+
+function filterTombstonedFavoriteRoutes(routes) {
+  return (Array.isArray(routes) ? routes : []).filter((route) => !isFavoriteRouteTombstoned(route));
+}
+
 function createEmptyCloudState() {
   return {
     loads: [],
@@ -624,11 +816,13 @@ function isCloudReady() {
 }
 
 function hasLocalChangesPending() {
-  return Boolean(appMeta.cloudSync?.localChangesPending);
+  return Boolean(appMeta.cloudSync?.localChangesPending || hasPendingDeletes());
 }
 
 function getPendingSyncCount() {
-  return cloudSync.pendingWrites + (hasLocalChangesPending() ? 1 : 0);
+  return cloudSync.pendingWrites
+    + (appMeta.cloudSync?.localChangesPending ? 1 : 0)
+    + countPendingDeletes();
 }
 
 function isCloudMigrationComplete() {
@@ -637,7 +831,7 @@ function isCloudMigrationComplete() {
 }
 
 function getLocalSafetyLoadCount() {
-  return countUniqueLoads(localStartupSnapshot.loads || []);
+  return countUniqueLoads(savedLoads);
 }
 
 function updateSyncStatusFromState() {
@@ -703,7 +897,7 @@ function updateAuthUi() {
   const signedIn = Boolean(cloudSync.user);
   setElementText(authControls.authStatus, signedIn ? 'Signed in' : (cloudSync.authReady ? 'Sign in required' : 'Checking sign-in...'));
   setElementText(authControls.signedInEmail, signedIn ? (cloudSync.user.email || 'Signed in') : 'Not signed in');
-  setElementText(authControls.cloudLoadCount, String(cloudSync.state.loads.length));
+  setElementText(authControls.cloudLoadCount, String(filterTombstonedLoads(cloudSync.state.loads).length));
   setElementText(authControls.localLoadCount, String(getLocalSafetyLoadCount()));
   setElementText(settingsPendingWrites, String(getPendingSyncCount()));
   setElementText(settingsLastSync, appMeta.cloudSync?.lastSyncedAt || cloudSync.state.lastSnapshotAt || 'Not yet synced');
@@ -814,7 +1008,7 @@ function getCloudDuplicateMaps() {
   const byId = new Map();
   const byFingerprint = new Map();
 
-  cloudSync.state.loads.forEach((load) => {
+  filterTombstonedLoads(cloudSync.state.loads).forEach((load) => {
     if (load.id) {
       byId.set(String(load.id), load);
     }
@@ -825,13 +1019,13 @@ function getCloudDuplicateMaps() {
   return { byId, byFingerprint };
 }
 
-function getMigrationPreview(localLoads = localStartupSnapshot.loads || []) {
+function getMigrationPreview(localLoads = startupSafetySnapshot.loads || []) {
   const { byId, byFingerprint } = getCloudDuplicateMaps();
   let uploadCount = 0;
   let skippedCount = 0;
   let newerCloudCount = 0;
 
-  getUniqueSavedLoads(localLoads).forEach((load) => {
+  getUniqueSavedLoads(filterTombstonedLoads(localLoads)).forEach((load) => {
     const cloudById = byId.get(String(load.id));
     const cloudByFingerprint = byFingerprint.get(buildLoadFingerprint(load));
 
@@ -855,7 +1049,7 @@ function getMigrationPreview(localLoads = localStartupSnapshot.loads || []) {
 
   return {
     examinedCount: countUniqueLoads(localLoads),
-    cloudCount: cloudSync.state.loads.length,
+    cloudCount: filterTombstonedLoads(cloudSync.state.loads).length,
     uploadCount,
     skippedCount,
     newerCloudCount
@@ -1051,7 +1245,11 @@ async function startFirebaseSync() {
       setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
     });
 
-    globalThis.addEventListener?.('online', updateSyncStatusFromState);
+    globalThis.addEventListener?.('online', () => {
+      updateSyncStatusFromState();
+      processPendingDeletes();
+      scheduleCloudBackfill();
+    });
     globalThis.addEventListener?.('offline', updateSyncStatusFromState);
   } catch (error) {
     cloudSync.enabled = false;
@@ -1233,12 +1431,12 @@ function handleFirebaseUser(user) {
     stopCloudListeners();
     cloudSync.state = createEmptyCloudState();
     cloudSync.source = 'local';
-    restoreLocalSafetySnapshot();
     updateAuthUi();
     return;
   }
 
   startCloudListeners();
+  processPendingDeletes();
   updateAuthUi();
 }
 
@@ -1283,19 +1481,23 @@ function applyCloudStateToApp() {
     settings: appSettings,
     favoriteRoutes
   });
-  const cloudLoads = cloudSync.state.loads.map(normalizeSavedLoad);
+  const pendingDeletes = getPendingDeletes();
+  const cloudLoads = filterTombstonedLoads(cloudSync.state.loads.map(normalizeSavedLoad));
   const shouldMergeLocalState = hasLocalChangesPending()
     || appMeta.cloudSync?.authoritative !== true
     || appMeta.cloudSync?.uid !== cloudSync.user.uid;
-  const localOnlyLoads = shouldMergeLocalState ? getLoadsMissingFromCloud(localBeforeApply.loads, cloudLoads) : [];
+  const localLoads = filterTombstonedLoads(localBeforeApply.loads);
+  const localOnlyLoads = shouldMergeLocalState ? getLoadsMissingFromCloud(localLoads, cloudLoads) : [];
 
-  savedLoads = shouldMergeLocalState ? mergeLoadRecords(cloudLoads, localBeforeApply.loads) : cloudLoads;
+  savedLoads = filterTombstonedLoads(shouldMergeLocalState ? mergeLoadRecords(cloudLoads, localLoads) : cloudLoads);
+  const cloudDailyAddOns = filterTombstonedDailyAddOns(cloudSync.state.dailyAddOns || {});
+  const localDailyAddOns = filterTombstonedDailyAddOns(localBeforeApply.dailyAddOns || {});
   dailyAddOns = normalizeDailyAddOns(shouldMergeLocalState
     ? {
-      ...(cloudSync.state.dailyAddOns || {}),
-      ...(localBeforeApply.dailyAddOns || {})
+      ...cloudDailyAddOns,
+      ...localDailyAddOns
     }
-    : cloudSync.state.dailyAddOns);
+    : cloudDailyAddOns);
   dailyEarningsRecords = shouldMergeLocalState
     ? {
       ...(isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {}),
@@ -1316,8 +1518,8 @@ function applyCloudStateToApp() {
     }
     : (cloudSettings.appSettings || cloudSettings));
   favoriteRoutes = shouldMergeLocalState
-    ? mergeFavoriteRoutes(cloudSettings.favoriteRoutes || [], localBeforeApply.favoriteRoutes || [])
-    : normalizeFavoriteRoutes(cloudSettings.favoriteRoutes || []);
+    ? filterTombstonedFavoriteRoutes(mergeFavoriteRoutes(cloudSettings.favoriteRoutes || [], localBeforeApply.favoriteRoutes || []))
+    : filterTombstonedFavoriteRoutes(normalizeFavoriteRoutes(cloudSettings.favoriteRoutes || []));
   appMeta = {
     ...appMeta,
     ...cloudSettings,
@@ -1326,7 +1528,8 @@ function applyCloudStateToApp() {
       uid: cloudSync.user.uid,
       email: cloudSync.user.email || '',
       lastSyncedAt: new Date().toISOString(),
-      localChangesPending: localOnlyLoads.length > 0 || hasLocalChangesPending()
+      pendingDeletes,
+      localChangesPending: localOnlyLoads.length > 0 || appMeta.cloudSync?.localChangesPending === true || countPendingDeletes(pendingDeletes) > 0
     }
   };
 
@@ -1344,16 +1547,20 @@ function applyCloudStateToApp() {
   if (localOnlyLoads.length > 0 || hasLocalChangesPending()) {
     scheduleCloudBackfill();
   }
+
+  if (countPendingDeletes(pendingDeletes) > 0) {
+    processPendingDeletes();
+  }
 }
 
-function restoreLocalSafetySnapshot() {
-  savedLoads = (localStartupSnapshot.loads || []).map(normalizeSavedLoad);
-  dailyAddOns = normalizeDailyAddOns(localStartupSnapshot.dailyAddOns || {});
-  dailyEarningsRecords = isPlainObject(localStartupSnapshot.dailySummaries) ? localStartupSnapshot.dailySummaries : {};
-  driverProfile = normalizeDriverProfile(localStartupSnapshot.profile || {});
-  appMeta = isPlainObject(localStartupSnapshot.metadata) ? localStartupSnapshot.metadata : {};
-  appSettings = normalizeAppSettings(localStartupSnapshot.settings || {});
-  favoriteRoutes = normalizeFavoriteRoutes(localStartupSnapshot.favoriteRoutes || []);
+function restoreStartupSafetySnapshot() {
+  savedLoads = filterTombstonedLoads(startupSafetySnapshot.loads || []).map(normalizeSavedLoad);
+  dailyAddOns = filterTombstonedDailyAddOns(normalizeDailyAddOns(startupSafetySnapshot.dailyAddOns || {}));
+  dailyEarningsRecords = isPlainObject(startupSafetySnapshot.dailySummaries) ? startupSafetySnapshot.dailySummaries : {};
+  driverProfile = normalizeDriverProfile(startupSafetySnapshot.profile || {});
+  appMeta = normalizeAppMeta(startupSafetySnapshot.metadata || {});
+  appSettings = normalizeAppSettings(startupSafetySnapshot.settings || {});
+  favoriteRoutes = filterTombstonedFavoriteRoutes(normalizeFavoriteRoutes(startupSafetySnapshot.favoriteRoutes || []));
 
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
@@ -1460,7 +1667,9 @@ function markLocalChangesPending(message = 'Local changes are saved on this devi
 }
 
 function clearLocalChangesPending() {
-  if (!hasLocalChangesPending()) {
+  const deletesPending = hasPendingDeletes();
+
+  if (!appMeta.cloudSync?.localChangesPending && !deletesPending) {
     return;
   }
 
@@ -1468,8 +1677,9 @@ function clearLocalChangesPending() {
     ...appMeta,
     cloudSync: {
       ...(appMeta.cloudSync || {}),
-      localChangesPending: false,
-      pendingSince: null,
+      pendingDeletes: getPendingDeletes(),
+      localChangesPending: deletesPending,
+      pendingSince: deletesPending ? (appMeta.cloudSync?.pendingSince || new Date().toISOString()) : null,
       lastSyncedAt: new Date().toISOString()
     }
   };
@@ -1700,6 +1910,11 @@ function syncLoadToCloud(record) {
     return;
   }
 
+  if (isLoadTombstoned(record)) {
+    processPendingDeletes();
+    return;
+  }
+
   queueCloudWrite(() => cloudSync.sdk.setDoc(
     cloudDocument('loads', toCloudDocumentId(record.id)),
     buildCloudLoadPayload(record),
@@ -1712,13 +1927,98 @@ function deleteCloudLoad(loadId) {
     return;
   }
 
-  queueCloudWrite(() => cloudSync.sdk.deleteDoc(
-    cloudDocument('loads', toCloudDocumentId(loadId))
-  ), 'Deleted load could not be synced to Firebase yet.');
+  processPendingDeletes();
+}
+
+async function processPendingDeletes(options = {}) {
+  if (!isCloudSignedIn()) {
+    updateAuthUi();
+    return false;
+  }
+
+  const pendingDeletes = getPendingDeletes();
+  const pendingCount = countPendingDeletes(pendingDeletes);
+
+  if (pendingCount === 0) {
+    updateAuthUi();
+    return true;
+  }
+
+  const countAsWrite = options.countAsWrite !== false;
+  const failedDeletes = [];
+
+  if (countAsWrite) {
+    cloudSync.pendingWrites += 1;
+  }
+
+  updateSyncStatusFromState();
+
+  try {
+    for (const loadId of Object.keys(pendingDeletes.loads)) {
+      try {
+        await cloudSync.sdk.deleteDoc(cloudDocument('loads', toCloudDocumentId(loadId)));
+        clearPendingDelete('loads', loadId);
+      } catch (error) {
+        failedDeletes.push(getFriendlyErrorDetail(error, `load ${loadId}`));
+      }
+    }
+
+    for (const date of Object.keys(pendingDeletes.dailyAddOns)) {
+      try {
+        await cloudSync.sdk.deleteDoc(cloudDocument('dailyAddOns', toCloudDocumentId(date)));
+        clearPendingDelete('dailyAddOns', date);
+      } catch (error) {
+        failedDeletes.push(getFriendlyErrorDetail(error, `daily add-on ${date}`));
+      }
+    }
+
+    const favoriteRouteDeleteIds = Object.keys(getPendingDeletes().favoriteRoutes);
+
+    if (favoriteRouteDeleteIds.length > 0) {
+      try {
+        favoriteRoutes = favoriteRoutes.filter((route) => !favoriteRouteDeleteIds.includes(String(route.id)));
+        saveFavoriteRoutesToStorage();
+        await cloudSync.sdk.setDoc(
+          cloudDocument('settings', 'app'),
+          buildCloudSettingsPayload({ favoriteRoutes, cloudAuthoritative: true }),
+          { merge: true }
+        );
+        favoriteRouteDeleteIds.forEach((routeId) => clearPendingDelete('favoriteRoutes', routeId));
+      } catch (error) {
+        failedDeletes.push(getFriendlyErrorDetail(error, 'favorite routes'));
+      }
+    }
+
+    if (failedDeletes.length > 0) {
+      cloudSync.lastError = `Pending deletes could not sync: ${failedDeletes.join('; ')}`;
+      setAuthError(`${cloudSync.lastError}. Local records remain protected on this device.`, true);
+
+      if (options.throwOnFailure) {
+        throw new Error(cloudSync.lastError);
+      }
+
+      return false;
+    }
+
+    cloudSync.lastError = '';
+    setAuthError('Pending deletes synced.');
+    return true;
+  } finally {
+    if (countAsWrite) {
+      cloudSync.pendingWrites = Math.max(0, cloudSync.pendingWrites - 1);
+    }
+
+    updateAuthUi();
+  }
 }
 
 function syncDailyAddOnToCloud(date) {
   if (!isCloudSignedIn() || !date) {
+    return;
+  }
+
+  if (isDailyAddOnTombstoned(date)) {
+    processPendingDeletes();
     return;
   }
 
@@ -1727,7 +2027,8 @@ function syncDailyAddOnToCloud(date) {
     const ref = cloudDocument('dailyAddOns', toCloudDocumentId(date));
 
     if (!addOn || (!addOn.perDiem && !addOn.sleeperBerth && !addOn.trainerPay && !addOn.notes)) {
-      return cloudSync.sdk.deleteDoc(ref);
+      queuePendingDelete('dailyAddOns', date, { reason: 'empty-add-on' });
+      return cloudSync.sdk.deleteDoc(ref).then(() => clearPendingDelete('dailyAddOns', date));
     }
 
     return cloudSync.sdk.setDoc(ref, buildCloudAddOnPayload(date), { merge: true });
@@ -1883,14 +2184,16 @@ function syncAllCurrentDataToCloud() {
   }
 
   queueCloudWrite(async () => {
+    await processPendingDeletes({ countAsWrite: false, throwOnFailure: true });
     refreshAllDailyEarningsRecords();
     const batch = createCloudBatchWriter();
 
-    for (const load of getUniqueSavedLoads(savedLoads)) {
+    for (const load of filterTombstonedLoads(getUniqueSavedLoads(savedLoads))) {
       await batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
     }
 
-    for (const date of Object.keys(dailyAddOns || {})) {
+    const activeDailyAddOns = filterTombstonedDailyAddOns(dailyAddOns || {});
+    for (const date of Object.keys(activeDailyAddOns)) {
       await batch.set(cloudDocument('dailyAddOns', toCloudDocumentId(date)), buildCloudAddOnPayload(date), { merge: true });
     }
 
@@ -1912,8 +2215,9 @@ function syncAllCurrentDataToCloud() {
         uid: cloudSync.user.uid,
         email: cloudSync.user.email || '',
         lastSyncedAt: new Date().toISOString(),
-        localChangesPending: false,
-        pendingSince: null
+        pendingDeletes: getPendingDeletes(),
+        localChangesPending: hasPendingDeletes(),
+        pendingSince: hasPendingDeletes() ? (appMeta.cloudSync?.pendingSince || new Date().toISOString()) : null
       }
     };
     saveAppMeta();
@@ -1922,16 +2226,16 @@ function syncAllCurrentDataToCloud() {
 }
 
 function getLocalMigrationState() {
-  const startupHasLoads = countUniqueLoads(localStartupSnapshot.loads || []) > 0;
+  const startupHasLoads = countUniqueLoads(startupSafetySnapshot.loads || []) > 0;
 
   return cloneTrackerState({
-    loads: getUniqueSavedLoads(startupHasLoads ? localStartupSnapshot.loads : savedLoads),
-    dailyAddOns: startupHasLoads ? localStartupSnapshot.dailyAddOns : dailyAddOns,
-    dailySummaries: startupHasLoads ? localStartupSnapshot.dailySummaries : dailyEarningsRecords,
-    profile: startupHasLoads ? localStartupSnapshot.profile : driverProfile,
-    metadata: startupHasLoads ? localStartupSnapshot.metadata : appMeta,
-    settings: startupHasLoads ? localStartupSnapshot.settings : appSettings,
-    favoriteRoutes: startupHasLoads ? localStartupSnapshot.favoriteRoutes : favoriteRoutes
+    loads: filterTombstonedLoads(getUniqueSavedLoads(startupHasLoads ? startupSafetySnapshot.loads : savedLoads)),
+    dailyAddOns: filterTombstonedDailyAddOns(startupHasLoads ? startupSafetySnapshot.dailyAddOns : dailyAddOns),
+    dailySummaries: startupHasLoads ? startupSafetySnapshot.dailySummaries : dailyEarningsRecords,
+    profile: startupHasLoads ? startupSafetySnapshot.profile : driverProfile,
+    metadata: startupHasLoads ? startupSafetySnapshot.metadata : appMeta,
+    settings: startupHasLoads ? startupSafetySnapshot.settings : appSettings,
+    favoriteRoutes: filterTombstonedFavoriteRoutes(startupHasLoads ? startupSafetySnapshot.favoriteRoutes : favoriteRoutes)
   });
 }
 
@@ -2592,20 +2896,18 @@ function saveDriverProfileToStorage() {
 
 function loadAppMeta() {
   const rawMeta = loadJson(META_STORAGE_KEY, {}, 'application metadata');
-
-  if (!isPlainObject(rawMeta)) {
-    return {};
-  }
-
-  return rawMeta;
+  return normalizeAppMeta(rawMeta);
 }
 
 function saveAppMeta() {
+  const normalizedMeta = normalizeAppMeta(appMeta);
+
   appMeta = {
-    ...appMeta,
+    ...normalizedMeta,
     appVersion: APP_VERSION,
     dataSchemaVersion: DATA_SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
+    cloudSync: normalizedMeta.cloudSync,
     storageKeys: {
       loads: STORAGE_KEY,
       dailyAddOns: ADD_ON_STORAGE_KEY,
@@ -2759,7 +3061,7 @@ function mergeFavoriteRoutes(...routeLists) {
     });
   });
 
-  return [...byIdentity.values()];
+  return filterTombstonedFavoriteRoutes([...byIdentity.values()]);
 }
 
 function loadFavoriteRoutes() {
@@ -3165,6 +3467,7 @@ function saveFavoriteRouteFromControls() {
     updatedAt: new Date().toISOString()
   };
   const previousRoutes = favoriteRoutes;
+  cancelPendingDelete('favoriteRoutes', route.id);
   favoriteRoutes = normalizeFavoriteRoutes([route, ...favoriteRoutes]);
 
   if (!saveFavoriteRoutesToStorage()) {
@@ -3195,12 +3498,19 @@ function deleteFavoriteRoute(routeId) {
     return;
   }
 
-  favoriteRoutes = favoriteRoutes.filter((route) => route.id !== routeId);
+  const route = favoriteRoutes.find((item) => item.id === routeId);
+  queuePendingDelete('favoriteRoutes', routeId, {
+    routeName: route?.name || '',
+    pickupLocation: route?.pickupLocation || '',
+    dropoffLocation: route?.dropoffLocation || ''
+  });
+  favoriteRoutes = favoriteRoutes.filter((item) => item.id !== routeId);
   saveFavoriteRoutesToStorage();
   renderFavoriteRoutes();
   if (!isCloudSignedIn()) {
     markLocalChangesPending('Favorite route deleted locally. Sign in to sync the change to Firebase.');
   }
+  processPendingDeletes();
   syncSettingsToCloud();
   setStatusMessage(favoriteRouteControls.status, 'Favorite route deleted.');
 }
@@ -3611,8 +3921,10 @@ function saveDailyAddOnFromControls() {
   };
 
   if (!addOn.perDiem && !addOn.sleeperBerth && !addOn.trainerPay && !addOn.notes) {
+    queuePendingDelete('dailyAddOns', date, { reason: 'daily-add-on-cleared' });
     delete dailyAddOns[date];
   } else {
+    cancelPendingDelete('dailyAddOns', date);
     dailyAddOns[date] = addOn;
   }
 
@@ -4093,10 +4405,15 @@ function renderSavedLoadCards(records) {
         <div class="load-actions">
           <button class="small-button" type="button" data-action="open" data-id="${escapeHtml(load.id)}">Open</button>
           <button class="small-button" type="button" data-action="edit" data-id="${escapeHtml(load.id)}">Edit</button>
-          <button class="small-button" type="button" data-action="duplicate" data-id="${escapeHtml(load.id)}">Duplicate</button>
-          <button class="small-button" type="button" data-action="print" data-id="${escapeHtml(load.id)}">Print</button>
-          <button class="small-button" type="button" data-action="export" data-id="${escapeHtml(load.id)}">Export</button>
-          <button class="small-button danger" type="button" data-action="delete" data-id="${escapeHtml(load.id)}">Delete</button>
+          <details class="record-actions-menu">
+            <summary>Actions</summary>
+            <div>
+              <button class="small-button" type="button" data-action="duplicate" data-id="${escapeHtml(load.id)}">Duplicate</button>
+              <button class="small-button" type="button" data-action="print" data-id="${escapeHtml(load.id)}">Print</button>
+              <button class="small-button" type="button" data-action="export" data-id="${escapeHtml(load.id)}">Export</button>
+              <button class="small-button danger" type="button" data-action="delete" data-id="${escapeHtml(load.id)}">Delete</button>
+            </div>
+          </details>
         </div>
       </div>
       <details class="load-details">
@@ -4636,6 +4953,11 @@ function deleteLoadEntry(loadId) {
     return;
   }
 
+  queuePendingDelete('loads', loadId, {
+    loadNumber: load.loadNumber || '',
+    ticketNumber: load.ticketNumber || '',
+    loadDate: load.loadDate || ''
+  });
   savedLoads = savedLoads.filter((item) => item.id !== loadId);
   storeLoads();
   refreshAllDailyEarningsRecords();
