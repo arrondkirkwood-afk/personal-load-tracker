@@ -6,6 +6,8 @@ const vm = require('vm');
 const appDir = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(appDir, 'index.html'), 'utf8');
 const script = fs.readFileSync(path.join(appDir, 'script.js'), 'utf8');
+const serviceWorker = fs.readFileSync(path.join(appDir, 'service-worker.js'), 'utf8');
+const manifest = fs.readFileSync(path.join(appDir, 'manifest.json'), 'utf8');
 const repairHtml = fs.readFileSync(path.join(appDir, 'repair.html'), 'utf8');
 const ids = [...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
 
@@ -54,6 +56,66 @@ class Element {
 
 const elements = new Map(ids.map((id) => [id, new Element(id)]));
 const storage = new Map();
+
+function createStartupSmokeContext(initialStorage) {
+  const smokeElements = new Map(ids.map((id) => [id, new Element(id)]));
+  const smokeStorage = new Map(Object.entries(initialStorage));
+
+  function getSmokeElement(id) {
+    if (!smokeElements.has(id)) {
+      smokeElements.set(id, new Element(id));
+    }
+
+    return smokeElements.get(id);
+  }
+
+  const smokeContext = {
+    console,
+    setTimeout,
+    clearTimeout,
+    localStorage: {
+      getItem: (key) => (smokeStorage.has(key) ? smokeStorage.get(key) : null),
+      setItem: (key, value) => smokeStorage.set(key, String(value)),
+      removeItem: (key) => smokeStorage.delete(key)
+    },
+    confirm: () => true,
+    navigator: {},
+    document: {
+      getElementById: getSmokeElement,
+      querySelectorAll: () => [],
+      createElement: (tagName) => new Element(tagName),
+      body: new Element('body')
+    },
+    URL: {
+      createObjectURL: () => 'blob:test',
+      revokeObjectURL: () => {}
+    },
+    Blob: function Blob() {},
+    globalThis: null
+  };
+
+  smokeContext.globalThis = smokeContext;
+  vm.createContext(smokeContext);
+  assert.doesNotThrow(() => vm.runInContext(script, smokeContext, { filename: 'script.js' }), 'loading saved records at startup does not throw');
+  return { context: smokeContext, storage: smokeStorage };
+}
+
+const startupSmoke = createStartupSmokeContext({
+  'personalOilfieldLoadTracker.settings': JSON.stringify({
+    loadedMilesPayScale: [{ min: 1, max: 999, rate: 123.45 }]
+  }),
+  'personalOilfieldLoadTracker.loads': JSON.stringify([{
+    id: 'existing-startup-load',
+    loadDate: '2026-07-12',
+    loadNumber: '7',
+    loadStatus: 'Completed Load',
+    grossBarrels: 100,
+    loadedMiles: 42
+  }])
+});
+const startupSnapshot = startupSmoke.context.getTrackerSnapshot();
+assert.strictEqual(startupSnapshot.recordCount, 1, 'existing saved load remains available after startup');
+assert.strictEqual(startupSnapshot.data.loads[0].estimatedPay, 123.45, 'app settings initialize before saved-load calculations');
 
 function getElement(id) {
   if (!elements.has(id)) {
@@ -277,9 +339,33 @@ assert.ok(backup.data.settings, 'backup includes app settings');
 assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup includes favorite routes');
 assert.ok(!script.includes('localStorage.clear'), 'app code does not clear localStorage');
 assert.ok(!script.includes('indexedDB.deleteDatabase'), 'app code does not delete IndexedDB');
-assert.ok(repairHtml.includes('index.html?v=1.4.1'), 'repair page opens the current version');
+assert.ok(script.includes("const STORAGE_KEY = 'personalOilfieldLoadTracker.loads'"), 'load storage key is preserved');
+assert.ok(script.includes("const ADD_ON_STORAGE_KEY = 'personalOilfieldLoadTracker.dailyAddOns'"), 'daily add-on storage key is preserved');
+assert.ok(script.includes("const EARNINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.dailySummaries'"), 'daily summary storage key is preserved');
+assert.ok(script.includes("const PROFILE_STORAGE_KEY = 'personalOilfieldLoadTracker.profile'"), 'profile storage key is preserved');
+assert.ok(script.includes("const META_STORAGE_KEY = 'personalOilfieldLoadTracker.meta'"), 'metadata storage key is preserved');
+assert.ok(script.includes("const SETTINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.settings'"), 'settings storage key is preserved');
+assert.ok(script.includes("const FAVORITE_ROUTES_STORAGE_KEY = 'personalOilfieldLoadTracker.favoriteRoutes'"), 'favorite routes storage key is preserved');
+assert.ok(script.includes("const DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.currentDraft'"), 'draft storage key is preserved');
+assert.ok(repairHtml.includes('index.html?v=1.4.2'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
+
+const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
+const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
+assert.ok(appVersionMatch, 'script exposes an app version');
+assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
+assert.strictEqual(appVersionMatch[1], '1.4.2', 'app version is updated');
+assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
+assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
+assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
+assert.ok(html.includes(`style.css?v=${appVersionMatch[1]}`), 'HTML stylesheet asset uses the app version');
+assert.ok(manifest.includes(`index.html?v=${appVersionMatch[1]}`), 'manifest start URL uses the app version');
+assert.ok(!html.includes('runFallbackFirebaseLogin'), 'duplicated inline Firebase fallback was removed');
+assert.ok(!html.includes('firebase-auth.js'), 'HTML does not run a second Firebase Auth import');
+assert.ok(!html.includes('signed-in='), 'successful sign-in no longer forces an HTML fallback reload');
+assert.ok(!html.includes("document.addEventListener('touchend'"), 'HTML does not intercept iPhone touch navigation ahead of the main app');
+assert.ok(![html, script, serviceWorker, manifest, repairHtml].some((text) => text.includes('1.4.1')), 'old 1.4.1 app-file references were removed');
 
 console.log('Personal Load Tracker regression tests passed');

@@ -1,4 +1,4 @@
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.2";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -411,12 +411,12 @@ const storageAudit = {
   duplicateIdsRepaired: 0,
   migrationBackupCreated: false
 };
+let appSettings = loadAppSettings();
 let savedLoads = loadSavedLoads();
 let dailyAddOns = loadDailyAddOns();
 let dailyEarningsRecords = loadDailySummaries();
 let driverProfile = loadDriverProfile();
 let appMeta = loadAppMeta();
-let appSettings = loadAppSettings();
 let favoriteRoutes = loadFavoriteRoutes();
 let localStartupSnapshot = cloneTrackerState({
   loads: savedLoads,
@@ -433,7 +433,8 @@ let pendingCommitMode = 'save';
 let isSaving = false;
 let draftSaveTimer = null;
 let waitingServiceWorker = null;
-let firebaseStartupInProgress = false;
+let firebaseStartupPromise = null;
+let signInInProgress = false;
 const cloudSync = {
   enabled: false,
   app: null,
@@ -656,6 +657,11 @@ function updateSyncStatusFromState() {
   }
 
   if (!cloudSync.user) {
+    if (hasLocalChangesPending()) {
+      setSyncStatus('Local changes pending', 'pending');
+      return;
+    }
+
     setSyncStatus('Sign in required', 'pending');
     return;
   }
@@ -924,9 +930,7 @@ async function loadFirebaseModules() {
     onAuthStateChanged: authModule.onAuthStateChanged,
     setPersistence: authModule.setPersistence,
     browserLocalPersistence: authModule.browserLocalPersistence,
-    browserSessionPersistence: authModule.browserSessionPersistence,
     indexedDBLocalPersistence: authModule.indexedDBLocalPersistence,
-    inMemoryPersistence: authModule.inMemoryPersistence,
     getFirestore: firestoreModule.getFirestore,
     enableIndexedDbPersistence: firestoreModule.enableIndexedDbPersistence,
     collection: firestoreModule.collection,
@@ -943,9 +947,7 @@ async function loadFirebaseModules() {
 function getAuthPersistenceCandidates() {
   return [
     cloudSync.sdk.indexedDBLocalPersistence,
-    cloudSync.sdk.browserLocalPersistence,
-    cloudSync.sdk.browserSessionPersistence,
-    cloudSync.sdk.inMemoryPersistence
+    cloudSync.sdk.browserLocalPersistence
   ].filter(Boolean);
 }
 
@@ -977,24 +979,37 @@ async function applyBestAuthPersistence() {
     }
   }
 
-  setAuthError('Sign-in can work for this open app session, but iOS may not remember it after closing. Local records are still protected.', true);
+  setAuthError('Cloud login storage is not available in this browser. Local records are still protected, but sign-in may not stay active after closing.', true);
 }
 
 async function initializeFirebaseSync() {
-  if (firebaseStartupInProgress) {
-    return;
+  if (firebaseStartupPromise) {
+    return firebaseStartupPromise;
   }
 
-  firebaseStartupInProgress = true;
+  firebaseStartupPromise = startFirebaseSync();
+
+  try {
+    return await firebaseStartupPromise;
+  } finally {
+    firebaseStartupPromise = null;
+  }
+}
+
+async function startFirebaseSync() {
+  if (cloudSync.enabled && cloudSync.auth && cloudSync.db) {
+    updateAuthUi();
+    return;
+  }
 
   if (!canStartFirebase()) {
     cloudSync.authReady = true;
     updateAuthUi();
-    firebaseStartupInProgress = false;
     return;
   }
 
   setSyncStatus('Connecting');
+  setAuthError('Checking sign-in...');
 
   try {
     cloudSync.sdk = await withTimeout(
@@ -1009,6 +1024,8 @@ async function initializeFirebaseSync() {
     cloudSync.db = cloudSync.sdk.getFirestore(cloudSync.app);
     cloudSync.enabled = true;
     cloudSync.lastError = '';
+
+    await applyBestAuthPersistence();
 
     const authReadyFallbackTimer = startAuthReadyFallbackTimer();
 
@@ -1025,10 +1042,6 @@ async function initializeFirebaseSync() {
     );
 
     updateAuthUi();
-
-    applyBestAuthPersistence().catch(() => {
-      setAuthError('Sign-in can work, but this browser may not remember the session as reliably. Local records are still protected.', true);
-    });
 
     withTimeout(
       cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db),
@@ -1049,8 +1062,6 @@ async function initializeFirebaseSync() {
       : 'Cloud login could not start. Local records are still available. Check your connection, then tap Reconnect and Sign In.';
     setAuthError(startupMessage, true);
     updateAuthUi();
-  } finally {
-    firebaseStartupInProgress = false;
   }
 }
 
@@ -1480,7 +1491,7 @@ function scheduleCloudBackfill() {
 }
 
 function startAuthReadyFallbackTimer() {
-  if (!APP_RUNTIME.isCapacitor || typeof globalThis.setTimeout !== 'function') {
+  if (typeof globalThis.setTimeout !== 'function') {
     return null;
   }
 
@@ -1493,7 +1504,7 @@ function startAuthReadyFallbackTimer() {
     cloudSync.lastError = '';
     setAuthError('Firebase is taking longer than expected. You can still try signing in.');
     updateAuthUi();
-  }, 12000);
+  }, APP_RUNTIME.isCapacitor ? 12000 : 15000);
 }
 
 function clearAuthReadyFallbackTimer(timerId) {
@@ -1504,6 +1515,13 @@ function clearAuthReadyFallbackTimer(timerId) {
 
 async function handleSignIn(event) {
   event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  if (signInInProgress) {
+    return;
+  }
+
+  signInInProgress = true;
 
   if (!cloudSync.enabled || !cloudSync.auth) {
     setAuthError('Reconnecting to cloud login...');
@@ -1511,6 +1529,7 @@ async function handleSignIn(event) {
 
     if (!cloudSync.enabled || !cloudSync.auth) {
       setAuthError('Cloud login is still not ready. Local records are safe on this device. Check your connection, then try again.', true);
+      signInInProgress = false;
       return;
     }
   }
@@ -1520,6 +1539,7 @@ async function handleSignIn(event) {
 
   if (!email || !password) {
     setAuthError('Enter the Firebase email and password.', true);
+    signInInProgress = false;
     return;
   }
 
@@ -1530,6 +1550,8 @@ async function handleSignIn(event) {
   }
 
   try {
+    await applyBestAuthPersistence();
+
     const credential = await withTimeout(
       cloudSync.sdk.signInWithEmailAndPassword(cloudSync.auth, email, password),
       APP_RUNTIME.isCapacitor ? 20000 : 30000,
@@ -1551,6 +1573,8 @@ async function handleSignIn(event) {
       : getFriendlyAuthError(error);
     setAuthError(message, true);
   } finally {
+    signInInProgress = false;
+
     if (authControls.signInButton) {
       authControls.signInButton.disabled = false;
     }
