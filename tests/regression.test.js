@@ -557,6 +557,9 @@ assert.strictEqual(oneDispatcherRows[0].workdays, 1, 'a date is attributed once'
 assert.strictEqual(oneDispatcherRows[0].perDiemPay, 52, 'per diem is attributed once per dispatcher day');
 assert.strictEqual(oneDispatcherRows[0].trainerPay, 55, 'trainer pay is attributed once per dispatcher day');
 assert.strictEqual(oneDispatcherRows[0].sleeperPay, 65, 'sleeper pay is attributed once per dispatcher day');
+const namedWithBlank = context.buildDispatcherDayComparison([oneDispatcherDay[0], analysisLoad({ id: 'day-blank', dispatcher: '', loadNumber: '3' })]);
+assert.strictEqual(namedWithBlank[0].name, 'Brandon', 'a named dispatcher plus a blank load remains a named-dispatcher day');
+assert.strictEqual(namedWithBlank[0].missingDispatcherLoads, 1, 'named-dispatcher day reports blank dispatcher loads separately');
 const mixedDay = [oneDispatcherDay[0], analysisLoad({ id: 'day-b-1', dispatcher: 'Taylor', loadNumber: '2', arrivedPickupTime: '12:00', completedTime: '15:00' })];
 const mixedRows = context.buildDispatcherDayComparison(mixedDay);
 assert.strictEqual(mixedRows.length, 1, 'two dispatchers on one date create one day group');
@@ -574,11 +577,77 @@ assert.strictEqual(loadOnly.averageAllInCompletedEarnings, loadOnly.loadEntryEar
 assert.ok(isFinite(loadOnly.cycleHourEarnings), 'cycle-hour earnings use valid load cycles');
 assert.strictEqual(context.groupLoadAnalysis(mixedDay, context.getStateRoute).reduce((total, row) => total + row.totalAssignments, 0), mixedDay.length, 'each load appears once in route grouping');
 
+const filterRecords = [
+  analysisLoad({ id: 'filter-brandon', loadDate: '2026-08-02', dispatcher: 'Brandon', pickupState: 'LA', dropoffState: 'TX' }),
+  analysisLoad({ id: 'filter-taylor', loadDate: '2026-08-02', dispatcher: 'Taylor', pickupState: 'TX', dropoffState: 'TX' }),
+  analysisLoad({ id: 'filter-brandon-only', loadDate: '2026-08-03', dispatcher: 'Brandon', pickupState: 'LA', dropoffState: 'LA' })
+];
+const filterBaseline = context.summarizeAnalysisRecords(filterRecords, '2026-08-02', '2026-08-03');
+const noFilterRecords = context.filterAnalysisRecords(filterRecords, { dispatcher: '', pickupState: '', dropoffState: '', stateRoute: '', exactRoute: '' });
+assert.strictEqual(context.summarizeLoadLevelRecords(noFilterRecords).totalAssignments, filterBaseline.totalAssignments, 'no active filter produces matching baseline and load totals');
+const brandonFiltered = context.filterAnalysisRecords(filterRecords, { dispatcher: 'Brandon', pickupState: '', dropoffState: '', stateRoute: '', exactRoute: '' });
+const filterSummary = context.summarizeLoadLevelRecords(brandonFiltered);
+assert.strictEqual(filterBaseline.totalAssignments, 3, 'baseline contains all date-range records');
+assert.strictEqual(filterSummary.totalAssignments, 2, 'dispatcher filter creates a separate filtered load scope');
+assert.strictEqual(filterBaseline.totalAssignments, 3, 'baseline remains unchanged after filtering');
+assert.ok(brandonFiltered.every((load) => load.dispatcher === 'Brandon'), 'underlying filtered records contain only matching loads');
+const filterGroups = [
+  context.groupLoadAnalysis(brandonFiltered, (load) => load.dispatcher), context.groupLoadAnalysis(brandonFiltered, (load) => context.displayState(load.pickupState)),
+  context.groupLoadAnalysis(brandonFiltered, (load) => context.displayState(load.dropoffState)), context.groupLoadAnalysis(brandonFiltered, context.getStateRoute),
+  context.groupLoadAnalysis(brandonFiltered, context.formatRoute)
+];
+assert.ok(filterGroups.every((rows) => rows.reduce((total, row) => total + row.totalAssignments, 0) === 2), 'all load comparisons use the filtered records');
+assert.strictEqual(context.filterDispatcherDays(filterRecords, 'Brandon').length, 1, 'dispatcher day filtering selects whole-day groups only');
+assert.strictEqual(context.filterDispatcherDays(filterRecords, 'Mixed Dispatchers').length, 1, 'Mixed Dispatchers remains a separate whole-day group');
+assert.strictEqual(context.filterDispatcherDays(filterRecords, '').length, 2, 'state and route filters do not alter dispatcher-day records');
+assert.ok(context.reconcileBaselineAnalysis(filterBaseline, context.buildDispatcherDayComparison(filterRecords)).ok, 'baseline reconciliation passes independently');
+assert.ok(context.reconcileFilteredLoadAnalysis(filterSummary, ...filterGroups).ok, 'filtered load reconciliation passes independently');
+
+const weightedIndicators = context.getWorkdayIndicators([
+  { date: '2026-09-01', dutyTimeSource: 'exact', exactDutyMinutes: 60, completedLoadCount: 1, totalEstimatedDailyEarnings: 100 },
+  { date: '2026-09-02', dutyTimeSource: 'exact', exactDutyMinutes: 600, completedLoadCount: 1, totalEstimatedDailyEarnings: 200 },
+  { date: '2026-09-03', dutyTimeSource: 'estimated', exactDutyMinutes: null, completedLoadCount: 1, totalEstimatedDailyEarnings: 1000 },
+  { date: '2026-09-04', dutyTimeSource: 'exact', exactDutyMinutes: 0, completedLoadCount: 1, totalEstimatedDailyEarnings: 1000 }
+]);
+assert.strictEqual(weightedIndicators['Weighted exact-duty range hourly earnings'], '$27.27', 'weighted exact hourly rate uses total earnings divided by total hours');
+assert.strictEqual(weightedIndicators['Exact-duty days below weighted range rate'], 1, 'long lower-rate day falls below the weighted rate');
+assert.strictEqual(weightedIndicators['Exact-duty days at or above weighted range rate'], 1, 'short higher-rate day falls above the weighted rate');
+
 const exactDaySummary = context.getDailyEarningsSummary('2026-08-01', oneDispatcherDay);
 assert.strictEqual(exactDaySummary.dutyTimeSource, 'exact', 'exact shift time takes priority over estimated time');
 assert.ok(context.isFiniteNumber(exactDaySummary.activeLoadCycleMinutes), 'active cycle time is available for exact-shift days');
 assert.strictEqual(exactDaySummary.nonLoadDutyMinutes, exactDaySummary.exactDutyMinutes - exactDaySummary.activeLoadCycleMinutes, 'non-load duty time subtracts unique active cycles');
 assert.ok(exactDaySummary.activeLoadUtilization > 0, 'active-load utilization is calculated without dividing by zero');
+const validUtilization = context.summarizeAnalysisRecords(oneDispatcherDay);
+assert.strictEqual(validUtilization.utilizationExactDutyMinutes, 720, 'valid utilization uses exact duty from the same valid day set');
+assert.strictEqual(validUtilization.activeLoadUtilization, validUtilization.activeLoadCycleMinutes / 720 * 100, 'utilization numerator and denominator use matching days');
+
+setField('daily-date', '2026-08-04');
+context.applyDailyAddOnsToControls();
+setField('shift-start-time', '08:00');
+setField('shift-end-time', '20:00');
+context.saveDailyAddOnFromControls();
+const invalidExactLoads = [
+  analysisLoad({ id: 'invalid-exact-1', loadDate: '2026-08-04', loadNumber: '1', arrivedPickupTime: '10:00', completedTime: '12:00' }),
+  analysisLoad({ id: 'invalid-exact-2', loadDate: '2026-08-04', loadNumber: '2', arrivedPickupTime: '11:00', completedTime: '13:00' })
+];
+const validAndInvalidUtilization = context.summarizeAnalysisRecords([...oneDispatcherDay, ...invalidExactLoads]);
+assert.strictEqual(validAndInvalidUtilization.exactDays, 2, 'both dates remain exact-duty days');
+assert.strictEqual(validAndInvalidUtilization.exactUtilizationDays, 1, 'timeline-error exact day is excluded from utilization');
+assert.strictEqual(validAndInvalidUtilization.excludedExactUtilizationDays, 1, 'excluded exact-duty day is disclosed');
+assert.strictEqual(validAndInvalidUtilization.utilizationExactDutyMinutes, 720, 'excluded exact-duty minutes do not reduce utilization percentage');
+
+setField('daily-date', '2026-08-05');
+context.applyDailyAddOnsToControls();
+setField('shift-start-time', '08:00');
+setField('shift-end-time', '20:00');
+context.saveDailyAddOnFromControls();
+const missingCycleExact = [analysisLoad({ id: 'missing-cycle-exact', loadDate: '2026-08-05', arrivedPickupTime: '', completedTime: '' })];
+const noValidUtilization = context.summarizeAnalysisRecords(missingCycleExact);
+assert.strictEqual(noValidUtilization.exactUtilizationDays, 0, 'exact day missing cycle data is excluded from utilization');
+assert.strictEqual(noValidUtilization.activeLoadUtilization, null, 'no valid utilization data remains unavailable rather than zero percent');
+setField('daily-date', '2026-08-01');
+context.applyDailyAddOnsToControls();
 setField('shift-start-time', '');
 setField('shift-end-time', '');
 context.saveDailyAddOnFromControls();
@@ -597,7 +666,9 @@ assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes
 assert.ok(script.includes("'Dispatcher Load Comparison'"), 'analysis CSV includes dispatcher-load rows');
 assert.ok(script.includes("'Pickup State Comparison'"), 'analysis CSV includes state rows');
 assert.ok(script.includes("'Underlying Loads'"), 'analysis CSV includes underlying load rows');
-assert.ok(script.includes('Overall Range Summary') && script.includes('Time Basis Summary'), 'printed analysis contains major summary sections');
+assert.ok(script.includes('Overall Date-Range Baseline') && script.includes('Filtered Load Summary') && script.includes('Time Basis Summary'), 'printed analysis contains baseline, filtered, and time summary sections');
+assert.ok(script.includes('Baseline calculations reconciled.') && script.includes('Filtered load calculations reconciled.'), 'separate reconciliation statuses are displayed');
+assert.ok(script.includes("['Section','Group','Metric','Value','Unit'") && script.includes("'Pickup-site minutes'") && script.includes("'Cycle minutes'"), 'analysis CSV separates metric rows from detailed underlying-load columns');
 assert.ok(!script.includes('localStorage.clear'), 'app code does not clear localStorage');
 assert.ok(!script.includes('indexedDB.deleteDatabase'), 'app code does not delete IndexedDB');
 assert.ok(script.includes("const STORAGE_KEY = 'personalOilfieldLoadTracker.loads'"), 'load storage key is preserved');
