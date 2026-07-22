@@ -443,6 +443,72 @@ const backup = context.getTrackerSnapshot();
 assert.strictEqual(backup.recordCount, 1, 'backup reports current record count');
 assert.ok(backup.data.settings, 'backup includes app settings');
 assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup includes favorite routes');
+
+const legacyLoad = context.normalizeSavedLoad({ id: 'legacy', loadDate: '2026-07-01', pickupLocation: 'Old Lease', dropoffLocation: 'Old Station' });
+assert.strictEqual(legacyLoad.dispatcher, '', 'existing records without dispatcher remain valid');
+assert.strictEqual(legacyLoad.pickupState, '', 'existing records without pickup state remain valid');
+assert.strictEqual(legacyLoad.cycleTimeMinutes, null, 'missing times are not treated as zero');
+assert.doesNotThrow(() => context.parseBackupText(JSON.stringify({ loads: [{ id: 'old-backup', loadDate: '2026-06-01' }] })), 'older backups import without new fields');
+
+const timed = context.calculateDerived(loadValues({ arrivedPickupTime: '23:30', loadedTime: '00:15', arrivedDropoffTime: '01:45', completedTime: '02:30' }));
+assert.strictEqual(timed.pickupTimeMinutes, 45, 'pickup-site duration crosses midnight');
+assert.strictEqual(timed.travelTimeMinutes, 90, 'travel duration calculates');
+assert.strictEqual(timed.dropoffTimeMinutes, 45, 'drop-off duration calculates');
+assert.strictEqual(timed.cycleTimeMinutes, 180, 'total cycle duration crosses midnight');
+
+setField('daily-date', '2026-07-12');
+setField('shift-start-time', '20:00');
+setField('shift-end-time', '06:00');
+context.saveDailyAddOnFromControls();
+assert.strictEqual(context.getDailyEarningsSummary('2026-07-12').exactDutyMinutes, 600, 'exact duty time uses daily shift times and crosses midnight');
+
+setField('favorite-route-name', 'State Route');
+setField('favorite-pickup-location', 'Lease State');
+setField('favorite-pickup-state', 'LA');
+setField('favorite-dropoff-location', 'Station State');
+setField('favorite-dropoff-state', 'TX');
+setField('favorite-route-mileage', '30');
+context.saveFavoriteRouteFromControls();
+const stateFavorite = JSON.parse(storage.get('personalOilfieldLoadTracker.favoriteRoutes'))[0];
+assert.strictEqual(stateFavorite.pickupState, 'LA', 'favorite routes preserve pickup state');
+assert.strictEqual(stateFavorite.dropoffState, 'TX', 'favorite routes preserve drop-off state');
+context.applyFavoriteRoute(stateFavorite.id);
+assert.strictEqual(getElement('pickup-state').value, 'LA', 'favorite route populates pickup state');
+assert.strictEqual(getElement('dropoff-state').value, 'TX', 'favorite route populates drop-off state');
+
+const simulatedCloudLoad = context.buildSynchronizedLoadPayload(context.normalizeSavedLoad({
+  id: 'cross-device-load', loadDate: '2026-07-20', loadNumber: '1', ticketNumber: 'CLOUD-1', loadStatus: 'Completed Load',
+  dispatcher: 'Morgan', pickupLocation: 'Hulin Lease', pickupState: 'LA', dropoffLocation: 'Burns Point', dropoffState: 'LA',
+  loadedMiles: 10, arrivedPickupTime: '22:00', loadedTime: '23:00', arrivedDropoffTime: '00:30', completedTime: '01:30'
+}));
+const deviceB = createStartupSmokeContext({ 'personalOilfieldLoadTracker.loads': JSON.stringify([simulatedCloudLoad]) });
+const received = deviceB.context.getTrackerSnapshot().data.loads[0];
+assert.strictEqual(received.dispatcher, simulatedCloudLoad.dispatcher, 'device B normalizes the synchronized dispatcher');
+assert.strictEqual(received.pickupState, simulatedCloudLoad.pickupState, 'device B normalizes synchronized states');
+assert.strictEqual(received.cycleTimeMinutes, simulatedCloudLoad.cycleTimeMinutes, 'device B calculates the same cycle time');
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(deviceB.context.getDailyEarningsSummary('2026-07-20'))),
+  JSON.parse(JSON.stringify(context.summarizeAnalysisRecords([simulatedCloudLoad]) && deviceB.context.getDailyEarningsSummary('2026-07-20'))),
+  'simulated devices calculate the same daily totals from the same cloud load'
+);
+const editedCloudLoad = deviceB.context.buildSynchronizedLoadPayload({ ...received, dispatcher: 'Taylor', updatedAt: '2026-07-21T00:00:00.000Z' });
+const deviceAAfterEdit = createStartupSmokeContext({ 'personalOilfieldLoadTracker.loads': JSON.stringify([editedCloudLoad]) });
+assert.strictEqual(deviceAAfterEdit.context.countUniqueLoads(), 1, 'receiving an edited cloud record does not duplicate it');
+assert.strictEqual(deviceAAfterEdit.context.getTrackerSnapshot().data.loads[0].dispatcher, 'Taylor', 'device A receives the device B edit');
+deviceB.context.queuePendingDelete('loads', 'cross-device-load', {});
+assert.strictEqual(deviceB.context.filterTombstonedLoads([editedCloudLoad]).length, 0, 'durable tombstone prevents a deleted cloud load from returning');
+
+const completedAndReject = [
+  context.normalizeSavedLoad({ id: 'completed-analysis', loadDate: '2026-07-12', loadStatus: 'Completed Load', estimatedPay: 100 }),
+  context.normalizeSavedLoad({ id: 'reject-analysis', loadDate: '2026-07-12', loadStatus: 'Reject', loadedMiles: 10 })
+];
+const analysis = context.summarizeAnalysisRecords(completedAndReject);
+assert.strictEqual(analysis.completedLoads, 1, 'rejects are excluded from completed-load counts');
+assert.strictEqual(analysis.rejects, 1, 'rejects are counted separately');
+assert.strictEqual(analysis.totalAssignments, 2, 'rejects remain included in total assignments');
+assert.ok(analysis.rejectPay > 0, 'reject pay remains included');
+assert.strictEqual(context.groupAnalysis([simulatedCloudLoad], (load) => load.dispatcher)[0].name, 'Morgan', 'dispatcher grouping is correct');
+assert.strictEqual(context.groupAnalysis([simulatedCloudLoad], context.getStateRoute)[0].name, 'LA → LA', 'state-route grouping is correct');
 assert.ok(!script.includes('localStorage.clear'), 'app code does not clear localStorage');
 assert.ok(!script.includes('indexedDB.deleteDatabase'), 'app code does not delete IndexedDB');
 assert.ok(script.includes("const STORAGE_KEY = 'personalOilfieldLoadTracker.loads'"), 'load storage key is preserved');
@@ -461,7 +527,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.4.3'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.4.4'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -470,7 +536,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.4.3', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.4.4', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
