@@ -1,4 +1,4 @@
-const APP_VERSION = "1.4.4";
+const APP_VERSION = "1.4.5";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -3296,6 +3296,13 @@ function getRecentDispatcherForDate(date, excludingId = null) {
     .sort((a, b) => String(b.updatedAt || b.savedAt || '').localeCompare(String(a.updatedAt || a.savedAt || '')))[0]?.dispatcher || '';
 }
 
+function normalizeDispatcherName(value, records = savedLoads) {
+  const entered = String(value || '').trim();
+  if (!entered) return '';
+  const match = getUniqueSavedLoads(records).map((load) => String(load.dispatcher || '').trim()).find((name) => name && name.toLowerCase() === entered.toLowerCase());
+  return match || entered;
+}
+
 function activateView(viewName) {
   const nextView = viewName || 'dashboard';
 
@@ -4082,8 +4089,61 @@ function getPayPeriodEarningsSummary(dateValue) {
   };
 }
 
-function getDailyEarningsSummary(date) {
-  const records = getLoadsForDate(date);
+function getNumericLoadOrder(load) {
+  const match = String(load?.loadNumber || '').match(/\d+/g);
+  return match ? Number(match[match.length - 1]) : null;
+}
+
+function sortLoadsForTimeline(records) {
+  return records.map((load, index) => ({ load, index })).sort((left, right) => {
+    const leftNumber = getNumericLoadOrder(left.load);
+    const rightNumber = getNumericLoadOrder(right.load);
+    if (isFiniteNumber(leftNumber) && isFiniteNumber(rightNumber) && leftNumber !== rightNumber) return leftNumber - rightNumber;
+    if (isFiniteNumber(leftNumber) !== isFiniteNumber(rightNumber)) return isFiniteNumber(leftNumber) ? -1 : 1;
+    const timeOrder = String(left.load.savedAt || left.load.updatedAt || '').localeCompare(String(right.load.savedAt || right.load.updatedAt || ''));
+    return timeOrder || left.index - right.index;
+  }).map((entry) => entry.load);
+}
+
+function normalizeDailyTimeline(records) {
+  const complete = sortLoadsForTimeline(getUniqueSavedLoads(records).filter((load) => load.arrivedPickupTime && load.completedTime));
+  if (!complete.length) return { status: 'missing', intervals: [], spanMinutes: null, warning: '' };
+  const intervals = [];
+  let previousEnd = null;
+  for (const load of complete) {
+    const pickupClock = parseTimeToMinutes(load.arrivedPickupTime);
+    const completionClock = parseTimeToMinutes(load.completedTime);
+    if (!isFiniteNumber(pickupClock) || !isFiniteNumber(completionClock)) continue;
+    let start = pickupClock;
+    if (previousEnd !== null) while (start < previousEnd) start += 1440;
+    let end = completionClock + Math.floor(start / 1440) * 1440;
+    while (end < start) end += 1440;
+    intervals.push({ loadId: load.id, start, end });
+    previousEnd = end;
+  }
+  if (!intervals.length) return { status: 'missing', intervals: [], spanMinutes: null, warning: '' };
+  const spanMinutes = intervals[intervals.length - 1].end - intervals[0].start;
+  const overlapOrImpossible = intervals.some((interval, index) => index > 0 && interval.start < intervals[index - 1].end) || spanMinutes > 1440;
+  if (overlapOrImpossible) return { status: 'review', intervals, spanMinutes: null, warning: 'Timeline needs review' };
+  return { status: 'valid', intervals, spanMinutes, warning: '' };
+}
+
+function getIntervalUnionMinutes(intervals) {
+  const ordered = intervals.filter((item) => isFiniteNumber(item.start) && isFiniteNumber(item.end) && item.end >= item.start)
+    .slice().sort((a, b) => a.start - b.start || a.end - b.end);
+  if (!ordered.length) return null;
+  let total = 0;
+  let start = ordered[0].start;
+  let end = ordered[0].end;
+  ordered.slice(1).forEach((interval) => {
+    if (interval.start <= end) end = Math.max(end, interval.end);
+    else { total += end - start; start = interval.start; end = interval.end; }
+  });
+  return total + end - start;
+}
+
+function getDailyEarningsSummary(date, recordsOverride = null) {
+  const records = Array.isArray(recordsOverride) ? getUniqueSavedLoads(recordsOverride).filter((load) => load.loadDate === date) : getLoadsForDate(date);
   const completedRecords = records.filter(isCompleted);
   const rejectRecords = records.filter(isReject);
   const addOn = getDailyAddOn(date);
@@ -4100,11 +4160,11 @@ function getDailyEarningsSummary(date) {
   const sleeperBerthPay = addOn.sleeperBerth ? getPayRate('sleeperBerthPay') : 0;
   const trainerPay = addOn.trainerPay ? getPayRate('trainerPay') : 0;
   const exactDutyMinutes = durationBetween(addOn.shiftStartTime, addOn.shiftEndTime);
-  const timedRecords = records.filter((load) => isFiniteNumber(load.firstPickupMinutes) && isFiniteNumber(load.completedTimelineMinutes));
-  const estimatedTrackedSpanMinutes = timedRecords.length > 0
-    ? Math.max(...timedRecords.map((load) => load.completedTimelineMinutes)) - Math.min(...timedRecords.map((load) => load.firstPickupMinutes))
-    : null;
+  const timeline = normalizeDailyTimeline(records);
+  const estimatedTrackedSpanMinutes = timeline.status === 'valid' ? timeline.spanMinutes : null;
   const usableDutyMinutes = isFiniteNumber(exactDutyMinutes) ? exactDutyMinutes : estimatedTrackedSpanMinutes;
+  const activeLoadCycleMinutes = isFiniteNumber(exactDutyMinutes) && timeline.status === 'valid' ? getIntervalUnionMinutes(timeline.intervals) : null;
+  const utilizationUsable = isFiniteNumber(activeLoadCycleMinutes) && exactDutyMinutes > 0 && activeLoadCycleMinutes <= exactDutyMinutes;
 
   return {
     date,
@@ -4137,6 +4197,11 @@ function getDailyEarningsSummary(date) {
     estimatedTrackedSpanMinutes,
     usableDutyMinutes,
     dutyTimeSource: isFiniteNumber(exactDutyMinutes) ? 'exact' : (isFiniteNumber(estimatedTrackedSpanMinutes) ? 'estimated' : 'missing'),
+    timelineStatus: timeline.status,
+    timelineWarning: timeline.warning,
+    activeLoadCycleMinutes: utilizationUsable ? activeLoadCycleMinutes : null,
+    nonLoadDutyMinutes: utilizationUsable ? exactDutyMinutes - activeLoadCycleMinutes : null,
+    activeLoadUtilization: utilizationUsable ? activeLoadCycleMinutes / exactDutyMinutes * 100 : null,
     totalEstimatedDailyEarnings: totalEstimatedEntryPay + perDiemPay + sleeperBerthPay + trainerPay,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
     averageGrossBarrels: completedRecords.length > 0 ? sum(completedRecords, 'grossBarrels') / completedRecords.length : 0,
@@ -4242,12 +4307,12 @@ function updateDashboardStats(summaryRecord) {
   const monthRejects = monthRecords.filter(isReject);
   const monthDays = [...new Set(monthRecords.map((load) => load.loadDate).filter(Boolean))].map(getDailyEarningsSummary);
 
-  dashboard.totalLoadsHauled.textContent = String(countUniqueLoads());
+  dashboard.totalLoadsHauled.textContent = String(getUniqueSavedLoads().filter(isCompleted).length);
   dashboard.currentWorkDate.textContent = selectedDate || '-';
-  dashboard.loadsHauledPayPeriod.textContent = String(payPeriodRecords.length);
-  dashboard.loadsHauledMonth.textContent = String(getLoadsForRange(monthRange.start, monthRange.end).length);
-  dashboard.loadsHauledSelectedDate.textContent = String(selectedDateRecords.length);
-  setElementText(headerRecordCount, `${countUniqueLoads()} ${countUniqueLoads() === 1 ? 'load' : 'loads'}`);
+  dashboard.loadsHauledPayPeriod.textContent = String(payPeriodRecords.filter(isCompleted).length);
+  dashboard.loadsHauledMonth.textContent = String(monthCompleted.length);
+  dashboard.loadsHauledSelectedDate.textContent = String(selectedDateRecords.filter(isCompleted).length);
+  setElementText(headerRecordCount, `${countUniqueLoads()} ${countUniqueLoads() === 1 ? 'assignment' : 'assignments'}`);
   setElementText(payPeriodSummary.totalEarnings, formatMoney(payPeriodRecord.totalEstimatedEarnings));
   setElementText(payPeriodSummary.completedCount, String(payPeriodRecord.completedLoadCount));
   setElementText(payPeriodSummary.rejectCount, String(payPeriodRecord.rejectCount));
@@ -4851,7 +4916,8 @@ function buildLoadRecord(values) {
     id: existingLoad?.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     savedAt: existingLoad?.savedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    ...values
+    ...values,
+    dispatcher: normalizeDispatcherName(values.dispatcher)
   });
 }
 
@@ -5504,7 +5570,7 @@ function downloadDailyEarningsSummary() {
   refreshAllDailyEarningsRecords();
   const headers = [
     'Date',
-    'Total loads hauled',
+    'Total assignments',
     'Completed load count',
     'Reject count',
     'Regular miles',
@@ -5911,7 +5977,9 @@ function printDailyReport() {
     ['Truck number', firstLoad.truckNumber || driverProfile.truckNumber || ''],
     ['Trailer number', firstLoad.trailerNumber || driverProfile.trailerNumber || ''],
     ['Work date', date],
-    ['Total loads hauled', record.loadRecordCount],
+    ['Completed loads', record.completedLoadCount],
+    ['Rejects', record.rejectCount],
+    ['Total assignments', record.completedLoadCount + record.rejectCount],
     ['Load earnings', formatMoney(record.completedLoadPay + record.rejectPay)],
     ['Wait-time earnings', formatMoney(record.totalWaitPay)],
     ['Trainer pay', formatMoney(record.trainerPay)],
@@ -6013,59 +6081,131 @@ function summarizeReportRange(startDate, endDate) {
   };
 }
 
-function summarizeAnalysisRecords(records, startDate = '', endDate = '') {
-  const uniqueRecords = getUniqueSavedLoads(records);
-  const completed = uniqueRecords.filter(isCompleted);
-  const rejects = uniqueRecords.filter(isReject);
-  const completeCycles = completed.filter((load) => isFiniteNumber(load.cycleTimeMinutes));
-  const dates = [...new Set(uniqueRecords.map((load) => load.loadDate).filter(Boolean))];
-  const days = dates.map((date) => getDailyEarningsSummary(date));
-  const exactDays = days.filter((day) => day.dutyTimeSource === 'exact');
-  const estimatedDays = days.filter((day) => day.dutyTimeSource === 'estimated');
-  const usableDutyMinutes = sum(days, 'usableDutyMinutes');
-  const completedPay = sum(completed, 'estimatedPay');
+function median(values) {
+  const usable = values.filter(isFiniteNumber).slice().sort((a, b) => a - b);
+  if (!usable.length) return null;
+  const middle = Math.floor(usable.length / 2);
+  return usable.length % 2 ? usable[middle] : (usable[middle - 1] + usable[middle]) / 2;
+}
+
+function summarizeLoadLevelRecords(records) {
+  const all = getUniqueSavedLoads(records);
+  const completed = all.filter(isCompleted);
+  const rejects = all.filter(isReject);
+  const validCycles = all.filter((load) => isFiniteNumber(load.cycleTimeMinutes) && load.cycleTimeMinutes > 0);
+  const completedWithCycles = completed.filter((load) => isFiniteNumber(load.cycleTimeMinutes));
+  const completedBasePay = sum(completed, 'estimatedPay');
   const rejectPay = sum(rejects, 'estimatedPay');
-  const dailyAddOnEarnings = sum(days, 'perDiemPay') + sum(days, 'sleeperBerthPay') + sum(days, 'trainerPay');
-  const totalEarnings = sum(uniqueRecords, 'estimatedEntryPay') + dailyAddOnEarnings;
-  const assignments = completed.length + rejects.length;
+  const waitPay = sum(all, 'waitPay');
+  const loadEntryEarnings = sum(all, 'estimatedEntryPay');
+  const validCycleEarnings = sum(validCycles, 'estimatedEntryPay');
   return {
-    start: startDate, end: endDate, records: uniqueRecords, daysRepresented: dates.length,
-    completedLoads: completed.length, rejects: rejects.length, totalAssignments: assignments,
-    completionRate: assignments ? completed.length / assignments * 100 : null,
-    totalLoadedMiles: sum(uniqueRecords, 'loadedMiles'), totalReroutedMiles: sum(uniqueRecords, 'reRoutedMiles'),
-    grossBarrels: sum(completed, 'grossBarrels'), pickupWaitMinutes: sum(uniqueRecords, 'paidPickupWaitMinutes'),
-    dropoffWaitMinutes: sum(uniqueRecords, 'paidDropoffWaitMinutes'), totalPaidWaitMinutes: sum(uniqueRecords, 'totalPaidWaitMinutes'),
-    totalCycleMinutes: sum(completeCycles, 'cycleTimeMinutes'), averageCycleMinutes: average(completeCycles, 'cycleTimeMinutes'),
-    averagePickupMinutes: average(completeCycles, 'pickupTimeMinutes'), averageTravelMinutes: average(completeCycles, 'travelTimeMinutes'),
-    averageDropoffMinutes: average(completeCycles, 'dropoffTimeMinutes'), loadsMissingTime: completed.length - completeCycles.length,
-    exactDutyMinutes: sum(exactDays, 'exactDutyMinutes'), estimatedSpanMinutes: sum(estimatedDays, 'estimatedTrackedSpanMinutes'),
-    exactDays: exactDays.length, estimatedDays: estimatedDays.length, usableDutyMinutes,
-    completedPay, rejectPay, waitPay: sum(uniqueRecords, 'waitPay'),
-    perDiemPay: sum(days, 'perDiemPay'), sleeperPay: sum(days, 'sleeperBerthPay'), trainerPay: sum(days, 'trainerPay'), totalEarnings,
-    averageCompletedLoadPay: completed.length ? completedPay / completed.length : null,
-    averageEarningsPerAssignment: assignments ? totalEarnings / assignments : null,
-    averageEarningsPerDay: dates.length ? totalEarnings / dates.length : null,
-    averagePaidWaitMinutes: uniqueRecords.length ? sum(uniqueRecords, 'totalPaidWaitMinutes') / uniqueRecords.length : null,
-    effectiveHourlyEarnings: usableDutyMinutes > 0 ? totalEarnings / (usableDutyMinutes / 60) : null,
-    completedLoadsPerHour: usableDutyMinutes > 0 ? completed.length / (usableDutyMinutes / 60) : null,
-    completeStateCount: uniqueRecords.filter((load) => load.pickupState && load.dropoffState).length,
-    dispatcherCount: uniqueRecords.filter((load) => load.dispatcher).length,
-    completeCycleCount: uniqueRecords.filter((load) => isFiniteNumber(load.cycleTimeMinutes)).length
+    records: all, completedLoads: completed.length, rejects: rejects.length, totalAssignments: completed.length + rejects.length,
+    completionRate: all.length ? completed.length / all.length * 100 : null,
+    loadedMiles: sum(all, 'loadedMiles'), reroutedMiles: sum(all, 'reRoutedMiles'), grossBarrels: sum(completed, 'grossBarrels'),
+    completedBasePay, rejectPay, waitPay, loadEntryEarnings,
+    pickupMinutes: sum(all, 'pickupTimeMinutes'), travelMinutes: sum(all, 'travelTimeMinutes'), dropoffMinutes: sum(all, 'dropoffTimeMinutes'),
+    cycleMinutes: sum(validCycles, 'cycleTimeMinutes'), paidPickupWaitMinutes: sum(all, 'paidPickupWaitMinutes'), paidDropoffWaitMinutes: sum(all, 'paidDropoffWaitMinutes'),
+    averageCycleMinutes: average(completedWithCycles, 'cycleTimeMinutes'), medianCycleMinutes: median(completedWithCycles.map((load) => load.cycleTimeMinutes)),
+    averageEarningsPerAssignment: all.length ? loadEntryEarnings / all.length : null,
+    averageBasePayPerCompletedLoad: completed.length ? completedBasePay / completed.length : null,
+    averageAllInCompletedEarnings: completed.length ? sum(completed, 'estimatedEntryPay') / completed.length : null,
+    averageAllInLoadEarnings: all.length ? loadEntryEarnings / all.length : null,
+    cycleHourEarnings: sum(validCycles, 'cycleTimeMinutes') > 0 ? validCycleEarnings / (sum(validCycles, 'cycleTimeMinutes') / 60) : null,
+    loadsMissingTime: all.length - validCycles.length
   };
 }
 
-function groupAnalysis(records, keySelector) {
+function groupLoadAnalysis(records, keySelector) {
   const groups = new Map();
   getUniqueSavedLoads(records).forEach((load) => {
     const key = keySelector(load) || 'Unknown';
     groups.set(key, [...(groups.get(key) || []), load]);
   });
-  return [...groups.entries()].map(([name, loads]) => ({ name, ...summarizeAnalysisRecords(loads) })).sort((a, b) => a.name.localeCompare(b.name));
+  return [...groups.entries()].map(([name, loads]) => ({ name, ...summarizeLoadLevelRecords(loads) })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function groupAnalysis(records, keySelector) {
+  return groupLoadAnalysis(records, keySelector);
+}
+
+function buildAnalysisDays(records) {
+  const byDate = new Map();
+  getUniqueSavedLoads(records).forEach((load) => {
+    if (load.loadDate) byDate.set(load.loadDate, [...(byDate.get(load.loadDate) || []), load]);
+  });
+  return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, loads]) => {
+    const summary = getDailyEarningsSummary(date, loads);
+    const names = new Map();
+    loads.map((load) => normalizeDispatcherName(load.dispatcher, loads)).filter(Boolean).forEach((name) => {
+      if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+    });
+    const dispatcher = names.size === 0 ? 'Unknown' : (names.size === 1 ? [...names.values()][0] : 'Mixed Dispatchers');
+    return { ...summary, dispatcher, loads, missingDispatcherLoads: loads.filter((load) => !String(load.dispatcher || '').trim()).length };
+  });
+}
+
+function summarizeDayRows(days, name = '') {
+  const completedLoads = sum(days, 'completedLoadCount');
+  const rejects = sum(days, 'rejectCount');
+  const assignments = completedLoads + rejects;
+  const exactDays = days.filter((day) => day.dutyTimeSource === 'exact');
+  const estimatedDays = days.filter((day) => day.dutyTimeSource === 'estimated' && day.timelineStatus !== 'review');
+  const missingDays = days.filter((day) => day.dutyTimeSource === 'missing');
+  const exactDutyMinutes = sum(exactDays, 'exactDutyMinutes');
+  const estimatedSpanMinutes = sum(estimatedDays, 'estimatedTrackedSpanMinutes');
+  const usableDutyMinutes = exactDutyMinutes + estimatedSpanMinutes;
+  const totalEarnings = sum(days, 'totalEstimatedDailyEarnings');
+  return {
+    name, days, workdays: days.length, completedLoads, rejects, totalAssignments: assignments,
+    completionRate: assignments ? completedLoads / assignments * 100 : null,
+    exactDays: exactDays.length, estimatedDays: estimatedDays.length, missingTimeDays: missingDays.length,
+    exactDutyMinutes, estimatedSpanMinutes, usableDutyMinutes,
+    completedBasePay: sum(days, 'completedLoadPay'), rejectPay: sum(days, 'rejectPay'), waitPay: sum(days, 'totalWaitPay'),
+    perDiemPay: sum(days, 'perDiemPay'), sleeperPay: sum(days, 'sleeperBerthPay'), trainerPay: sum(days, 'trainerPay'), totalEarnings,
+    averageEarningsPerWorkday: days.length ? totalEarnings / days.length : null,
+    effectiveHourlyEarnings: usableDutyMinutes > 0 ? totalEarnings / (usableDutyMinutes / 60) : null,
+    completedLoadsPerDutyHour: usableDutyMinutes > 0 ? completedLoads / (usableDutyMinutes / 60) : null,
+    averageCompletedLoadsPerWorkday: days.length ? completedLoads / days.length : null,
+    averageDutyHoursPerWorkday: days.length && usableDutyMinutes > 0 ? usableDutyMinutes / 60 / days.length : null
+  };
+}
+
+function buildDispatcherDayComparison(records) {
+  const groups = new Map();
+  buildAnalysisDays(records).forEach((day) => groups.set(day.dispatcher, [...(groups.get(day.dispatcher) || []), day]));
+  return [...groups.entries()].map(([name, days]) => summarizeDayRows(days, name)).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function summarizeAnalysisRecords(records, startDate = '', endDate = '') {
+  const all = getUniqueSavedLoads(records);
+  const loadLevel = summarizeLoadLevelRecords(all);
+  const days = buildAnalysisDays(all);
+  const dayTotals = summarizeDayRows(days, 'All days');
+  const exactDays = days.filter((day) => day.dutyTimeSource === 'exact');
+  const estimatedDays = days.filter((day) => day.dutyTimeSource === 'estimated');
+  const exactEarnings = sum(exactDays, 'totalEstimatedDailyEarnings');
+  const estimatedEarnings = sum(estimatedDays, 'totalEstimatedDailyEarnings');
+  return {
+    ...loadLevel, ...dayTotals, start: startDate, end: endDate, days,
+    exactHourlyEarnings: dayTotals.exactDutyMinutes > 0 ? exactEarnings / (dayTotals.exactDutyMinutes / 60) : null,
+    estimatedHourlyEarnings: dayTotals.estimatedSpanMinutes > 0 ? estimatedEarnings / (dayTotals.estimatedSpanMinutes / 60) : null,
+    mixedBasisHourlyEarnings: dayTotals.usableDutyMinutes > 0 ? (exactEarnings + estimatedEarnings) / (dayTotals.usableDutyMinutes / 60) : null,
+    dispatcherCount: all.filter((load) => String(load.dispatcher || '').trim()).length,
+    pickupStateCount: all.filter((load) => load.pickupState).length, dropoffStateCount: all.filter((load) => load.dropoffState).length,
+    completeStateCount: all.filter((load) => load.pickupState && load.dropoffState).length,
+    completeCycleCount: all.filter((load) => isFiniteNumber(load.cycleTimeMinutes)).length,
+    noUsableTimeDays: days.filter((day) => !isFiniteNumber(day.usableDutyMinutes)).length,
+    mixedDispatcherDays: days.filter((day) => day.dispatcher === 'Mixed Dispatchers').length,
+    timelineErrorDays: days.filter((day) => day.timelineStatus === 'review').length,
+    exactUtilizationDays: days.filter((day) => isFiniteNumber(day.activeLoadUtilization)).length,
+    activeLoadCycleMinutes: sum(days, 'activeLoadCycleMinutes'), nonLoadDutyMinutes: sum(days, 'nonLoadDutyMinutes')
+  };
 }
 
 function getFilteredAnalysisRecords(startDate, endDate) {
   return getLoadsForRange(startDate, endDate).filter((load) => (
-    (!reportControls.dispatcher?.value || (load.dispatcher || 'Unknown') === reportControls.dispatcher.value)
+    (!reportControls.dispatcher?.value || (normalizeDispatcherName(load.dispatcher, getLoadsForRange(startDate, endDate)) || 'Unknown') === reportControls.dispatcher.value)
     && (!reportControls.pickupState?.value || displayState(load.pickupState) === reportControls.pickupState.value)
     && (!reportControls.dropoffState?.value || displayState(load.dropoffState) === reportControls.dropoffState.value)
     && (!reportControls.stateRoute?.value || getStateRoute(load) === reportControls.stateRoute.value)
@@ -6073,9 +6213,13 @@ function getFilteredAnalysisRecords(startDate, endDate) {
   ));
 }
 
-function analysisTable(title, rows) {
+function loadAnalysisTable(title, rows) {
   if (!rows.length) return `<h4>${escapeHtml(title)}</h4><p class="helper-text">No matching records.</p>`;
-  return `<h4>${escapeHtml(title)}</h4><div class="table-scroll"><table><thead><tr><th>Group</th><th>Days</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Completion</th><th>Earnings</th><th>Avg/day</th><th>Avg completed pay</th><th>Avg cycle</th><th>Effective hourly</th><th>Loads/hour</th><th>Avg paid wait</th><th>Loaded miles</th><th>Missing time</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.daysRepresented}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMoney(row.totalEarnings)}</td><td>${formatMaybeMoney(row.averageEarningsPerDay)}</td><td>${formatMaybeMoney(row.averageCompletedLoadPay)}</td><td>${formatMaybeDuration(row.averageCycleMinutes)}</td><td>${formatMaybeMoney(row.effectiveHourlyEarnings)}</td><td>${formatMaybeNumber(row.completedLoadsPerHour)}</td><td>${formatMaybeDuration(row.averagePaidWaitMinutes)}</td><td>${formatMiles(row.totalLoadedMiles)}</td><td>${row.loadsMissingTime}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<h4>${escapeHtml(title)}</h4><div class="table-scroll"><table><thead><tr><th>Group</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Completion</th><th>Loaded miles</th><th>Rerouted</th><th>Base pay</th><th>Reject pay</th><th>Wait pay</th><th>Load-entry earnings</th><th>Avg cycle</th><th>Median cycle</th><th>Avg base/completed</th><th>Avg all-in/completed</th><th>Avg/assignment</th><th>Cycle-hour earnings</th><th>Missing time</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMiles(row.loadedMiles)}</td><td>${formatMiles(row.reroutedMiles)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.rejectPay)}</td><td>${formatMoney(row.waitPay)}</td><td>${formatMoney(row.loadEntryEarnings)}</td><td>${formatMaybeDuration(row.averageCycleMinutes)}</td><td>${formatMaybeDuration(row.medianCycleMinutes)}</td><td>${formatMaybeMoney(row.averageBasePayPerCompletedLoad)}</td><td>${formatMaybeMoney(row.averageAllInCompletedEarnings)}</td><td>${formatMaybeMoney(row.averageEarningsPerAssignment)}</td><td>${formatMaybeMoney(row.cycleHourEarnings)}</td><td>${row.loadsMissingTime}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function dispatcherDayTable(rows) {
+  return `<h4>Dispatcher Day Comparison</h4><div class="table-scroll"><table><thead><tr><th>Dispatcher</th><th>Workdays</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Exact days</th><th>Estimated days</th><th>Missing days</th><th>Exact duty</th><th>Estimated span</th><th>Usable duty</th><th>Base pay</th><th>Reject pay</th><th>Wait pay</th><th>Per diem</th><th>Sleeper</th><th>Trainer</th><th>Total earnings</th><th>Avg/day</th><th>Effective hourly</th><th>Loads/hour</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.workdays}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${row.exactDays}</td><td>${row.estimatedDays}</td><td>${row.missingTimeDays}</td><td>${formatDuration(row.exactDutyMinutes)}</td><td>${formatDuration(row.estimatedSpanMinutes)}</td><td>${formatDuration(row.usableDutyMinutes)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.rejectPay)}</td><td>${formatMoney(row.waitPay)}</td><td>${formatMoney(row.perDiemPay)}</td><td>${formatMoney(row.sleeperPay)}</td><td>${formatMoney(row.trainerPay)}</td><td>${formatMoney(row.totalEarnings)}</td><td>${formatMaybeMoney(row.averageEarningsPerWorkday)}</td><td>${formatMaybeMoney(row.effectiveHourlyEarnings)}</td><td>${formatMaybeNumber(row.completedLoadsPerDutyHour)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function formatPercentValue(value) { return isFiniteNumber(value) ? `${value.toFixed(1)}%` : 'Not available'; }
@@ -6139,51 +6283,130 @@ function setFilterOptions(select, values) {
 function renderDispatchAnalysis(startDate, endDate) {
   if (!reportControls.analysisContent) return;
   const rangeRecords = getLoadsForRange(startDate, endDate);
-  setFilterOptions(reportControls.dispatcher, rangeRecords.map((load) => load.dispatcher || 'Unknown'));
+  setFilterOptions(reportControls.dispatcher, rangeRecords.map((load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown'));
   setFilterOptions(reportControls.pickupState, rangeRecords.map((load) => displayState(load.pickupState)));
   setFilterOptions(reportControls.dropoffState, rangeRecords.map((load) => displayState(load.dropoffState)));
   setFilterOptions(reportControls.stateRoute, rangeRecords.map(getStateRoute));
   setFilterOptions(reportControls.exactRoute, rangeRecords.map(formatRoute));
   const records = getFilteredAnalysisRecords(startDate, endDate);
-  const result = summarizeAnalysisRecords(records, startDate, endDate);
-  const metrics = [
+  const result = summarizeAnalysisRecords(rangeRecords, startDate, endDate);
+  const loadResult = summarizeLoadLevelRecords(records);
+  const dayRows = buildDispatcherDayComparison(rangeRecords);
+  const dispatcherLoadRows = groupLoadAnalysis(records, (load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown');
+  const pickupRows = groupLoadAnalysis(records, (load) => displayState(load.pickupState));
+  const dropoffRows = groupLoadAnalysis(records, (load) => displayState(load.dropoffState));
+  const stateRouteRows = groupLoadAnalysis(records, getStateRoute);
+  const exactRouteRows = groupLoadAnalysis(records, formatRoute);
+  const reliability = getAnalysisReliability(result);
+  const reconciliation = reconcileAnalysis(result, dayRows, dispatcherLoadRows, pickupRows, dropoffRows, stateRouteRows, exactRouteRows);
+  const indicators = getWorkdayIndicators(result.days);
+  const overallMetrics = [
     ['Completed loads', result.completedLoads], ['Rejects', result.rejects], ['Total assignments', result.totalAssignments],
-    ['Completion rate', formatPercentValue(result.completionRate)], ['Total loaded miles', formatMiles(result.totalLoadedMiles)],
-    ['Total rerouted miles', formatMiles(result.totalReroutedMiles)], ['Gross barrels (completed)', formatBarrels(result.grossBarrels)],
-    ['Total paid loading wait', formatDuration(result.pickupWaitMinutes)], ['Total paid offloading wait', formatDuration(result.dropoffWaitMinutes)],
-    ['Total paid wait', formatDuration(result.totalPaidWaitMinutes)], ['Total load-cycle time', formatDuration(result.totalCycleMinutes)],
-    ['Average load-cycle time', formatMaybeDuration(result.averageCycleMinutes)], ['Average pickup-site time', formatMaybeDuration(result.averagePickupMinutes)],
-    ['Average travel time', formatMaybeDuration(result.averageTravelMinutes)], ['Average drop-off-site time', formatMaybeDuration(result.averageDropoffMinutes)],
-    ['Exact total duty time', formatMaybeDuration(result.exactDays ? result.exactDutyMinutes : null)],
-    ['Estimated tracked work span', formatMaybeDuration(result.estimatedDays ? result.estimatedSpanMinutes : null)],
-    ['Days using exact duty time', result.exactDays], ['Days using estimated spans', result.estimatedDays], ['Loads missing complete time', result.loadsMissingTime],
-    ['Completed-load pay', formatMoney(result.completedPay)], ['Reject pay', formatMoney(result.rejectPay)], ['Wait pay', formatMoney(result.waitPay)],
-    ['Per diem', formatMoney(result.perDiemPay)], ['Sleeper pay', formatMoney(result.sleeperPay)], ['Trainer pay', formatMoney(result.trainerPay)],
-    ['Total estimated earnings', formatMoney(result.totalEarnings)], ['Average completed-load pay', formatMaybeMoney(result.averageCompletedLoadPay)],
-    ['Average earnings per assignment', formatMaybeMoney(result.averageEarningsPerAssignment)], ['Effective hourly earnings', formatMaybeMoney(result.effectiveHourlyEarnings)],
-    ['Completed loads per tracked hour', formatMaybeNumber(result.completedLoadsPerHour)]
+    ['Completion rate', formatPercentValue(result.completionRate)], ['Completed-load base pay', formatMoney(result.completedBasePay)],
+    ['Reject pay', formatMoney(result.rejectPay)], ['Wait pay', formatMoney(result.waitPay)], ['Per diem', formatMoney(result.perDiemPay)],
+    ['Sleeper pay', formatMoney(result.sleeperPay)], ['Trainer pay', formatMoney(result.trainerPay)], ['Total estimated earnings', formatMoney(result.totalEarnings)]
+  ];
+  const timeMetrics = [
+    ['Exact-duty days', result.exactDays], ['Estimated-span days', result.estimatedDays], ['Missing-time days', result.missingTimeDays],
+    ['Exact duty time', formatMaybeDuration(result.exactDays ? result.exactDutyMinutes : null)], ['Estimated tracked work span', formatMaybeDuration(result.estimatedDays ? result.estimatedSpanMinutes : null)],
+    ['Combined usable duty time', formatMaybeDuration(result.usableDutyMinutes || null)],
+    ['Effective hourly earnings — exact-duty days', formatMaybeMoney(result.exactHourlyEarnings)],
+    ['Effective hourly earnings — estimated-span days', formatMaybeMoney(result.estimatedHourlyEarnings)],
+    ['Effective hourly earnings — combined mixed basis', formatMaybeMoney(result.mixedBasisHourlyEarnings)],
+    ['Days with exact utilization data', result.exactUtilizationDays], ['Active load-cycle time', formatMaybeDuration(result.activeLoadCycleMinutes || null)],
+    ['Non-load duty time', formatMaybeDuration(result.nonLoadDutyMinutes || null)],
+    ['Active-load utilization', result.exactDutyMinutes > 0 && result.exactUtilizationDays ? formatPercentValue(result.activeLoadCycleMinutes / result.exactDutyMinutes * 100) : 'Not enough time data'],
+    ['Days missing exact shift time', result.days.length - result.exactDays], ['Days with timeline errors', result.timelineErrorDays]
   ];
   reportControls.analysisContent.innerHTML = `
-    <div class="review-grid analysis-summary">${metrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
-    ${analysisTable('Dispatcher comparison', groupAnalysis(records, (load) => load.dispatcher || 'Unknown'))}
-    ${analysisTable('Pickup state comparison', groupAnalysis(records, (load) => displayState(load.pickupState)))}
-    ${analysisTable('Drop-off state comparison', groupAnalysis(records, (load) => displayState(load.dropoffState)))}
-    ${analysisTable('State route comparison', groupAnalysis(records, getStateRoute))}
-    ${analysisTable('Exact route comparison', groupAnalysis(records, formatRoute))}
-    <h4>Underlying load references</h4><div class="table-scroll"><table><thead><tr><th>Date</th><th>Load</th><th>Ticket</th><th>BOL</th><th>Jotform</th><th>Dispatcher</th><th>Route</th><th>Status</th><th>Earnings</th><th>Cycle time</th></tr></thead><tbody>${records.map((load) => `<tr><td>${escapeHtml(load.loadDate)}</td><td>${escapeHtml(load.loadNumber || '-')}</td><td>${escapeHtml(load.ticketNumber || '-')}</td><td>${escapeHtml(load.bolNumber || '-')}</td><td>${escapeHtml(load.jotformConfirmationNumber || '-')}</td><td>${escapeHtml(load.dispatcher || 'Unknown')}</td><td>${escapeHtml(formatRoute(load))}</td><td>${escapeHtml(load.loadStatus)}</td><td>${escapeHtml(formatMoney(load.estimatedEntryPay))}</td><td>${escapeHtml(formatMaybeDuration(load.cycleTimeMinutes))}</td></tr>`).join('')}</tbody></table></div>
-    <h4>Data completeness</h4><div class="review-grid">${[
-      ['Loads in range', records.length], ['Loads with complete state information', result.completeStateCount],
-      ['Loads with dispatcher information', result.dispatcherCount], ['Loads with complete cycle-time information', result.completeCycleCount],
-      ['Days with exact shift times', result.exactDays], ['Days using estimated tracked spans', result.estimatedDays]
+    <h4>Overall Range Summary</h4><div class="review-grid analysis-summary">${overallMetrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
+    <h4>Time Basis Summary</h4><div class="review-grid">${timeMetrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
+    ${result.timelineErrorDays ? `<p class="validation-summary show warning">${escapeHtml(result.days.filter((day) => day.timelineStatus === 'review').map((day) => `${day.date}: Timeline needs review`).join(' · '))}</p>` : ''}
+    ${dispatcherDayTable(dayRows)}
+    ${loadAnalysisTable('Dispatcher Load Comparison', dispatcherLoadRows)}
+    ${loadAnalysisTable('Pickup State Comparison', pickupRows)}
+    ${loadAnalysisTable('Drop-off State Comparison', dropoffRows)}
+    ${loadAnalysisTable('State Route Comparison', stateRouteRows)}
+    ${loadAnalysisTable('Exact Route Comparison', exactRouteRows)}
+    <details class="workday-indicators"><summary><strong>Workday Indicators</strong></summary><div class="review-grid">${Object.entries(indicators).map(([label, value]) => reportMetric(label, String(value))).join('')}</div></details>
+    <h4>Data Completeness</h4><div class="review-grid">${[
+      ['Total assignments in range', result.totalAssignments], ['Completed loads', result.completedLoads], ['Rejects', result.rejects],
+      ['Loads with dispatcher', result.dispatcherCount], ['Loads with pickup state', result.pickupStateCount], ['Loads with drop-off state', result.dropoffStateCount],
+      ['Loads with both states', result.completeStateCount], ['Loads with complete cycle times', result.completeCycleCount], ['Loads missing cycle times', result.totalAssignments - result.completeCycleCount],
+      ['Days with exact shift times', result.exactDays], ['Days with estimated tracked spans', result.estimatedDays], ['Days with no usable time', result.noUsableTimeDays],
+      ['Days with mixed dispatchers', result.mixedDispatcherDays], ['Days with timeline errors', result.timelineErrorDays],
+      ['Report reliability', `${reliability.label} — dispatcher ${reliability.dispatcherPercent.toFixed(1)}%, states ${reliability.statePercent.toFixed(1)}%, cycle time ${reliability.cyclePercent.toFixed(1)}%, exact shifts ${reliability.exactPercent.toFixed(1)}%`]
     ].map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
-    <p class="report-disclosure">Results depend on the accuracy and completeness of entered records. Missing time values are excluded from time-based averages. Estimated tracked work span is not the same as exact duty time. Estimated earnings are for personal recordkeeping and may not match official payroll. Dispatcher comparisons show outcomes and do not establish intent.</p>`;
+    <h4>Underlying Load References</h4><div class="table-scroll"><table><thead><tr><th>Date</th><th>Load</th><th>Ticket</th><th>BOL</th><th>Jotform</th><th>Dispatcher</th><th>Pickup</th><th>Drop-off</th><th>Status</th><th>Base pay</th><th>Wait pay</th><th>Load-entry earnings</th><th>Cycle time</th></tr></thead><tbody>${records.map((load) => `<tr><td>${escapeHtml(load.loadDate)}</td><td>${escapeHtml(load.loadNumber || '-')}</td><td>${escapeHtml(load.ticketNumber || '-')}</td><td>${escapeHtml(load.bolNumber || '-')}</td><td>${escapeHtml(load.jotformConfirmationNumber || '-')}</td><td>${escapeHtml(normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown')}</td><td>${escapeHtml(`${load.pickupLocation || 'Pickup'}, ${displayState(load.pickupState)}`)}</td><td>${escapeHtml(`${load.dropoffLocation || 'Drop-off'}, ${displayState(load.dropoffState)}`)}</td><td>${escapeHtml(load.loadStatus)}</td><td>${escapeHtml(formatMoney(load.estimatedPay))}</td><td>${escapeHtml(formatMoney(load.waitPay))}</td><td>${escapeHtml(formatMoney(load.estimatedEntryPay))}</td><td>${escapeHtml(formatMaybeDuration(load.cycleTimeMinutes))}</td></tr>`).join('')}</tbody></table></div>
+    <p class="${reconciliation.ok ? 'report-disclosure' : 'validation-summary show warning'}">${reconciliation.ok ? 'Analysis calculations reconciled.' : 'Analysis calculation needs review'}</p>
+    <p class="report-disclosure">Combined mixed-basis hourly earnings includes both entered exact duty time and estimated tracked work spans. Load, route, and state comparisons exclude daily add-ons and full-day duty time. Results depend on entered data; missing time is excluded. Estimated earnings may not match official payroll. Dispatcher comparisons show measurable outcomes and do not establish intent.</p>`;
+}
+
+function getAnalysisReliability(result) {
+  const assignmentBase = result.totalAssignments || 1;
+  const dayBase = result.days.length || 1;
+  const dispatcherPercent = result.dispatcherCount / assignmentBase * 100;
+  const statePercent = result.completeStateCount / assignmentBase * 100;
+  const cyclePercent = result.completeCycleCount / assignmentBase * 100;
+  const exactPercent = result.exactDays / dayBase * 100;
+  const label = dispatcherPercent >= 90 && statePercent >= 90 && cyclePercent >= 90 && exactPercent >= 90 ? 'High completeness'
+    : (dispatcherPercent >= 70 && statePercent >= 70 && cyclePercent >= 70 && exactPercent >= 50 ? 'Moderate completeness' : 'Limited completeness');
+  return { label, dispatcherPercent, statePercent, cyclePercent, exactPercent };
+}
+
+function getWorkdayIndicators(days) {
+  const exact = days.filter((day) => day.dutyTimeSource === 'exact' && day.exactDutyMinutes > 0);
+  const averageCompleted = days.length ? sum(days, 'completedLoadCount') / days.length : 0;
+  const hourlyDays = exact.map((day) => ({ ...day, hourly: day.totalEstimatedDailyEarnings / (day.exactDutyMinutes / 60) }));
+  const averageHourly = hourlyDays.length ? hourlyDays.reduce((total, day) => total + day.hourly, 0) / hourlyDays.length : null;
+  const by = (items, selector, direction) => items.slice().sort((a, b) => direction * (selector(a) - selector(b)))[0];
+  const label = (day, value) => day ? `${day.date} (${value(day)})` : 'Not enough time data';
+  return {
+    'Days over 12 duty hours': exact.filter((day) => day.exactDutyMinutes > 720).length,
+    'Days over 14 duty hours': exact.filter((day) => day.exactDutyMinutes > 840).length,
+    'Days with fewer completed loads than range average': days.filter((day) => day.completedLoadCount < averageCompleted).length,
+    'Days below range average exact hourly earnings': isFiniteNumber(averageHourly) ? hourlyDays.filter((day) => day.hourly < averageHourly).length : 0,
+    'Longest exact duty day': label(by(exact, (day) => day.exactDutyMinutes, -1), (day) => formatDuration(day.exactDutyMinutes)),
+    'Shortest exact duty day': label(by(exact, (day) => day.exactDutyMinutes, 1), (day) => formatDuration(day.exactDutyMinutes)),
+    'Highest completed-load day': label(by(days, (day) => day.completedLoadCount, -1), (day) => `${day.completedLoadCount} completed`),
+    'Lowest completed-load day': label(by(days, (day) => day.completedLoadCount, 1), (day) => `${day.completedLoadCount} completed`),
+    'Highest exact-duty hourly earnings day': label(by(hourlyDays, (day) => day.hourly, -1), (day) => formatMoney(day.hourly)),
+    'Lowest exact-duty hourly earnings day': label(by(hourlyDays, (day) => day.hourly, 1), (day) => formatMoney(day.hourly))
+  };
+}
+
+function reconcileAnalysis(result, dayRows, ...loadGroups) {
+  const close = (left, right) => Math.abs(left - right) < 0.01;
+  const checks = [
+    result.completedLoads + result.rejects === result.totalAssignments,
+    close(result.completedBasePay + result.rejectPay + result.waitPay + result.perDiemPay + result.sleeperPay + result.trainerPay, result.totalEarnings),
+    close(sum(dayRows, 'totalEarnings'), result.totalEarnings), close(sum(dayRows, 'usableDutyMinutes'), result.usableDutyMinutes),
+    new Set(dayRows.flatMap((row) => row.days.map((day) => day.date))).size === result.days.length,
+    loadGroups.every((groups) => groups.reduce((total, group) => total + group.totalAssignments, 0) === result.totalAssignments)
+  ];
+  if (checks.some((check) => !check)) console.error('Analysis calculation needs review', { checks });
+  return { ok: checks.every(Boolean), checks };
 }
 
 function downloadDispatchAnalysis() {
   const range = getReportRange();
+  const rangeRecords = getLoadsForRange(range.start, range.end);
   const records = getFilteredAnalysisRecords(range.start, range.end);
-  const headers = ['Date','Load number','Ticket','BOL','Jotform','Dispatcher','Route','Pickup state','Drop-off state','Status','Earnings','Cycle time'];
-  const rows = records.map((load) => [load.loadDate, load.loadNumber, load.ticketNumber, load.bolNumber, load.jotformConfirmationNumber, load.dispatcher || 'Unknown', formatRoute(load), displayState(load.pickupState), displayState(load.dropoffState), load.loadStatus, formatCsvNumber(load.estimatedEntryPay), isFiniteNumber(load.cycleTimeMinutes) ? load.cycleTimeMinutes : 'Not enough time data']);
+  const result = summarizeAnalysisRecords(rangeRecords, range.start, range.end);
+  const headers = ['Section','Group','Metric','Value','Date','Load number','Ticket','BOL','Jotform','Dispatcher','Pickup location','Pickup state','Drop-off location','Drop-off state','Status','Base pay','Wait pay','Load-entry earnings','Cycle time'];
+  const metricRows = (section, values) => Object.entries(values).map(([metric, value]) => [section,'',metric,value]);
+  const comparisonRows = (section, groups) => groups.map((row) => [section,row.name,'Total assignments',row.totalAssignments,'','','','','','','','','','','',formatCsvNumber(row.completedBasePay),formatCsvNumber(row.waitPay),formatCsvNumber(row.loadEntryEarnings),formatCsvNumber(row.averageCycleMinutes)]);
+  const rows = [
+    ...metricRows('Overall Summary', { 'Report start': range.start, 'Report end': range.end, 'Completed loads': result.completedLoads, Rejects: result.rejects, 'Total assignments': result.totalAssignments, 'Total estimated earnings': formatCsvNumber(result.totalEarnings) }),
+    ...metricRows('Time Basis Summary', { 'Exact duty minutes': result.exactDutyMinutes, 'Estimated span minutes': result.estimatedSpanMinutes, 'Mixed-basis hourly earnings': formatCsvNumber(result.mixedBasisHourlyEarnings) }),
+    ...buildDispatcherDayComparison(rangeRecords).map((row) => ['Dispatcher Day Comparison',row.name,'Workdays',row.workdays,'','','','','','','','','','','',formatCsvNumber(row.completedBasePay),formatCsvNumber(row.waitPay),formatCsvNumber(row.totalEarnings),row.usableDutyMinutes]),
+    ...comparisonRows('Dispatcher Load Comparison', groupLoadAnalysis(records, (load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown')),
+    ...comparisonRows('Pickup State Comparison', groupLoadAnalysis(records, (load) => displayState(load.pickupState))),
+    ...comparisonRows('Drop-off State Comparison', groupLoadAnalysis(records, (load) => displayState(load.dropoffState))),
+    ...comparisonRows('State Route Comparison', groupLoadAnalysis(records, getStateRoute)), ...comparisonRows('Exact Route Comparison', groupLoadAnalysis(records, formatRoute)),
+    ...metricRows('Workday Indicators', getWorkdayIndicators(result.days)), ...metricRows('Data Completeness', { Reliability: getAnalysisReliability(result).label, 'Timeline errors': result.timelineErrorDays }),
+    ...records.map((load) => ['Underlying Loads','','','',load.loadDate,load.loadNumber,load.ticketNumber,load.bolNumber,load.jotformConfirmationNumber,normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown',load.pickupLocation,displayState(load.pickupState),load.dropoffLocation,displayState(load.dropoffState),load.loadStatus,formatCsvNumber(load.estimatedPay),formatCsvNumber(load.waitPay),formatCsvNumber(load.estimatedEntryPay),isFiniteNumber(load.cycleTimeMinutes) ? load.cycleTimeMinutes : 'Not enough time data'])
+  ];
   downloadCsv(`dispatch-earnings-analysis-${range.start}-${range.end}.csv`, headers, rows);
 }
 
@@ -6248,7 +6471,13 @@ function initializeAnalysisInputs() {
     if (select) select.innerHTML = stateOptions;
   });
   const dispatcherList = document.getElementById('dispatcher-options');
-  if (dispatcherList) dispatcherList.innerHTML = [...new Set(getUniqueSavedLoads().map((load) => load.dispatcher).filter(Boolean))].sort().map((name) => `<option value="${escapeHtml(name)}"></option>`).join('');
+  if (dispatcherList) {
+    const names = new Map();
+    getUniqueSavedLoads().map((load) => String(load.dispatcher || '').trim()).filter(Boolean).forEach((name) => {
+      if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+    });
+    dispatcherList.innerHTML = [...names.values()].sort().map((name) => `<option value="${escapeHtml(name)}"></option>`).join('');
+  }
 }
 
 form?.addEventListener('submit', saveLoad);

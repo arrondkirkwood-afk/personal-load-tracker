@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.4.4">
+  <link rel="manifest" href="manifest.json?v=1.4.5">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.4.4">
+  <link rel="stylesheet" href="style.css?v=1.4.5">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.4.4</strong></span>
+          <span>Version <strong id="app-version">1.4.5</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -71,7 +71,7 @@
                 <p class="section-kicker">Daily Summary</p>
                 <h2 id="daily-summary-title">Selected date</h2>
               </div>
-              <span class="status-pill"><strong id="loads-hauled-selected-date">0</strong>&nbsp;loads</span>
+              <span class="status-pill"><strong id="loads-hauled-selected-date">0</strong>&nbsp;completed</span>
             </div>
             <div class="metric-strip">
               <article><span>Gross barrels</span><strong id="daily-gross-barrels">0.00 bbl</strong></article>
@@ -84,10 +84,10 @@
           <section class="panel summary-card" aria-labelledby="pay-period-summary-title">
             <div class="section-heading compact">
               <div>
-                <p class="section-kicker">Pay Period</p>
-                <h2 id="pay-period-summary-title">Current range</h2>
+                <p class="section-kicker">Pay Period Containing Selected Date</p>
+                <h2 id="pay-period-summary-title">Selected-date pay period</h2>
               </div>
-              <span class="status-pill"><strong id="loads-hauled-pay-period">0</strong>&nbsp;loads</span>
+              <span class="status-pill"><strong id="loads-hauled-pay-period">0</strong>&nbsp;completed</span>
             </div>
             <div class="period-range">
               <label for="pay-period-start">
@@ -112,7 +112,7 @@
             </div>
           </section>
           <section class="panel summary-card" aria-labelledby="month-summary-title">
-            <div class="section-heading compact"><div><p class="section-kicker">Current Month</p><h2 id="month-summary-title">Month performance</h2></div></div>
+            <div class="section-heading compact"><div><p class="section-kicker">Month Containing Selected Date</p><h2 id="month-summary-title">Selected-date month</h2></div></div>
             <div class="metric-strip tight">
               <article><span>Completed loads</span><strong id="month-completed-count">0</strong></article>
               <article><span>Rejects</span><strong id="month-reject-count">0</strong></article>
@@ -530,9 +530,9 @@
               <span>Report range</span>
               <select id="report-range-mode">
                 <option value="selected-date">Selected date</option>
-                <option value="current-pay-period">Current pay period</option>
+                <option value="current-pay-period">Pay period containing selected date</option>
                 <option value="previous-pay-period">Previous pay period</option>
-                <option value="current-month">Current month</option>
+                <option value="current-month">Month containing selected date</option>
                 <option value="previous-month">Previous month</option>
                 <option value="custom">Custom range</option>
               </select>
@@ -715,7 +715,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.4.4</strong>
+                <span>Application version</span><strong id="settings-app-version">1.4.5</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -724,9 +724,9 @@
               <details class="diagnostics-details">
                 <summary>Current Data Diagnostics</summary>
                 <div class="settings-list diagnostics-list">
-                  <span>Total loads hauled</span><strong id="total-loads-hauled">0</strong>
+                  <span>All-time completed loads</span><strong id="total-loads-hauled">0</strong>
                   <span>Current work date</span><strong id="current-work-date">-</strong>
-                  <span>Loads hauled this month</span><strong id="loads-hauled-month">0</strong>
+                  <span>Completed loads in selected month</span><strong id="loads-hauled-month">0</strong>
                   <span>Completed loads</span><strong id="daily-completed-loads">0</strong>
                   <span>Rejects</span><strong id="daily-rejects">0</strong>
                   <span>Total loaded miles</span><strong id="daily-loaded-miles">0.0 mi</strong>
@@ -840,10 +840,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.4.4&updated=' + Date.now());
+            window.location.replace('index.html?v=1.4.5&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.4.4&updated=' + Date.now());
+            window.location.replace('index.html?v=1.4.5&updated=' + Date.now());
           });
       }
 
@@ -879,6 +879,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.4.4"></script>
+  <script src="script.js?v=1.4.5"></script>
 </body>
 </html>

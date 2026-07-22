@@ -509,6 +509,95 @@ assert.strictEqual(analysis.totalAssignments, 2, 'rejects remain included in tot
 assert.ok(analysis.rejectPay > 0, 'reject pay remains included');
 assert.strictEqual(context.groupAnalysis([simulatedCloudLoad], (load) => load.dispatcher)[0].name, 'Morgan', 'dispatcher grouping is correct');
 assert.strictEqual(context.groupAnalysis([simulatedCloudLoad], context.getStateRoute)[0].name, 'LA → LA', 'state-route grouping is correct');
+
+function analysisLoad(overrides = {}) {
+  return context.normalizeSavedLoad({
+    id: overrides.id || `analysis-${Math.random()}`,
+    loadDate: '2026-08-01', loadStatus: 'Completed Load', loadedMiles: 10,
+    arrivedPickupTime: '08:00', loadedTime: '09:00', arrivedDropoffTime: '10:00', completedTime: '11:00',
+    ...overrides
+  });
+}
+
+const midnightTwo = [
+  analysisLoad({ id: 'midnight-1', loadNumber: '1', arrivedPickupTime: '22:00', completedTime: '23:30' }),
+  analysisLoad({ id: 'midnight-2', loadNumber: '2', arrivedPickupTime: '00:30', completedTime: '02:00' })
+];
+assert.strictEqual(context.normalizeDailyTimeline(midnightTwo).spanMinutes, 240, 'two loads crossing midnight produce a four-hour span');
+assert.strictEqual(context.normalizeDailyTimeline(midnightTwo.slice().reverse()).spanMinutes, 240, 'out-of-order storage uses numeric load order');
+const midnightThree = [...midnightTwo, analysisLoad({ id: 'midnight-3', loadNumber: '3', arrivedPickupTime: '02:30', completedTime: '04:00' })];
+assert.strictEqual(context.normalizeDailyTimeline(midnightThree).spanMinutes, 360, 'three loads crossing midnight normalize continuously');
+assert.strictEqual(context.normalizeDailyTimeline([analysisLoad({ id: 'single-cross', arrivedPickupTime: '23:00', completedTime: '01:00' })]).spanMinutes, 120, 'one load crossing midnight remains correct');
+assert.strictEqual(context.normalizeDailyTimeline([analysisLoad({ id: 'missing-pickup', arrivedPickupTime: '', completedTime: '01:00' })]).spanMinutes, null, 'missing pickup does not become zero');
+assert.strictEqual(context.normalizeDailyTimeline([analysisLoad({ id: 'missing-completion', arrivedPickupTime: '23:00', completedTime: '' })]).spanMinutes, null, 'missing completion does not become zero');
+const overlapping = [
+  analysisLoad({ id: 'overlap-1', loadNumber: '1', arrivedPickupTime: '10:00', completedTime: '12:00' }),
+  analysisLoad({ id: 'overlap-2', loadNumber: '2', arrivedPickupTime: '11:00', completedTime: '13:00' })
+];
+assert.strictEqual(context.normalizeDailyTimeline(overlapping).status, 'review', 'overlapping sequence produces Timeline needs review');
+const fallbackOrder = [
+  analysisLoad({ id: 'fallback-2', loadNumber: '', savedAt: '2026-08-01T12:00:00Z', arrivedPickupTime: '12:00', completedTime: '13:00' }),
+  analysisLoad({ id: 'fallback-1', loadNumber: '', savedAt: '2026-08-01T08:00:00Z', arrivedPickupTime: '08:00', completedTime: '09:00' })
+];
+assert.strictEqual(context.normalizeDailyTimeline(fallbackOrder).spanMinutes, 300, 'savedAt ordering is the fallback');
+
+setField('daily-date', '2026-08-01');
+context.applyDailyAddOnsToControls();
+setChecked('per-diem-checkbox', true);
+setChecked('trainer-pay-checkbox', true);
+setChecked('sleeper-berth-checkbox', true);
+setField('shift-start-time', '08:00');
+setField('shift-end-time', '20:00');
+context.saveDailyAddOnFromControls();
+const oneDispatcherDay = [analysisLoad({ id: 'day-a-1', dispatcher: 'Brandon', loadNumber: '1' }), analysisLoad({ id: 'day-a-2', dispatcher: 'brandon', loadNumber: '2', arrivedPickupTime: '12:00', completedTime: '15:00' })];
+const oneDispatcherRows = context.buildDispatcherDayComparison(oneDispatcherDay);
+assert.strictEqual(oneDispatcherRows.length, 1, 'one dispatcher creates one dispatcher-day group');
+assert.strictEqual(oneDispatcherRows[0].name, 'Brandon', 'dispatcher spelling is reused case-insensitively');
+assert.strictEqual(oneDispatcherRows[0].workdays, 1, 'a date is attributed once');
+assert.strictEqual(oneDispatcherRows[0].perDiemPay, 52, 'per diem is attributed once per dispatcher day');
+assert.strictEqual(oneDispatcherRows[0].trainerPay, 55, 'trainer pay is attributed once per dispatcher day');
+assert.strictEqual(oneDispatcherRows[0].sleeperPay, 65, 'sleeper pay is attributed once per dispatcher day');
+const mixedDay = [oneDispatcherDay[0], analysisLoad({ id: 'day-b-1', dispatcher: 'Taylor', loadNumber: '2', arrivedPickupTime: '12:00', completedTime: '15:00' })];
+const mixedRows = context.buildDispatcherDayComparison(mixedDay);
+assert.strictEqual(mixedRows.length, 1, 'two dispatchers on one date create one day group');
+assert.strictEqual(mixedRows[0].name, 'Mixed Dispatchers', 'mixed dispatcher day is labeled correctly');
+assert.strictEqual(mixedRows[0].exactDutyMinutes, 720, 'mixed dispatcher day does not duplicate duty time');
+assert.strictEqual(mixedRows[0].perDiemPay, 52, 'mixed dispatcher day does not duplicate per diem');
+assert.strictEqual(context.buildDispatcherDayComparison([analysisLoad({ id: 'unknown-day', dispatcher: '' })])[0].name, 'Unknown', 'unknown dispatcher remains separate');
+
+const loadOnly = context.summarizeLoadLevelRecords(mixedDay);
+assert.strictEqual(loadOnly.loadEntryEarnings, mixedDay.reduce((total, load) => total + load.estimatedEntryPay, 0), 'load comparison uses load-entry earnings only');
+assert.ok(!Object.hasOwn(loadOnly, 'perDiemPay'), 'load comparison excludes per diem');
+assert.ok(!Object.hasOwn(loadOnly, 'exactDutyMinutes'), 'load comparison excludes full-day duty time');
+assert.strictEqual(loadOnly.averageBasePayPerCompletedLoad, loadOnly.completedBasePay / loadOnly.completedLoads, 'average base pay excludes wait pay');
+assert.strictEqual(loadOnly.averageAllInCompletedEarnings, loadOnly.loadEntryEarnings / loadOnly.completedLoads, 'average all-in completed earnings includes wait pay');
+assert.ok(isFinite(loadOnly.cycleHourEarnings), 'cycle-hour earnings use valid load cycles');
+assert.strictEqual(context.groupLoadAnalysis(mixedDay, context.getStateRoute).reduce((total, row) => total + row.totalAssignments, 0), mixedDay.length, 'each load appears once in route grouping');
+
+const exactDaySummary = context.getDailyEarningsSummary('2026-08-01', oneDispatcherDay);
+assert.strictEqual(exactDaySummary.dutyTimeSource, 'exact', 'exact shift time takes priority over estimated time');
+assert.ok(context.isFiniteNumber(exactDaySummary.activeLoadCycleMinutes), 'active cycle time is available for exact-shift days');
+assert.strictEqual(exactDaySummary.nonLoadDutyMinutes, exactDaySummary.exactDutyMinutes - exactDaySummary.activeLoadCycleMinutes, 'non-load duty time subtracts unique active cycles');
+assert.ok(exactDaySummary.activeLoadUtilization > 0, 'active-load utilization is calculated without dividing by zero');
+setField('shift-start-time', '');
+setField('shift-end-time', '');
+context.saveDailyAddOnFromControls();
+const estimatedDaySummary = context.getDailyEarningsSummary('2026-08-01', midnightTwo);
+assert.strictEqual(estimatedDaySummary.estimatedTrackedSpanMinutes, 240, 'daily estimated span uses normalized midnight timeline');
+assert.strictEqual(estimatedDaySummary.nonLoadDutyMinutes, null, 'non-load duty time is not calculated from estimated spans');
+assert.strictEqual(context.getDailyEarningsSummary('2026-08-01', overlapping).timelineStatus, 'review', 'timeline-error day is marked for review');
+
+const counts = context.summarizeLoadLevelRecords([
+  analysisLoad({ id: 'count-1' }), analysisLoad({ id: 'count-2' }), analysisLoad({ id: 'count-r', loadStatus: 'Reject' })
+]);
+assert.deepStrictEqual([counts.completedLoads, counts.rejects, counts.totalAssignments], [2, 1, 3], 'completed, reject, and assignment counts reconcile');
+assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
+assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
+assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
+assert.ok(script.includes("'Dispatcher Load Comparison'"), 'analysis CSV includes dispatcher-load rows');
+assert.ok(script.includes("'Pickup State Comparison'"), 'analysis CSV includes state rows');
+assert.ok(script.includes("'Underlying Loads'"), 'analysis CSV includes underlying load rows');
+assert.ok(script.includes('Overall Range Summary') && script.includes('Time Basis Summary'), 'printed analysis contains major summary sections');
 assert.ok(!script.includes('localStorage.clear'), 'app code does not clear localStorage');
 assert.ok(!script.includes('indexedDB.deleteDatabase'), 'app code does not delete IndexedDB');
 assert.ok(script.includes("const STORAGE_KEY = 'personalOilfieldLoadTracker.loads'"), 'load storage key is preserved');
@@ -527,7 +616,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.4.4'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.4.5'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -536,7 +625,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.4.4', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.4.5', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
