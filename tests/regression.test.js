@@ -660,6 +660,49 @@ const counts = context.summarizeLoadLevelRecords([
   analysisLoad({ id: 'count-1' }), analysisLoad({ id: 'count-2' }), analysisLoad({ id: 'count-r', loadStatus: 'Reject' })
 ]);
 assert.deepStrictEqual([counts.completedLoads, counts.rejects, counts.totalAssignments], [2, 1, 3], 'completed, reject, and assignment counts reconcile');
+
+const goalLoad = (id, pay, status = 'Completed Load') => ({ id, loadDate: '2026-09-01', loadStatus: status, estimatedPay: pay });
+const belowGoal = context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-249', 249)], 300);
+assert.strictEqual(belowGoal.goalStatus, 'Below goal', '$249 completed-load pay against $300 is below goal');
+assert.strictEqual(belowGoal.amountBelowGoal, 51, 'below-goal difference is $51');
+assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-300', 300)], 300).goalStatus, 'Goal met', 'exactly $300 meets goal');
+const aboveGoal = context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-325', 325)], 300);
+assert.strictEqual(aboveGoal.goalStatus, 'Goal met', '$325 meets goal');
+assert.strictEqual(aboveGoal.amountAboveGoal, 25, 'above-goal difference is $25');
+assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-reject', 500, 'Reject')], 300).goalStatus, 'Insufficient data', 'reject pay cannot meet completed-load goal');
+assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([], 300).goalStatus, 'Insufficient data', 'day without usable completed-load pay has insufficient data');
+assert.strictEqual(context.normalizeAppSettings({}).dailyCompletedLoadPayGoal, 300, 'daily completed-load-pay goal defaults to $300');
+assert.strictEqual(context.normalizeAppSettings({ dailyCompletedLoadPayGoal: 312.75 }).dailyCompletedLoadPayGoal, 312.75, 'goal supports dollars and cents in existing settings object');
+
+const historicalRecords = [goalLoad('historical-a', 249)];
+const historicalBefore = JSON.stringify(historicalRecords);
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', historicalRecords).goalStatus, 'Below goal', 'historical records receive goal status without editing');
+historicalRecords[0] = goalLoad('historical-a', 325);
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', historicalRecords).goalStatus, 'Goal met', 'editing historical pay recalculates the date');
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', []).goalStatus, 'Insufficient data', 'deleting historical load recalculates the date');
+assert.notStrictEqual(JSON.stringify(historicalRecords), historicalBefore, 'test fixture edit is explicit');
+const immutableRecords = [goalLoad('immutable-report', 249)];
+const immutableSnapshot = JSON.stringify(immutableRecords);
+context.getDailyEarningsSummary('2026-09-01', immutableRecords);
+assert.strictEqual(JSON.stringify(immutableRecords), immutableSnapshot, 'viewing goal reports does not modify saved load records');
+
+const addOnIndependence = context.calculateDailyCompletedLoadPayGoal([goalLoad('base-249', 249)], 300);
+['Per diem', 'Wait pay', 'Reject pay', 'Sleeper pay', 'Trainer pay'].forEach((label) => {
+  assert.strictEqual(addOnIndependence.goalStatus, 'Below goal', `${label} does not count toward goal`);
+});
+const unchangedEarningsFormula = context.getDailyEarningsSummary('2026-09-01', [goalLoad('earnings-formula', 249)]);
+assert.strictEqual(unchangedEarningsFormula.totalEstimatedDailyEarnings, unchangedEarningsFormula.totalEstimatedEntryPay + unchangedEarningsFormula.perDiemPay + unchangedEarningsFormula.sleeperBerthPay + unchangedEarningsFormula.trainerPay, 'total estimated daily earnings formula remains unchanged');
+
+const goalRange = context.summarizeDailyGoalResults([
+  { goalStatus: 'Goal met', completedLoadPay: 300, amountAboveGoal: 0, amountBelowGoal: 0, goalDifference: 0 },
+  { goalStatus: 'Goal met', completedLoadPay: 325, amountAboveGoal: 25, amountBelowGoal: 0, goalDifference: 25 },
+  { goalStatus: 'Below goal', completedLoadPay: 249, amountAboveGoal: 0, amountBelowGoal: 51, goalDifference: -51 },
+  { goalStatus: 'Insufficient data', completedLoadPay: 0, amountAboveGoal: null, amountBelowGoal: null, goalDifference: null }
+]);
+assert.deepStrictEqual([goalRange.daysGoalMet, goalRange.daysBelowGoal, goalRange.daysInsufficientData], [2, 1, 1], 'pay-period and monthly goal counts aggregate correctly');
+assert.ok(html.includes('Daily completed-load-pay goal'), 'editable goal setting is displayed');
+assert.ok(script.includes("'Daily completed-load-pay goal'") && script.includes("'Goal status'") && script.includes("'Goal difference'"), 'daily and analysis CSV output contains goal information');
+assert.ok(script.includes("['Goal status', record.goalStatus]"), 'printed daily report contains goal information');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');

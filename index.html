@@ -79,6 +79,13 @@
               <article><span>Earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
               <article><span>Paid wait</span><strong id="daily-paid-wait">0 hr 0 min</strong></article>
             </div>
+            <article class="daily-goal-card goal-insufficient" id="daily-goal-card" aria-live="polite">
+              <h3>Completed-Load Pay Goal</h3>
+              <div><span>Completed-load pay</span><strong id="daily-goal-completed-pay">$0.00</strong></div>
+              <div><span>Daily goal</span><strong id="daily-goal-amount">$300.00</strong></div>
+              <div><span>Goal status</span><strong id="daily-goal-status">Insufficient data</strong></div>
+              <div><span>Dollar difference</span><strong id="daily-goal-difference">Not available</strong></div>
+            </article>
           </section>
 
           <section class="panel summary-card" aria-labelledby="pay-period-summary-title">
@@ -109,6 +116,9 @@
               <article><span>Sleeper</span><strong id="pay-period-sleeper-pay">$0.00</strong></article>
               <article><span>Reject</span><strong id="pay-period-reject-pay">$0.00</strong></article>
               <article><span>Wait pay</span><strong id="pay-period-wait-pay">$0.00</strong></article>
+              <article><span>Days goal met</span><strong id="pay-period-goal-met">0</strong></article>
+              <article><span>Days below goal</span><strong id="pay-period-goal-below">0</strong></article>
+              <article><span>Avg completed-load pay/workday</span><strong id="pay-period-goal-average">$0.00</strong></article>
             </div>
           </section>
           <section class="panel summary-card" aria-labelledby="month-summary-title">
@@ -118,6 +128,9 @@
               <article><span>Rejects</span><strong id="month-reject-count">0</strong></article>
               <article><span>Total assignments</span><strong id="month-assignment-count">0</strong></article>
               <article><span>Total estimated earnings</span><strong id="month-total-earnings">$0.00</strong></article>
+              <article><span>Days goal met</span><strong id="month-goal-met">0</strong></article>
+              <article><span>Days below goal</span><strong id="month-goal-below">0</strong></article>
+              <article><span>Avg completed-load pay/workday</span><strong id="month-goal-average">$0.00</strong></article>
             </div>
           </section>
         </div>
@@ -582,6 +595,11 @@
             <div class="result-row"><span>Total offloaded barrels</span><strong id="review-barrels-offloaded">0.00 bbl</strong></div>
             <div class="result-row"><span>Total difference vs gross</span><strong id="review-difference-gross">0.00 bbl</strong></div>
             <div class="result-row"><span>Total completed load pay</span><strong id="review-completed-pay">$0.00</strong></div>
+            <div class="result-row"><span>Daily completed-load-pay goal</span><strong id="review-goal-amount">$300.00</strong></div>
+            <div class="result-row" id="review-goal-result"><span>Goal status</span><strong id="review-goal-status">Insufficient data</strong></div>
+            <div class="result-row"><span>Goal difference</span><strong id="review-goal-difference">Not available</strong></div>
+            <div class="result-row"><span>Exact shift time</span><strong id="review-exact-duty-time">Not enough time data</strong></div>
+            <div class="result-row"><span>Completed-load pay per duty hour</span><strong id="review-completed-pay-hour">$0.00</strong></div>
             <div class="result-row"><span>Total reject pay</span><strong id="review-reject-pay">$0.00</strong></div>
             <div class="result-row"><span>Total loading wait</span><strong id="review-paid-pickup-wait">0 hr 0 min</strong></div>
             <div class="result-row"><span>Total offloading wait</span><strong id="review-paid-dropoff-wait">0 hr 0 min</strong></div>
@@ -640,12 +658,14 @@
             <div class="settings-card">
               <h3>Pay Rates</h3>
               <div class="field-grid pay-rate-grid">
+                <label class="full-width" for="settings-daily-completed-load-goal"><span>Daily completed-load-pay goal</span><input id="settings-daily-completed-load-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-wait-rate"><span>Wait-time rate per hour</span><input id="settings-wait-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-per-diem-rate"><span>Per diem rate</span><input id="settings-per-diem-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-sleeper-rate"><span>Sleeper berth rate</span><input id="settings-sleeper-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-reject-rate"><span>Reject-pay rate</span><input id="settings-reject-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-trainer-rate"><span>Trainer-pay rate</span><input id="settings-trainer-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
               </div>
+              <p class="helper-text">Changing the daily goal updates comparisons for all displayed work dates. It does not change saved load pay or total estimated earnings.</p>
               <details class="pay-table-details">
                 <summary>Loaded-mile pay table</summary>
                 <div id="loaded-mile-pay-editor" class="loaded-mile-pay-editor"></div>

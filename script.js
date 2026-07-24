@@ -5,6 +5,7 @@ const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
 const APP_RUNTIME = detectAppRuntime();
 const STORAGE_KEY = 'personalOilfieldLoadTracker.loads';
 const ADD_ON_STORAGE_KEY = 'personalOilfieldLoadTracker.dailyAddOns';
+const DEFAULT_DAILY_COMPLETED_LOAD_PAY_GOAL = 300;
 const EARNINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.dailySummaries';
 const PROFILE_STORAGE_KEY = 'personalOilfieldLoadTracker.profile';
 const META_STORAGE_KEY = 'personalOilfieldLoadTracker.meta';
@@ -207,6 +208,13 @@ const daily = {
   trainerPay: document.getElementById('daily-trainer-pay'),
   totalEarnings: document.getElementById('daily-total-earnings')
 };
+const dailyGoal = {
+  card: document.getElementById('daily-goal-card'),
+  completedPay: document.getElementById('daily-goal-completed-pay'),
+  goal: document.getElementById('daily-goal-amount'),
+  status: document.getElementById('daily-goal-status'),
+  difference: document.getElementById('daily-goal-difference')
+};
 
 const dashboard = {
   totalLoadsHauled: document.getElementById('total-loads-hauled'),
@@ -225,11 +233,16 @@ const payPeriodSummary = {
   perDiemPay: document.getElementById('pay-period-per-diem-pay'),
   sleeperPay: document.getElementById('pay-period-sleeper-pay'),
   rejectPay: document.getElementById('pay-period-reject-pay'),
-  waitPay: document.getElementById('pay-period-wait-pay')
+  waitPay: document.getElementById('pay-period-wait-pay'),
+  goalMet: document.getElementById('pay-period-goal-met'),
+  goalBelow: document.getElementById('pay-period-goal-below'),
+  goalAverage: document.getElementById('pay-period-goal-average')
 };
 const monthSummary = {
   completedCount: document.getElementById('month-completed-count'), rejectCount: document.getElementById('month-reject-count'),
-  assignmentCount: document.getElementById('month-assignment-count'), totalEarnings: document.getElementById('month-total-earnings')
+  assignmentCount: document.getElementById('month-assignment-count'), totalEarnings: document.getElementById('month-total-earnings'),
+  goalMet: document.getElementById('month-goal-met'), goalBelow: document.getElementById('month-goal-below'),
+  goalAverage: document.getElementById('month-goal-average')
 };
 
 const summary = {
@@ -293,7 +306,13 @@ const review = {
   sleeperPay: document.getElementById('review-sleeper-pay'),
   trainerApplied: document.getElementById('review-trainer-applied'),
   trainerPay: document.getElementById('review-trainer-pay'),
-  totalEarnings: document.getElementById('review-total-earnings')
+  totalEarnings: document.getElementById('review-total-earnings'),
+  goalAmount: document.getElementById('review-goal-amount'),
+  goalStatus: document.getElementById('review-goal-status'),
+  goalDifference: document.getElementById('review-goal-difference'),
+  goalResult: document.getElementById('review-goal-result'),
+  exactDutyTime: document.getElementById('review-exact-duty-time'),
+  completedPayHour: document.getElementById('review-completed-pay-hour')
 };
 
 const form = document.getElementById('load-form');
@@ -377,6 +396,7 @@ const reportControls = {
   analysisContent: document.getElementById('dispatch-analysis-content')
 };
 const paySettingsControls = {
+  dailyCompletedLoadGoal: document.getElementById('settings-daily-completed-load-goal'),
   waitRate: document.getElementById('settings-wait-rate'),
   perDiemRate: document.getElementById('settings-per-diem-rate'),
   sleeperRate: document.getElementById('settings-sleeper-rate'),
@@ -2961,6 +2981,7 @@ function getDefaultSettings() {
   return {
     payRates: { ...DEFAULT_PAY_SETTINGS },
     loadedMilesPayScale: DEFAULT_LOADED_MILES_PAY_SCALE.map((range) => ({ ...range })),
+    dailyCompletedLoadPayGoal: DEFAULT_DAILY_COMPLETED_LOAD_PAY_GOAL,
     keepRouteForNextLoad: true
   };
 }
@@ -3011,6 +3032,7 @@ function normalizeAppSettings(rawSettings) {
       waitPayRate: normalizePayRate(rawRates.waitPayRate, defaults.payRates.waitPayRate)
     },
     loadedMilesPayScale: normalizeLoadedMilesPayScale(raw.loadedMilesPayScale),
+    dailyCompletedLoadPayGoal: normalizePayRate(raw.dailyCompletedLoadPayGoal, defaults.dailyCompletedLoadPayGoal),
     keepRouteForNextLoad: raw.keepRouteForNextLoad !== false
   };
 }
@@ -3026,6 +3048,47 @@ function saveAppSettingsToStorage() {
 function getPayRate(rateName) {
   const defaults = getDefaultSettings().payRates;
   return normalizePayRate(appSettings?.payRates?.[rateName], defaults[rateName]);
+}
+
+function getDailyCompletedLoadPayGoal() {
+  return normalizePayRate(appSettings?.dailyCompletedLoadPayGoal, DEFAULT_DAILY_COMPLETED_LOAD_PAY_GOAL);
+}
+
+function calculateDailyCompletedLoadPayGoal(records, goal = getDailyCompletedLoadPayGoal()) {
+  const completedRecords = getUniqueSavedLoads(Array.isArray(records) ? records : []).filter(isCompleted);
+  const usableRecords = completedRecords.filter((load) => isFiniteNumber(load.estimatedPay));
+  const completedLoadPay = sum(usableRecords, 'estimatedPay');
+  const dailyGoal = normalizePayRate(goal, DEFAULT_DAILY_COMPLETED_LOAD_PAY_GOAL);
+  if (!usableRecords.length) {
+    return { completedLoadPay, dailyGoal, goalStatus: 'Insufficient data', goalDifference: null, amountAboveGoal: null, amountBelowGoal: null };
+  }
+  const goalDifference = completedLoadPay - dailyGoal;
+  return {
+    completedLoadPay,
+    dailyGoal,
+    goalStatus: goalDifference >= 0 ? 'Goal met' : 'Below goal',
+    goalDifference,
+    amountAboveGoal: goalDifference > 0 ? goalDifference : 0,
+    amountBelowGoal: goalDifference < 0 ? Math.abs(goalDifference) : 0
+  };
+}
+
+function summarizeDailyGoalResults(days) {
+  const goalMetDays = days.filter((day) => day.goalStatus === 'Goal met');
+  const belowGoalDays = days.filter((day) => day.goalStatus === 'Below goal');
+  const insufficientDataDays = days.filter((day) => day.goalStatus === 'Insufficient data');
+  const usableDays = [...goalMetDays, ...belowGoalDays];
+  return {
+    daysGoalMet: goalMetDays.length,
+    daysBelowGoal: belowGoalDays.length,
+    daysInsufficientData: insufficientDataDays.length,
+    usableGoalDays: usableDays.length,
+    percentUsableDaysMeetingGoal: usableDays.length ? goalMetDays.length / usableDays.length * 100 : null,
+    totalAmountAboveGoal: sum(goalMetDays, 'amountAboveGoal'),
+    totalAmountBelowGoal: sum(belowGoalDays, 'amountBelowGoal'),
+    averageCompletedLoadPayPerWorkday: days.length ? sum(days, 'completedLoadPay') / days.length : null,
+    averageGoalDifference: usableDays.length ? sum(usableDays, 'goalDifference') / usableDays.length : null
+  };
 }
 
 function getActiveLoadedMilesPayScale() {
@@ -3399,6 +3462,9 @@ function renderLoadedMilesPayEditor() {
 }
 
 function applyPaySettingsToControls() {
+  if (paySettingsControls.dailyCompletedLoadGoal) {
+    paySettingsControls.dailyCompletedLoadGoal.value = String(getDailyCompletedLoadPayGoal());
+  }
   if (paySettingsControls.waitRate) {
     paySettingsControls.waitRate.value = String(getPayRate('waitPayRate'));
   }
@@ -3443,8 +3509,15 @@ function readLoadedMilesPayEditor() {
 }
 
 function savePaySettingsFromControls() {
+  const goalInput = String(paySettingsControls.dailyCompletedLoadGoal?.value ?? '').trim();
+  const parsedGoal = Number(goalInput);
+  if (!goalInput || !Number.isFinite(parsedGoal) || parsedGoal < 0) {
+    setStatusMessage(paySettingsControls.status, 'Daily completed-load-pay goal must be a number of zero or greater.', true);
+    return;
+  }
   const nextSettings = normalizeAppSettings({
     ...appSettings,
+    dailyCompletedLoadPayGoal: parsedGoal,
     payRates: {
       waitPayRate: paySettingsControls.waitRate?.value,
       perDiemPay: paySettingsControls.perDiemRate?.value,
@@ -4085,7 +4158,8 @@ function getPayPeriodEarningsSummary(dateValue) {
     perDiemPay: sum(dailySummaries, 'perDiemPay'),
     sleeperBerthPay: sum(dailySummaries, 'sleeperBerthPay'),
     trainerPay: sum(dailySummaries, 'trainerPay'),
-    totalEstimatedEarnings: sum(dailySummaries, 'totalEstimatedDailyEarnings')
+    totalEstimatedEarnings: sum(dailySummaries, 'totalEstimatedDailyEarnings'),
+    ...summarizeDailyGoalResults(dailySummaries)
   };
 }
 
@@ -4165,6 +4239,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const usableDutyMinutes = isFiniteNumber(exactDutyMinutes) ? exactDutyMinutes : estimatedTrackedSpanMinutes;
   const activeLoadCycleMinutes = isFiniteNumber(exactDutyMinutes) && timeline.status === 'valid' ? getIntervalUnionMinutes(timeline.intervals) : null;
   const utilizationUsable = isFiniteNumber(activeLoadCycleMinutes) && exactDutyMinutes > 0 && activeLoadCycleMinutes <= exactDutyMinutes;
+  const goalResult = calculateDailyCompletedLoadPayGoal(records);
 
   return {
     date,
@@ -4179,6 +4254,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     totalBarrelsOffloaded: sum(records, 'barrelsOffloaded'),
     totalDifferenceVsGrossBarrels: sum(records, 'differenceVsGrossBarrels'),
     completedLoadPay,
+    ...goalResult,
     rejectPay,
     totalPaidPickupWaitMinutes,
     totalPaidDropoffWaitMinutes,
@@ -4203,6 +4279,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     nonLoadDutyMinutes: utilizationUsable ? exactDutyMinutes - activeLoadCycleMinutes : null,
     activeLoadUtilization: utilizationUsable ? activeLoadCycleMinutes / exactDutyMinutes * 100 : null,
     totalEstimatedDailyEarnings: totalEstimatedEntryPay + perDiemPay + sleeperBerthPay + trainerPay,
+    completedLoadPayPerExactDutyHour: exactDutyMinutes > 0 ? completedLoadPay / (exactDutyMinutes / 60) : null,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
     averageGrossBarrels: completedRecords.length > 0 ? sum(completedRecords, 'grossBarrels') / completedRecords.length : 0,
     averageNetBarrels: average(completedRecords, 'netBarrels') || 0,
@@ -4292,6 +4369,19 @@ function summarizeLoadsForDates(records) {
   };
 }
 
+function formatGoalDifference(record) {
+  if (!isFiniteNumber(record?.goalDifference)) return 'Not available';
+  if (record.goalDifference > 0) return `Above goal by ${formatMoney(record.goalDifference)}`;
+  if (record.goalDifference < 0) return `Below goal by ${formatMoney(Math.abs(record.goalDifference))}`;
+  return 'At goal: $0.00 difference';
+}
+
+function setGoalResultClass(element, status, baseClass = '') {
+  if (!element) return;
+  const suffix = status === 'Goal met' ? 'met' : (status === 'Below goal' ? 'below' : 'insufficient');
+  element.className = `${baseClass} goal-${suffix}`.trim();
+}
+
 function updateDashboardStats(summaryRecord) {
   const selectedDate = daily.date.value || todayLocal();
   const monthRange = getMonthRange(selectedDate);
@@ -4306,6 +4396,7 @@ function updateDashboardStats(summaryRecord) {
   const monthCompleted = monthRecords.filter(isCompleted);
   const monthRejects = monthRecords.filter(isReject);
   const monthDays = [...new Set(monthRecords.map((load) => load.loadDate).filter(Boolean))].map(getDailyEarningsSummary);
+  const monthGoalSummary = summarizeDailyGoalResults(monthDays);
 
   dashboard.totalLoadsHauled.textContent = String(getUniqueSavedLoads().filter(isCompleted).length);
   dashboard.currentWorkDate.textContent = selectedDate || '-';
@@ -4322,10 +4413,16 @@ function updateDashboardStats(summaryRecord) {
   setElementText(payPeriodSummary.sleeperPay, formatMoney(payPeriodRecord.sleeperBerthPay));
   setElementText(payPeriodSummary.rejectPay, formatMoney(payPeriodRecord.rejectPay));
   setElementText(payPeriodSummary.waitPay, formatMoney(payPeriodRecord.totalWaitPay));
+  setElementText(payPeriodSummary.goalMet, String(payPeriodRecord.daysGoalMet));
+  setElementText(payPeriodSummary.goalBelow, String(payPeriodRecord.daysBelowGoal));
+  setElementText(payPeriodSummary.goalAverage, formatMaybeMoney(payPeriodRecord.averageCompletedLoadPayPerWorkday));
   setElementText(monthSummary.completedCount, String(monthCompleted.length));
   setElementText(monthSummary.rejectCount, String(monthRejects.length));
   setElementText(monthSummary.assignmentCount, String(monthCompleted.length + monthRejects.length));
   setElementText(monthSummary.totalEarnings, formatMoney(sum(monthDays, 'totalEstimatedDailyEarnings')));
+  setElementText(monthSummary.goalMet, String(monthGoalSummary.daysGoalMet));
+  setElementText(monthSummary.goalBelow, String(monthGoalSummary.daysBelowGoal));
+  setElementText(monthSummary.goalAverage, formatMaybeMoney(monthGoalSummary.averageCompletedLoadPayPerWorkday));
 
   const selectedDateSummary = summarizeLoadsForDates(selectedDateRecords);
   daily.grossBarrels.textContent = formatBarrels(summaryRecord.totalGrossBarrels);
@@ -4344,6 +4441,11 @@ function updateDashboardStats(summaryRecord) {
   daily.sleeperPay.textContent = formatMoney(summaryRecord.sleeperBerthPay);
   daily.trainerPay.textContent = formatMoney(summaryRecord.trainerPay);
   daily.totalEarnings.textContent = formatMoney(summaryRecord.totalEstimatedDailyEarnings);
+  setElementText(dailyGoal.completedPay, formatMoney(summaryRecord.completedLoadPay));
+  setElementText(dailyGoal.goal, formatMoney(summaryRecord.dailyGoal));
+  setElementText(dailyGoal.status, summaryRecord.goalStatus);
+  setElementText(dailyGoal.difference, formatGoalDifference(summaryRecord));
+  setGoalResultClass(dailyGoal.card, summaryRecord.goalStatus, 'daily-goal-card');
 
   return selectedDateSummary;
 }
@@ -4380,6 +4482,15 @@ function updateDailySummary() {
   review.trainerApplied.textContent = summaryRecord.trainerPayApplied ? 'Yes' : 'No';
   review.trainerPay.textContent = formatMoney(summaryRecord.trainerPay);
   review.totalEarnings.textContent = formatMoney(summaryRecord.totalEstimatedDailyEarnings);
+  setElementText(review.goalAmount, formatMoney(summaryRecord.dailyGoal));
+  setElementText(review.goalStatus, summaryRecord.goalStatus);
+  setElementText(review.goalDifference, formatGoalDifference(summaryRecord));
+  setElementText(review.exactDutyTime, formatMaybeDuration(summaryRecord.exactDutyMinutes));
+  setElementText(review.completedPayHour, formatMaybeMoney(summaryRecord.completedLoadPayPerExactDutyHour));
+  if (review.goalResult) {
+    const suffix = summaryRecord.goalStatus === 'Goal met' ? 'met' : (summaryRecord.goalStatus === 'Below goal' ? 'below' : 'insufficient');
+    review.goalResult.className = `result-row goal-result-${suffix}`;
+  }
 
   renderSavedLoads();
   renderRecentLoads();
@@ -5580,6 +5691,9 @@ function downloadDailyEarningsSummary() {
     'Total barrels offloaded',
     'Total difference vs gross barrels',
     'Total completed load pay',
+    'Daily completed-load-pay goal',
+    'Goal status',
+    'Goal difference',
     'Total reject pay',
     'Total load wait time',
     'Total unload wait time',
@@ -5610,6 +5724,9 @@ function downloadDailyEarningsSummary() {
       formatCsvNumber(record.totalBarrelsOffloaded),
       formatCsvNumber(record.totalDifferenceVsGrossBarrels),
       formatCsvNumber(record.completedLoadPay),
+      formatCsvNumber(record.dailyGoal),
+      record.goalStatus,
+      formatCsvNumber(record.goalDifference),
       formatCsvNumber(record.rejectPay),
       formatDuration(record.totalPaidPickupWaitMinutes),
       formatDuration(record.totalPaidDropoffWaitMinutes),
@@ -5980,7 +6097,13 @@ function printDailyReport() {
     ['Completed loads', record.completedLoadCount],
     ['Rejects', record.rejectCount],
     ['Total assignments', record.completedLoadCount + record.rejectCount],
-    ['Load earnings', formatMoney(record.completedLoadPay + record.rejectPay)],
+    ['Completed-load pay', formatMoney(record.completedLoadPay)],
+    ['Daily completed-load-pay goal', formatMoney(record.dailyGoal)],
+    ['Goal status', record.goalStatus],
+    ['Goal difference', formatGoalDifference(record)],
+    ['Exact duty time', formatMaybeDuration(record.exactDutyMinutes)],
+    ['Completed-load pay per duty hour', formatMaybeMoney(record.completedLoadPayPerExactDutyHour)],
+    ['Reject pay', formatMoney(record.rejectPay)],
     ['Wait-time earnings', formatMoney(record.totalWaitPay)],
     ['Trainer pay', formatMoney(record.trainerPay)],
     ['Total earnings', formatMoney(record.totalEstimatedDailyEarnings)],
@@ -6168,7 +6291,8 @@ function summarizeDayRows(days, name = '') {
     completedLoadsPerDutyHour: usableDutyMinutes > 0 ? completedLoads / (usableDutyMinutes / 60) : null,
     averageCompletedLoadsPerWorkday: days.length ? completedLoads / days.length : null,
     averageDutyHoursPerWorkday: days.length && usableDutyMinutes > 0 ? usableDutyMinutes / 60 / days.length : null,
-    missingDispatcherLoads: sum(days, 'missingDispatcherLoads')
+    missingDispatcherLoads: sum(days, 'missingDispatcherLoads'),
+    ...summarizeDailyGoalResults(days)
   };
 }
 
@@ -6258,7 +6382,7 @@ function loadAnalysisTable(title, rows) {
 }
 
 function dispatcherDayTable(rows) {
-  return `<h4>Dispatcher Day Comparison</h4><p class="report-disclosure">State and route filters apply to load-level analysis only. Dispatcher Day Comparison remains a whole-day analysis.</p><div class="table-scroll"><table><thead><tr><th>Dispatcher</th><th>Workdays</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Completion</th><th>Avg completed/day</th><th>Avg duty hours/day</th><th>Missing dispatcher</th><th>Exact days</th><th>Estimated days</th><th>Missing days</th><th>Exact duty</th><th>Estimated span</th><th>Usable duty</th><th>Base pay</th><th>Reject pay</th><th>Wait pay</th><th>Per diem</th><th>Sleeper</th><th>Trainer</th><th>Total earnings</th><th>Avg/day</th><th>Effective hourly</th><th>Loads/hour</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.workdays}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMaybeNumber(row.averageCompletedLoadsPerWorkday)}</td><td>${formatMaybeNumber(row.averageDutyHoursPerWorkday)}</td><td>${row.missingDispatcherLoads}</td><td>${row.exactDays}</td><td>${row.estimatedDays}</td><td>${row.missingTimeDays}</td><td>${formatDuration(row.exactDutyMinutes)}</td><td>${formatDuration(row.estimatedSpanMinutes)}</td><td>${formatDuration(row.usableDutyMinutes)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.rejectPay)}</td><td>${formatMoney(row.waitPay)}</td><td>${formatMoney(row.perDiemPay)}</td><td>${formatMoney(row.sleeperPay)}</td><td>${formatMoney(row.trainerPay)}</td><td>${formatMoney(row.totalEarnings)}</td><td>${formatMaybeMoney(row.averageEarningsPerWorkday)}</td><td>${formatMaybeMoney(row.effectiveHourlyEarnings)}</td><td>${formatMaybeNumber(row.completedLoadsPerDutyHour)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<h4>Dispatcher Day Comparison</h4><p class="report-disclosure">The goal uses completed-load base pay only. Daily add-ons remain separate. State and route filters apply to load-level analysis only.</p><div class="table-scroll"><table><thead><tr><th>Dispatcher</th><th>Workdays</th><th>Goal met</th><th>Below goal</th><th>Usable days meeting goal</th><th>Avg completed pay/workday</th><th>Avg goal difference</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Completion</th><th>Base pay</th><th>Per diem</th><th>Total earnings</th><th>Exact days</th><th>Estimated days</th><th>Missing days</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.workdays}</td><td>${row.daysGoalMet}</td><td>${row.daysBelowGoal}</td><td>${formatPercentValue(row.percentUsableDaysMeetingGoal)}</td><td>${formatMaybeMoney(row.averageCompletedLoadPayPerWorkday)}</td><td>${formatMaybeMoney(row.averageGoalDifference)}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.perDiemPay)}</td><td>${formatMoney(row.totalEarnings)}</td><td>${row.exactDays}</td><td>${row.estimatedDays}</td><td>${row.missingTimeDays}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function formatPercentValue(value) { return isFiniteNumber(value) ? `${value.toFixed(1)}%` : 'Not available'; }
@@ -6355,7 +6479,10 @@ function renderDispatchAnalysis(startDate, endDate) {
     ['Exact-duty days', result.exactDays], ['Estimated-span days', result.estimatedDays], ['Missing-time days', result.missingTimeDays],
     ['Exact duty time', formatMaybeDuration(result.exactDays ? result.exactDutyMinutes : null)], ['Estimated tracked span', formatMaybeDuration(result.estimatedDays ? result.estimatedSpanMinutes : null)],
     ['Combined usable duty time', formatMaybeDuration(result.usableDutyMinutes || null)], ['Exact-duty hourly earnings', formatMaybeMoney(result.exactHourlyEarnings)],
-    ['Estimated-span hourly earnings', formatMaybeMoney(result.estimatedHourlyEarnings)], ['Combined mixed-basis hourly earnings', formatMaybeMoney(result.mixedBasisHourlyEarnings)]
+    ['Estimated-span hourly earnings', formatMaybeMoney(result.estimatedHourlyEarnings)], ['Combined mixed-basis hourly earnings', formatMaybeMoney(result.mixedBasisHourlyEarnings)],
+    ['Days goal met', result.daysGoalMet], ['Days below goal', result.daysBelowGoal], ['Days with insufficient goal data', result.daysInsufficientData],
+    ['Usable days meeting goal', formatPercentValue(result.percentUsableDaysMeetingGoal)], ['Total amount above goal', formatMoney(result.totalAmountAboveGoal)],
+    ['Total amount below goal', formatMoney(result.totalAmountBelowGoal)], ['Average completed-load pay per workday', formatMaybeMoney(result.averageCompletedLoadPayPerWorkday)]
   ];
   const timeMetrics = [
     ['Exact-duty days', result.exactDays], ['Estimated-span days', result.estimatedDays], ['Missing-time days', result.missingTimeDays],
@@ -6374,6 +6501,7 @@ function renderDispatchAnalysis(startDate, endDate) {
   ];
   reportControls.analysisContent.innerHTML = `
     <h4>Overall Date-Range Baseline</h4><div class="review-grid analysis-summary">${overallMetrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
+    <h4>Historical Daily Goal Results</h4><div class="table-scroll"><table><thead><tr><th>Date</th><th>Completed loads</th><th>Completed-load pay</th><th>Daily goal</th><th>Goal status</th><th>Goal difference</th><th>Total estimated earnings</th><th>Exact duty time</th><th>Completed pay/duty hour</th></tr></thead><tbody>${result.days.map((day) => `<tr><td>${escapeHtml(day.date)}</td><td>${day.completedLoadCount}</td><td>${escapeHtml(formatMoney(day.completedLoadPay))}</td><td>${escapeHtml(formatMoney(day.dailyGoal))}</td><td>${escapeHtml(day.goalStatus)}</td><td>${escapeHtml(formatGoalDifference(day))}</td><td>${escapeHtml(formatMoney(day.totalEstimatedDailyEarnings))}</td><td>${escapeHtml(formatMaybeDuration(day.exactDutyMinutes))}</td><td>${escapeHtml(formatMaybeMoney(day.completedLoadPayPerExactDutyHour))}</td></tr>`).join('')}</tbody></table></div>
     ${filtersActive ? `<h4>Filtered Load Summary</h4><div class="review-grid"><div class="result-row"><span>Active filters</span><strong>${escapeHtml(describeAnalysisFilters(filters))}</strong></div>${[
       ['Completed loads', loadResult.completedLoads], ['Rejects', loadResult.rejects], ['Total assignments', loadResult.totalAssignments],
       ['Completion rate', formatPercentValue(loadResult.completionRate)], ['Loaded miles', formatMiles(loadResult.loadedMiles)], ['Rerouted miles', formatMiles(loadResult.reroutedMiles)],
@@ -6541,6 +6669,9 @@ function downloadDispatchAnalysis() {
     ['Completed-load base pay',formatCsvNumber(result.completedBasePay),'USD'],['Reject pay',formatCsvNumber(result.rejectPay),'USD'],['Wait pay',formatCsvNumber(result.waitPay),'USD'],
     ['Per diem',formatCsvNumber(result.perDiemPay),'USD'],['Sleeper pay',formatCsvNumber(result.sleeperPay),'USD'],['Trainer pay',formatCsvNumber(result.trainerPay),'USD'],['Total estimated earnings',formatCsvNumber(result.totalEarnings),'USD'],
     ['Exact-duty days',result.exactDays,'days'],['Estimated-span days',result.estimatedDays,'days'],['Missing-time days',result.missingTimeDays,'days'],['Exact duty time',result.exactDutyMinutes,'minutes'],
+    ['Days goal met',result.daysGoalMet,'days'],['Days below goal',result.daysBelowGoal,'days'],['Days with insufficient goal data',result.daysInsufficientData,'days'],
+    ['Usable days meeting goal',formatCsvNumber(result.percentUsableDaysMeetingGoal),'percent'],['Total amount above goal',formatCsvNumber(result.totalAmountAboveGoal),'USD'],
+    ['Total amount below goal',formatCsvNumber(result.totalAmountBelowGoal),'USD'],['Average completed-load pay per workday',formatCsvNumber(result.averageCompletedLoadPayPerWorkday),'USD'],
     ['Estimated tracked span',result.estimatedSpanMinutes,'minutes'],['Combined usable duty time',result.usableDutyMinutes,'minutes'],['Exact-duty hourly earnings',formatCsvNumber(result.exactHourlyEarnings),'USD/hour'],
     ['Estimated-span hourly earnings',formatCsvNumber(result.estimatedHourlyEarnings),'USD/hour'],['Combined mixed-basis hourly earnings',formatCsvNumber(result.mixedBasisHourlyEarnings),'USD/hour']
   ];
@@ -6551,6 +6682,8 @@ function downloadDispatchAnalysis() {
     ...metricRows('Time Basis Summary', [['Days with valid utilization',result.exactUtilizationDays,'days'],['Exact-duty days excluded from utilization',result.excludedExactUtilizationDays,'days'],['Exact duty time represented in utilization',result.utilizationExactDutyMinutes,'minutes'],['Active load-cycle time',result.activeLoadCycleMinutes,'minutes'],['Non-load duty time',result.nonLoadDutyMinutes,'minutes'],['Active-load utilization',formatCsvNumber(result.activeLoadUtilization),'percent']]),
     ...dayRows.flatMap((row) => metricRows('Dispatcher Day Comparison', [
       ['Workdays',row.workdays,'days'],['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total assignments',row.totalAssignments,'assignments'],
+      ['Days goal met',row.daysGoalMet,'days'],['Days below goal',row.daysBelowGoal,'days'],['Usable days meeting goal',formatCsvNumber(row.percentUsableDaysMeetingGoal),'percent'],
+      ['Average completed-load pay per workday',formatCsvNumber(row.averageCompletedLoadPayPerWorkday),'USD'],['Average goal difference',formatCsvNumber(row.averageGoalDifference),'USD'],
       ['Completion rate',formatCsvNumber(row.completionRate),'percent'],['Average completed loads per workday',formatCsvNumber(row.averageCompletedLoadsPerWorkday),'loads/day'],
       ['Average duty hours per workday',formatCsvNumber(row.averageDutyHoursPerWorkday),'hours/day'],['Loads missing dispatcher information',row.missingDispatcherLoads,'loads'],
       ['Exact-duty days',row.exactDays,'days'],['Estimated-span days',row.estimatedDays,'days'],['Missing-time days',row.missingTimeDays,'days'],
@@ -6560,6 +6693,7 @@ function downloadDispatchAnalysis() {
       ['Total estimated earnings',formatCsvNumber(row.totalEarnings),'USD'],['Average earnings per workday',formatCsvNumber(row.averageEarningsPerWorkday),'USD'],
       ['Effective hourly earnings',formatCsvNumber(row.effectiveHourlyEarnings),'USD/hour'],['Completed loads per duty hour',formatCsvNumber(row.completedLoadsPerDutyHour),'loads/hour']
     ], row.name)),
+    ...result.days.flatMap((day) => metricRows('Historical Daily Goal Results', [['Completed loads',day.completedLoadCount,'loads'],['Completed-load pay',formatCsvNumber(day.completedLoadPay),'USD'],['Daily completed-load-pay goal',formatCsvNumber(day.dailyGoal),'USD'],['Goal status',day.goalStatus,''],['Goal difference',formatCsvNumber(day.goalDifference),'USD'],['Total estimated daily earnings',formatCsvNumber(day.totalEstimatedDailyEarnings),'USD'],['Exact duty time',day.exactDutyMinutes,'minutes'],['Completed-load pay per duty hour',formatCsvNumber(day.completedLoadPayPerExactDutyHour),'USD/hour']], day.date)),
     ...loadMetricRows('Dispatcher Load Comparison',dispatcherRows),...loadMetricRows('Pickup State Comparison',pickupRows),...loadMetricRows('Drop-off State Comparison',dropoffRows),...loadMetricRows('State Route Comparison',stateRows),...loadMetricRows('Exact Route Comparison',routeRows),
     ...metricRows('Workday Indicators', [
       ['Weighted exact-duty range hourly earnings',formatCsvNumber(weightedStats.weightedHourly),'USD/hour'],

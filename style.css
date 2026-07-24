@@ -33,6 +33,16 @@
 .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 1rem; }
 .table-scroll table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: .85rem; }
 .table-scroll th, .table-scroll td { border-bottom: 1px solid #d8e1e8; padding: .65rem; text-align: left; white-space: nowrap; }
+.daily-goal-card { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.55rem; margin-top:1rem; padding:1rem; border:2px solid #68747b; border-radius:var(--radius-sm); background:#eef1f2; color:#263238; }
+.daily-goal-card h3 { grid-column:1/-1; margin:0; }
+.daily-goal-card div { min-width:0; display:grid; gap:.2rem; }
+.daily-goal-card span { font-size:.76rem; font-weight:800; }
+.daily-goal-card strong { overflow-wrap:anywhere; }
+.daily-goal-card.goal-met { background:#d9f3df; border-color:#24783b; color:#164d27; }
+.daily-goal-card.goal-below { background:#fde2e2; border-color:#a92929; color:#731d1d; }
+.goal-result-met { border-color:#24783b; background:#d9f3df; }
+.goal-result-below { border-color:#a92929; background:#fde2e2; }
+.goal-result-insufficient { border-color:#68747b; background:#eef1f2; }
 .report-disclosure { color: #5f6c7b; font-size: .85rem; line-height: 1.5; }
 @media (max-width: 600px) { .analysis-filters { grid-template-columns: 1fr; } .dispatch-analysis { max-width: 100%; } }
 
@@ -1407,4 +1417,6 @@ textarea.invalid {
   .recent-row {
     grid-template-columns: 1fr;
   }
+  .daily-goal-card { grid-template-columns:1fr; }
+  .daily-goal-card h3 { grid-column:auto; }
 }
