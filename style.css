@@ -40,6 +40,15 @@
 .daily-goal-card strong { overflow-wrap:anywhere; }
 .daily-goal-card.goal-met { background:#d9f3df; border-color:#24783b; color:#164d27; }
 .daily-goal-card.goal-below { background:#fde2e2; border-color:#a92929; color:#731d1d; }
+.workday-action { margin-top:.75rem; }
+.workday-action > summary { display:inline-flex; width:auto; cursor:pointer; list-style:none; }
+.workday-action[open] > summary { margin-bottom:.75rem; }
+.permanent-disclosure { border-left:4px solid #8a5b00; padding:.75rem; background:#fff7df; color:#4f3900; }
+.readiness-banner { padding:1rem; border-radius:var(--radius-sm); border:2px solid #68747b; background:#eef1f2; margin-bottom:1rem; }
+.duty-status-normal { color:#164d27; }
+.duty-status-extended { color:#7a4a00; }
+.duty-status-review { color:#731d1d; }
+.dashboard-month-detail { display:none; }
 .goal-result-met { border-color:#24783b; background:#d9f3df; }
 .goal-result-below { border-color:#a92929; background:#fde2e2; }
 .goal-result-insufficient { border-color:#68747b; background:#eef1f2; }

@@ -703,6 +703,43 @@ assert.deepStrictEqual([goalRange.daysGoalMet, goalRange.daysBelowGoal, goalRang
 assert.ok(html.includes('Daily completed-load-pay goal'), 'editable goal setting is displayed');
 assert.ok(script.includes("'Daily completed-load-pay goal'") && script.includes("'Goal status'") && script.includes("'Goal difference'"), 'daily and analysis CSV output contains goal information');
 assert.ok(script.includes("['Goal status', record.goalStatus]"), 'printed daily report contains goal information');
+
+assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 719 }), 'Normal Range', 'shift shorter than 12 hours is normal range');
+assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 720 }), 'Extended Duty Day', 'exactly 12 hours is extended duty');
+assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 839 }), 'Extended Duty Day', '13 hours 59 minutes is extended duty');
+assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 840 }), 'Potential HOS Concern — Review ELD', 'exactly 14 hours reaches review threshold');
+assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 900 }), 'Potential HOS Concern — Review ELD', 'longer than 14 hours reaches review threshold');
+assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: null }), 'Estimated or Incomplete', 'missing exact shift time is estimated or incomplete');
+
+const mergedCycles = [
+  analysisLoad({ id: 'merged-cycle-1', loadNumber: '1', arrivedPickupTime: '08:00', completedTime: '11:00' }),
+  analysisLoad({ id: 'merged-cycle-2', loadNumber: '2', arrivedPickupTime: '10:00', completedTime: '13:00' })
+];
+assert.strictEqual(context.getMergedActiveCycleMinutes(mergedCycles), 300, 'overlapping load cycles are merged without double counting');
+const separateCycles = [
+  analysisLoad({ id: 'separate-cycle-1', loadNumber: '1', arrivedPickupTime: '08:00', completedTime: '10:00' }),
+  analysisLoad({ id: 'separate-cycle-2', loadNumber: '2', arrivedPickupTime: '11:00', completedTime: '13:00' })
+];
+assert.strictEqual(context.getMergedActiveCycleMinutes(separateCycles), 240, 'non-overlapping load cycles are totaled');
+
+const normalizedWorkday = context.normalizeDailyAddOns({ '2026-09-02': {
+  workDate: '2026-09-02', defaultDispatcher: 'Morgan', shiftStartTime: '20:00', shiftEndTime: '06:00',
+  dailyNotes: 'Cross-midnight shift', perDiem: true, sleeperBerth: true, trainerPay: false
+} })['2026-09-02'];
+assert.strictEqual(normalizedWorkday.defaultDispatcher, 'Morgan', 'daily workday default dispatcher normalizes');
+assert.strictEqual(normalizedWorkday.dailyNotes, 'Cross-midnight shift', 'daily workday notes normalize');
+assert.strictEqual(context.getWorkdayStatus(normalizedWorkday), 'Completed', 'workday with start and end is completed');
+assert.strictEqual(context.durationBetween(normalizedWorkday.shiftStartTime, normalizedWorkday.shiftEndTime), 600, 'workday shift crossing midnight calculates correctly');
+
+const readinessLoads = [analysisLoad({ id: 'ready-load', dispatcher: 'Morgan', pickupLocation: 'A', dropoffLocation: 'B' })];
+const readinessResult = context.summarizeAnalysisRecords(readinessLoads);
+assert.ok(['Analysis Ready', 'Partially Ready', 'Limited Analysis'].includes(context.getAnalysisReadiness(readinessResult).label), 'analysis readiness returns an approved status');
+assert.ok(html.includes('Start Workday') && html.includes('End Workday'), 'dashboard provides start and end workday actions');
+assert.ok(html.includes('Duty-Time Review'), 'reports include Duty-Time Review');
+assert.ok(html.includes('Official ELD and company records control'), 'Duty-Time Review includes permanent ELD limitation');
+assert.ok(script.includes("'Duty-Time Review'") && script.includes("'Duty-time status'"), 'analysis CSV includes duty-time review data');
+assert.ok(script.includes("['Workload observation', getWorkloadObservation(record)]"), 'printed daily report includes workload observation');
+assert.ok(script.includes("defaultDispatcher: String(addOn.defaultDispatcher"), 'daily default dispatcher participates in normalization');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
@@ -730,7 +767,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.4.6'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.5.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -739,7 +776,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.4.6', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.5.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');

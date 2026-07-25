@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.4.6">
+  <link rel="manifest" href="manifest.json?v=1.5.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.4.6">
+  <link rel="stylesheet" href="style.css?v=1.5.0">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.4.6</strong></span>
+          <span>Version <strong id="app-version">1.5.0</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -65,6 +65,40 @@
         </div>
 
         <div class="summary-layout">
+          <section class="panel summary-card today-workday-card" aria-labelledby="workday-card-title">
+            <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="workday-card-title">Workday</h2></div><span class="status-pill" id="workday-status">Not Started</span></div>
+            <div class="metric-strip tight">
+              <article><span>Work date</span><strong id="workday-date">-</strong></article>
+              <article><span>Default dispatcher</span><strong id="workday-dispatcher">Unknown</strong></article>
+              <article><span>Completed loads</span><strong id="workday-completed-loads">0</strong></article>
+              <article><span>Completed-load pay</span><strong id="workday-completed-pay">$0.00</strong></article>
+              <article><span>Total estimated earnings</span><strong id="workday-total-earnings">$0.00</strong></article>
+              <article><span>Exact duty time</span><strong id="workday-duty-time">Not available</strong></article>
+              <article><span>$300 goal</span><strong id="workday-goal-status">Insufficient data</strong></article>
+            </div>
+            <details id="start-workday-details" class="workday-action">
+              <summary class="button primary">Start Workday</summary>
+              <div class="field-grid two">
+                <label for="workday-default-dispatcher"><span>Default dispatcher</span><input id="workday-default-dispatcher" type="text" list="dispatcher-options" autocomplete="off"></label>
+                <label for="workday-shift-start"><span>Shift start time</span><input id="workday-shift-start" type="time"></label>
+              </div>
+              <div class="toggle-grid compact">
+                <label class="toggle-field" for="workday-per-diem"><input id="workday-per-diem" type="checkbox"><span>Per diem</span></label>
+                <label class="toggle-field" for="workday-sleeper"><input id="workday-sleeper" type="checkbox"><span>Sleeper berth</span></label>
+                <label class="toggle-field" for="workday-trainer"><input id="workday-trainer" type="checkbox"><span>Trainer pay</span></label>
+              </div>
+              <button class="button primary" id="start-workday-button" type="button">Save Start Workday</button>
+            </details>
+            <details id="end-workday-details" class="workday-action">
+              <summary class="button secondary">End Workday</summary>
+              <div class="field-grid two">
+                <label for="workday-shift-end"><span>Shift end time</span><input id="workday-shift-end" type="time"></label>
+                <label for="workday-notes"><span>Daily notes</span><textarea id="workday-notes" rows="2"></textarea></label>
+              </div>
+              <button class="button secondary" id="end-workday-button" type="button">Save End Workday</button>
+            </details>
+            <p class="helper-text">Times are manually entered and remain editable. This tracker is not an ELD or official HOS record.</p>
+          </section>
           <section class="panel summary-card" aria-labelledby="daily-summary-title">
             <div class="section-heading compact">
               <div>
@@ -119,9 +153,11 @@
               <article><span>Days goal met</span><strong id="pay-period-goal-met">0</strong></article>
               <article><span>Days below goal</span><strong id="pay-period-goal-below">0</strong></article>
               <article><span>Avg completed-load pay/workday</span><strong id="pay-period-goal-average">$0.00</strong></article>
+              <article><span>Extended duty days</span><strong id="pay-period-extended-days">0</strong></article>
+              <article><span>Days at/above 14-hour review</span><strong id="pay-period-fourteen-days">0</strong></article>
             </div>
           </section>
-          <section class="panel summary-card" aria-labelledby="month-summary-title">
+          <section class="panel summary-card dashboard-month-detail" aria-labelledby="month-summary-title">
             <div class="section-heading compact"><div><p class="section-kicker">Month Containing Selected Date</p><h2 id="month-summary-title">Selected-date month</h2></div></div>
             <div class="metric-strip tight">
               <article><span>Completed loads</span><strong id="month-completed-count">0</strong></article>
@@ -575,6 +611,11 @@
               <button class="button secondary" id="print-analysis-button" type="button">Print Analysis</button>
             </div>
           </details>
+          <details class="dispatch-analysis" id="duty-time-review-section">
+            <summary><strong>Duty-Time Review</strong></summary>
+            <div id="duty-time-review-content"></div>
+            <p class="report-disclosure permanent-disclosure">This personal tracker does not distinguish every driving, on-duty, off-duty, sleeper, exception, or ELD status. Official ELD and company records control legal compliance determinations. A review threshold is not a finding of a legal violation.</p>
+          </details>
         </section>
 
         <section class="panel earnings-review" aria-labelledby="earnings-review-title">
@@ -735,7 +776,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.4.6</strong>
+                <span>Application version</span><strong id="settings-app-version">1.5.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -860,10 +901,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.4.6&updated=' + Date.now());
+            window.location.replace('index.html?v=1.5.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.4.6&updated=' + Date.now());
+            window.location.replace('index.html?v=1.5.0&updated=' + Date.now());
           });
       }
 
@@ -899,6 +940,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.4.6"></script>
+  <script src="script.js?v=1.5.0"></script>
 </body>
 </html>
