@@ -1,4 +1,4 @@
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.5.1";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -6903,7 +6903,6 @@ function escapeHtml(value) {
 
 function initialize() {
   const today = todayLocal();
-  simplifyNewLoadForm();
   initializeAnalysisInputs();
   if (appVersion) {
     appVersion.textContent = APP_VERSION;
@@ -6940,26 +6939,6 @@ function initialize() {
   activateView('dashboard');
   registerServiceWorker();
   initializeFirebaseSync();
-}
-
-function simplifyNewLoadForm() {
-  if (typeof document.querySelector !== 'function' || typeof document.createElement !== 'function') return;
-  const calculationPanel = document.querySelector('.calculation-panel');
-  if (!calculationPanel?.parentNode) return;
-  const details = document.createElement('details');
-  details.className = 'form-section optional-section simplified-more-details';
-  details.innerHTML = '<summary><span>E</span><strong>More Details</strong></summary><p class="helper-text">Optional load-specific details. Existing values remain available for editing, drafts, favorites, reports, and exports.</p><div class="field-grid optional-grid simplified-more-details-grid"></div>';
-  calculationPanel.parentNode.insertBefore(details, calculationPanel);
-  const grid = details.querySelector('.simplified-more-details-grid');
-  [
-    'driver-name', 'truck-number', 'trailer-number', 'api-gravity', 'bsw-percentage', 'empty-truck-weight',
-    'start-meter-reading', 'end-meter-reading', 'ticket-number', 'bol-number', 'jotform-confirmation-number',
-    're-routed-miles', 'product-type', 'notes'
-  ].forEach((id) => {
-    const field = document.getElementById(id);
-    const label = field?.closest?.('label');
-    if (label && grid && !grid.contains(label)) grid.appendChild(label);
-  });
 }
 
 function initializeAnalysisInputs() {
