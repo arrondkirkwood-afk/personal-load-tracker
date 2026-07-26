@@ -1,4 +1,4 @@
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.6.0";
 const DATA_SCHEMA_VERSION = 2;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -12,6 +12,8 @@ const META_STORAGE_KEY = 'personalOilfieldLoadTracker.meta';
 const SETTINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.settings';
 const FAVORITE_ROUTES_STORAGE_KEY = 'personalOilfieldLoadTracker.favoriteRoutes';
 const DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.currentDraft';
+const PAID_TIME_STORAGE_KEY = 'personalOilfieldLoadTracker.paidTime';
+const PAID_TIME_DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.paidTimeDraft';
 const MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.preMigrationBackup.v2';
 const FIREBASE_MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.firebaseMigrationSafetyBackup.v3';
 const LEGACY_STORAGE_KEY = 'personalOilfieldLoadTrackerLog';
@@ -22,7 +24,7 @@ const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
 const FIRESTORE_BATCH_WRITE_LIMIT = 450;
-const PENDING_DELETE_GROUPS = ['loads', 'dailyAddOns', 'favoriteRoutes'];
+const PENDING_DELETE_GROUPS = ['loads', 'dailyAddOns', 'favoriteRoutes', 'paidTime'];
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyC68MPQAa0nsAX-Wq2WSfO09H1kI6P4kaA",
   authDomain: "arrond-oilfield-load-tracker.firebaseapp.com",
@@ -70,7 +72,11 @@ const DEFAULT_PAY_SETTINGS = {
   perDiemPay: 50,
   sleeperBerthPay: 60,
   trainerPay: 50,
-  waitPayRate: 24
+  waitPayRate: 24,
+  deadheadHourlyRate: 24,
+  truckWashHourlyRate: 24,
+  breakdownHourlyRate: 24,
+  otherHourlyRate: 24
 };
 const WAIT_GRACE_MINUTES = 60;
 const NO_RATE_FOUND_LABEL = 'No rate found — enter manually';
@@ -206,7 +212,14 @@ const daily = {
   perDiemPay: document.getElementById('daily-per-diem-pay'),
   sleeperPay: document.getElementById('daily-sleeper-pay'),
   trainerPay: document.getElementById('daily-trainer-pay'),
-  totalEarnings: document.getElementById('daily-total-earnings')
+  totalEarnings: document.getElementById('daily-total-earnings'),
+  todayCompleted: document.getElementById('today-completed-loads'),
+  todayRejects: document.getElementById('today-rejects'),
+  todayCompletedPay: document.getElementById('today-completed-pay'),
+  todayHourlyPay: document.getElementById('today-hourly-pay'),
+  todayWaitPay: document.getElementById('today-wait-pay'),
+  todayAddOns: document.getElementById('today-add-ons'),
+  todayDutyTime: document.getElementById('today-duty-time')
 };
 const dailyGoal = {
   card: document.getElementById('daily-goal-card'),
@@ -409,8 +422,23 @@ const workdayControls = {
   trainer: document.getElementById('workday-trainer'), startButton: document.getElementById('start-workday-button'),
   endButton: document.getElementById('end-workday-button')
 };
+const paidTimeControls = {
+  panel: document.getElementById('paid-time-entry-panel'), form: document.getElementById('paid-time-form'),
+  date: document.getElementById('paid-time-date'), category: document.getElementById('paid-time-category'),
+  custom: document.getElementById('paid-time-custom-category'), start: document.getElementById('paid-time-start'),
+  end: document.getElementById('paid-time-end'), rate: document.getElementById('paid-time-rate'),
+  dispatcher: document.getElementById('paid-time-dispatcher'), truck: document.getElementById('paid-time-truck'),
+  trailer: document.getElementById('paid-time-trailer'), relatedLoad: document.getElementById('paid-time-related-load'),
+  miles: document.getElementById('paid-time-miles'), location: document.getElementById('paid-time-location'),
+  notes: document.getElementById('paid-time-notes'), duration: document.getElementById('paid-time-duration'),
+  pay: document.getElementById('paid-time-pay'), error: document.getElementById('paid-time-error')
+};
 const paySettingsControls = {
   dailyCompletedLoadGoal: document.getElementById('settings-daily-completed-load-goal'),
+  deadheadRate: document.getElementById('settings-deadhead-rate'),
+  truckWashRate: document.getElementById('settings-truck-wash-rate'),
+  breakdownRate: document.getElementById('settings-breakdown-rate'),
+  otherHourlyRate: document.getElementById('settings-other-hourly-rate'),
   waitRate: document.getElementById('settings-wait-rate'),
   perDiemRate: document.getElementById('settings-per-diem-rate'),
   sleeperRate: document.getElementById('settings-sleeper-rate'),
@@ -467,8 +495,45 @@ const storageAudit = {
   duplicateIdsRepaired: 0,
   migrationBackupCreated: false
 };
+
+function normalizePaidTimeRecord(raw = {}) {
+  const startTime = String(raw.startTime || '');
+  const endTime = String(raw.endTime || '');
+  const durationMinutes = durationBetween(startTime, endTime);
+  const hourlyRate = normalizePayRate(raw.hourlyRate, 0);
+  return {
+    ...raw,
+    id: String(raw.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    workDate: String(raw.workDate || raw.date || ''),
+    category: ['Deadhead','Truck Wash','Breakdown','Other Hourly Work'].includes(raw.category) ? raw.category : 'Other Hourly Work',
+    customCategoryName: String(raw.customCategoryName || ''),
+    startTime, endTime,
+    durationMinutes,
+    hourlyRate,
+    estimatedPay: isFiniteNumber(durationMinutes) ? durationMinutes / 60 * hourlyRate : null,
+    dispatcher: String(raw.dispatcher || '').trim(),
+    truckNumber: String(raw.truckNumber || ''),
+    trailerNumber: String(raw.trailerNumber || ''),
+    relatedLoadId: String(raw.relatedLoadId || ''),
+    deadheadMiles: numberOrNull(raw.deadheadMiles),
+    location: String(raw.location || ''),
+    notes: String(raw.notes || ''),
+    createdAt: raw.createdAt || new Date().toISOString(),
+    updatedAt: raw.updatedAt || new Date().toISOString()
+  };
+}
+
+function normalizePaidTimeRecords(raw) {
+  return (Array.isArray(raw) ? raw : []).filter(isPlainObject).map(normalizePaidTimeRecord);
+}
+
+function loadPaidTimeRecords() {
+  return normalizePaidTimeRecords(loadJson(PAID_TIME_STORAGE_KEY, [], 'paid-time records'));
+}
+
 let appSettings = loadAppSettings();
 let savedLoads = loadSavedLoads();
+let paidTimeRecords = loadPaidTimeRecords();
 let dailyAddOns = loadDailyAddOns();
 let dailyEarningsRecords = loadDailySummaries();
 let driverProfile = loadDriverProfile();
@@ -481,9 +546,11 @@ let startupSafetySnapshot = cloneTrackerState({
   profile: driverProfile,
   metadata: appMeta,
   settings: appSettings,
-  favoriteRoutes
+  favoriteRoutes,
+  paidTime: paidTimeRecords
 });
 let editingLoadId = null;
+let editingPaidTimeId = null;
 let pendingDuplicateRecord = null;
 let pendingCommitMode = 'save';
 let isSaving = false;
@@ -601,7 +668,8 @@ function cloneTrackerState(state) {
     profile: deepClone(state.profile || {}) || {},
     metadata: deepClone(state.metadata || {}) || {},
     settings: deepClone(state.settings || {}) || {},
-    favoriteRoutes: deepClone(state.favoriteRoutes || []) || []
+    favoriteRoutes: deepClone(state.favoriteRoutes || []) || [],
+    paidTime: deepClone(state.paidTime || []) || []
   };
 }
 
@@ -609,7 +677,8 @@ function createEmptyPendingDeletes() {
   return {
     loads: {},
     dailyAddOns: {},
-    favoriteRoutes: {}
+    favoriteRoutes: {},
+    paidTime: {}
   };
 }
 
@@ -620,6 +689,7 @@ function normalizePendingDeleteEntry(group, key, entry) {
       || rawEntry.loadId
       || rawEntry.date
       || rawEntry.routeId
+      || rawEntry.paidTimeId
       || key
       || ''
   ).trim();
@@ -646,6 +716,7 @@ function normalizePendingDeleteEntry(group, key, entry) {
   if (group === 'favoriteRoutes') {
     normalized.routeId = normalizedKey;
   }
+  if (group === 'paidTime') normalized.paidTimeId = normalizedKey;
 
   return normalized;
 }
@@ -799,6 +870,7 @@ function filterTombstonedFavoriteRoutes(routes) {
 function createEmptyCloudState() {
   return {
     loads: [],
+    paidTime: [],
     dailyAddOns: {},
     dailySummaries: {},
     profile: null,
@@ -806,6 +878,7 @@ function createEmptyCloudState() {
     migration: null,
     loaded: {
       loads: false,
+      paidTime: false,
       dailyAddOns: false,
       dailySummaries: false,
       profile: false,
@@ -1469,6 +1542,7 @@ function startCloudListeners() {
       || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
     ))
   ));
+  listenToCloudCollection('paidTime', 'paidTime', (snapshot) => snapshot.docs.map((doc) => normalizePaidTimeRecord({ id: doc.id, ...normalizeCloudData(doc.data()) })));
   listenToCloudCollection('dailyAddOns', 'dailyAddOns', (snapshot) => normalizeCloudDateMap(snapshot, (item) => normalizeDailyAddOns({ [item.date]: item })[item.date]));
   listenToCloudCollection('dailySummaries', 'dailySummaries', (snapshot) => normalizeCloudDateMap(snapshot, (item) => item));
   listenToCloudDocument('profile', 'profile', 'current');
@@ -1512,6 +1586,7 @@ function shouldApplyCloudState() {
 
 function persistCurrentStateToLocalFallback() {
   storeJson(STORAGE_KEY, savedLoads, 'load log');
+  storeJson(PAID_TIME_STORAGE_KEY, paidTimeRecords, 'paid-time records');
   storeJson(ADD_ON_STORAGE_KEY, dailyAddOns, 'daily add-ons');
   storeJson(EARNINGS_STORAGE_KEY, dailyEarningsRecords, 'daily summaries');
   storeJson(PROFILE_STORAGE_KEY, driverProfile, 'driver profile');
@@ -1536,6 +1611,9 @@ function applyCloudStateToApp() {
     settings: appSettings,
     favoriteRoutes
   });
+  const cloudPaidTime = normalizePaidTimeRecords(cloudSync.state.paidTime || []);
+  const paidById = new Map([...cloudPaidTime, ...paidTimeRecords].map((item) => [item.id, item]));
+  paidTimeRecords = [...paidById.values()].filter((item) => !getPendingDeletes().paidTime[item.id]);
   const pendingDeletes = getPendingDeletes();
   const cloudLoads = filterTombstonedLoads(cloudSync.state.loads.map(normalizeSavedLoad));
   const shouldMergeLocalState = hasLocalChangesPending()
@@ -1616,6 +1694,7 @@ function restoreStartupSafetySnapshot() {
   appMeta = normalizeAppMeta(startupSafetySnapshot.metadata || {});
   appSettings = normalizeAppSettings(startupSafetySnapshot.settings || {});
   favoriteRoutes = filterTombstonedFavoriteRoutes(normalizeFavoriteRoutes(startupSafetySnapshot.favoriteRoutes || []));
+  paidTimeRecords = normalizePaidTimeRecords(startupSafetySnapshot.paidTime || []);
 
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
@@ -1927,6 +2006,7 @@ function buildCloudSettingsPayload(extra = {}) {
       metadata: META_STORAGE_KEY,
       settings: SETTINGS_STORAGE_KEY,
       favoriteRoutes: FAVORITE_ROUTES_STORAGE_KEY
+      ,paidTime: PAID_TIME_STORAGE_KEY
     },
     appSettings,
     payRates: appSettings.payRates,
@@ -2028,6 +2108,15 @@ async function processPendingDeletes(options = {}) {
         clearPendingDelete('dailyAddOns', date);
       } catch (error) {
         failedDeletes.push(getFriendlyErrorDetail(error, `daily add-on ${date}`));
+      }
+    }
+
+    for (const paidTimeId of Object.keys(getPendingDeletes().paidTime)) {
+      try {
+        await cloudSync.sdk.deleteDoc(cloudDocument('paidTime', toCloudDocumentId(paidTimeId)));
+        clearPendingDelete('paidTime', paidTimeId);
+      } catch (error) {
+        failedDeletes.push(getFriendlyErrorDetail(error, `paid-time record ${paidTimeId}`));
       }
     }
 
@@ -2183,6 +2272,7 @@ function syncImportedStateToCloud(nextState, mode) {
     const nextLoadIds = new Set(nextState.loads.map((load) => String(load.id)));
     const nextAddOnDates = new Set(Object.keys(nextState.dailyAddOns || {}));
     const nextSummaryDates = new Set(Object.keys(nextState.dailySummaries || {}));
+    const nextPaidTimeIds = new Set((nextState.paidTime || []).map((item) => String(item.id)));
 
     for (const load of nextState.loads) {
       await batch.set(cloudDocument('loads', toCloudDocumentId(load.id)), buildCloudLoadPayload(load), { merge: true });
@@ -2200,6 +2290,13 @@ function syncImportedStateToCloud(nextState, mode) {
       await batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), sanitizeForFirestore({
         ...nextState.dailySummaries[date],
         date,
+        cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+      }), { merge: true });
+    }
+
+    for (const item of nextState.paidTime || []) {
+      await batch.set(cloudDocument('paidTime', toCloudDocumentId(item.id)), sanitizeForFirestore({
+        ...normalizePaidTimeRecord(item),
         cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
       }), { merge: true });
     }
@@ -2230,6 +2327,12 @@ function syncImportedStateToCloud(nextState, mode) {
           await batch.delete(cloudDocument('dailySummaries', toCloudDocumentId(date)));
         }
       }
+
+      for (const item of cloudSync.state.paidTime || []) {
+        if (!nextPaidTimeIds.has(String(item.id))) {
+          await batch.delete(cloudDocument('paidTime', toCloudDocumentId(item.id)));
+        }
+      }
     }
 
     await batch.commit();
@@ -2258,6 +2361,15 @@ function syncAllCurrentDataToCloud() {
 
     for (const date of Object.keys(dailyEarningsRecords || {})) {
       await batch.set(cloudDocument('dailySummaries', toCloudDocumentId(date)), buildCloudSummaryPayload(date), { merge: true });
+    }
+
+    for (const item of paidTimeRecords.filter((record) => !getPendingDeletes().paidTime[record.id])) {
+      await batch.set(cloudDocument('paidTime', toCloudDocumentId(item.id)), sanitizeForFirestore({
+        ...item,
+        appVersion: APP_VERSION,
+        dataSchemaVersion: DATA_SCHEMA_VERSION,
+        cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
+      }), { merge: true });
     }
 
     await batch.set(cloudDocument('profile', 'current'), buildCloudProfilePayload(), { merge: true });
@@ -2294,7 +2406,8 @@ function getLocalMigrationState() {
     profile: startupHasLoads ? startupSafetySnapshot.profile : driverProfile,
     metadata: startupHasLoads ? startupSafetySnapshot.metadata : appMeta,
     settings: startupHasLoads ? startupSafetySnapshot.settings : appSettings,
-    favoriteRoutes: filterTombstonedFavoriteRoutes(startupHasLoads ? startupSafetySnapshot.favoriteRoutes : favoriteRoutes)
+    favoriteRoutes: filterTombstonedFavoriteRoutes(startupHasLoads ? startupSafetySnapshot.favoriteRoutes : favoriteRoutes),
+    paidTime: startupHasLoads ? startupSafetySnapshot.paidTime : paidTimeRecords
   });
 }
 
@@ -3047,6 +3160,10 @@ function normalizeAppSettings(rawSettings) {
       sleeperBerthPay: normalizePayRate(rawRates.sleeperBerthPay, defaults.payRates.sleeperBerthPay),
       trainerPay: normalizePayRate(rawRates.trainerPay, defaults.payRates.trainerPay),
       waitPayRate: normalizePayRate(rawRates.waitPayRate, defaults.payRates.waitPayRate)
+      ,deadheadHourlyRate: normalizePayRate(rawRates.deadheadHourlyRate, defaults.payRates.deadheadHourlyRate)
+      ,truckWashHourlyRate: normalizePayRate(rawRates.truckWashHourlyRate, defaults.payRates.truckWashHourlyRate)
+      ,breakdownHourlyRate: normalizePayRate(rawRates.breakdownHourlyRate, defaults.payRates.breakdownHourlyRate)
+      ,otherHourlyRate: normalizePayRate(rawRates.otherHourlyRate, defaults.payRates.otherHourlyRate)
     },
     loadedMilesPayScale: normalizeLoadedMilesPayScale(raw.loadedMilesPayScale),
     dailyCompletedLoadPayGoal: normalizePayRate(raw.dailyCompletedLoadPayGoal, defaults.dailyCompletedLoadPayGoal),
@@ -3484,6 +3601,10 @@ function applyPaySettingsToControls() {
   if (paySettingsControls.dailyCompletedLoadGoal) {
     paySettingsControls.dailyCompletedLoadGoal.value = String(getDailyCompletedLoadPayGoal());
   }
+  if (paySettingsControls.deadheadRate) paySettingsControls.deadheadRate.value = String(getPayRate('deadheadHourlyRate'));
+  if (paySettingsControls.truckWashRate) paySettingsControls.truckWashRate.value = String(getPayRate('truckWashHourlyRate'));
+  if (paySettingsControls.breakdownRate) paySettingsControls.breakdownRate.value = String(getPayRate('breakdownHourlyRate'));
+  if (paySettingsControls.otherHourlyRate) paySettingsControls.otherHourlyRate.value = String(getPayRate('otherHourlyRate'));
   if (paySettingsControls.waitRate) {
     paySettingsControls.waitRate.value = String(getPayRate('waitPayRate'));
   }
@@ -3543,6 +3664,10 @@ function savePaySettingsFromControls() {
       sleeperBerthPay: paySettingsControls.sleeperRate?.value,
       rejectPay: paySettingsControls.rejectRate?.value,
       trainerPay: paySettingsControls.trainerRate?.value
+      ,deadheadHourlyRate: paySettingsControls.deadheadRate?.value
+      ,truckWashHourlyRate: paySettingsControls.truckWashRate?.value
+      ,breakdownHourlyRate: paySettingsControls.breakdownRate?.value
+      ,otherHourlyRate: paySettingsControls.otherHourlyRate?.value
     },
     loadedMilesPayScale: readLoadedMilesPayEditor()
   });
@@ -4275,6 +4400,67 @@ function getIntervalUnionMinutes(intervals) {
   return total + end - start;
 }
 
+function getPaidTimeOverlapReview(records, paidRecords) {
+  const loadIntervals = records.map((load) => {
+    const start = parseTimeToMinutes(load.arrivedPickupTime);
+    let end = parseTimeToMinutes(load.completedTime);
+    if (!isFiniteNumber(start) || !isFiniteNumber(end)) return null;
+    if (end < start) end += 1440;
+    return { start, end, id: load.id };
+  }).filter(Boolean);
+  let overlapMinutes = 0;
+  const warnings = [];
+  paidRecords.forEach((item) => {
+    const start = parseTimeToMinutes(item.startTime);
+    let end = parseTimeToMinutes(item.endTime);
+    if (!isFiniteNumber(start) || !isFiniteNumber(end)) return;
+    if (end < start) end += 1440;
+    loadIntervals.forEach((load) => {
+      const overlap = Math.max(0, Math.min(end, load.end) - Math.max(start, load.start));
+      if (overlap > 0) {
+        overlapMinutes += overlap;
+        warnings.push(`${item.category} overlaps load ${load.id} by ${formatDuration(overlap)}`);
+      }
+    });
+  });
+  const paidIntervals = paidRecords.map((item) => {
+    const start = parseTimeToMinutes(item.startTime);
+    let end = parseTimeToMinutes(item.endTime);
+    if (!isFiniteNumber(start) || !isFiniteNumber(end)) return null;
+    if (end < start) end += 1440;
+    return { start, end, id: item.id, category: item.category };
+  }).filter(Boolean);
+  paidIntervals.forEach((item, index) => {
+    paidIntervals.slice(index + 1).forEach((other) => {
+      const overlap = Math.max(0, Math.min(item.end, other.end) - Math.max(item.start, other.start));
+      if (overlap > 0) {
+        overlapMinutes += overlap;
+        warnings.push(`${item.category} overlaps ${other.category} by ${formatDuration(overlap)}`);
+      }
+    });
+  });
+  return { overlapMinutes, warnings, status: warnings.length ? 'review' : 'clear' };
+}
+
+function getMergedClassifiedDutyMinutes(records, paidRecords) {
+  const intervals = [];
+  records.forEach((load) => {
+    const start = parseTimeToMinutes(load.arrivedPickupTime);
+    let end = parseTimeToMinutes(load.completedTime);
+    if (!isFiniteNumber(start) || !isFiniteNumber(end)) return;
+    if (end < start) end += 1440;
+    intervals.push({ start, end });
+  });
+  paidRecords.forEach((item) => {
+    const start = parseTimeToMinutes(item.startTime);
+    let end = parseTimeToMinutes(item.endTime);
+    if (!isFiniteNumber(start) || !isFiniteNumber(end)) return;
+    if (end < start) end += 1440;
+    intervals.push({ start, end });
+  });
+  return getIntervalUnionMinutes(intervals);
+}
+
 function getMergedActiveCycleMinutes(records) {
   const ordered = sortLoadsForTimeline(getUniqueSavedLoads(records).filter((load) => load.arrivedPickupTime && load.completedTime));
   const intervals = [];
@@ -4308,12 +4494,28 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const perDiemPay = addOn.perDiem ? getPayRate('perDiemPay') : 0;
   const sleeperBerthPay = addOn.sleeperBerth ? getPayRate('sleeperBerthPay') : 0;
   const trainerPay = addOn.trainerPay ? getPayRate('trainerPay') : 0;
+  const paidTime = paidTimeRecords.filter((item) => item.workDate === date);
+  const paidByCategory = (category) => sum(paidTime.filter((item) => item.category === category), 'estimatedPay');
+  const paidMinutesByCategory = (category) => sum(paidTime.filter((item) => item.category === category), 'durationMinutes');
+  const deadheadPay = paidByCategory('Deadhead');
+  const truckWashPay = paidByCategory('Truck Wash');
+  const breakdownPay = paidByCategory('Breakdown');
+  const otherHourlyPay = paidByCategory('Other Hourly Work');
+  const deadheadMinutes = paidMinutesByCategory('Deadhead');
+  const truckWashMinutes = paidMinutesByCategory('Truck Wash');
+  const breakdownMinutes = paidMinutesByCategory('Breakdown');
+  const otherHourlyMinutes = paidMinutesByCategory('Other Hourly Work');
+  const totalHourlyAdditionalMinutes = deadheadMinutes + truckWashMinutes + breakdownMinutes + otherHourlyMinutes;
+  const hourlyAdditionalPay = deadheadPay + truckWashPay + breakdownPay + otherHourlyPay;
+  const paidTimeOverlap = getPaidTimeOverlapReview(records, paidTime);
   const exactDutyMinutes = durationBetween(addOn.shiftStartTime, addOn.shiftEndTime);
   const timeline = normalizeDailyTimeline(records);
   const estimatedTrackedSpanMinutes = timeline.status === 'valid' ? timeline.spanMinutes : null;
   const usableDutyMinutes = isFiniteNumber(exactDutyMinutes) ? exactDutyMinutes : estimatedTrackedSpanMinutes;
   const activeLoadCycleMinutes = isFiniteNumber(exactDutyMinutes) ? getMergedActiveCycleMinutes(records) : null;
+  const classifiedDutyMinutes = isFiniteNumber(exactDutyMinutes) ? getMergedClassifiedDutyMinutes(records, paidTime) : null;
   const utilizationUsable = isFiniteNumber(activeLoadCycleMinutes) && exactDutyMinutes > 0 && activeLoadCycleMinutes <= exactDutyMinutes;
+  const classificationUsable = isFiniteNumber(classifiedDutyMinutes) && exactDutyMinutes > 0 && classifiedDutyMinutes <= exactDutyMinutes;
   const goalResult = calculateDailyCompletedLoadPayGoal(records);
 
   return {
@@ -4344,6 +4546,12 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     sleeperBerthPay,
     trainerPayApplied: addOn.trainerPay,
     trainerPay,
+    paidTimeCount: paidTime.length,
+    deadheadMinutes, truckWashMinutes, breakdownMinutes, otherHourlyMinutes, totalHourlyAdditionalMinutes,
+    deadheadPay, truckWashPay, breakdownPay, otherHourlyPay, hourlyAdditionalPay,
+    paidTimeOverlapMinutes: paidTimeOverlap.overlapMinutes,
+    paidTimeOverlapStatus: paidTimeOverlap.status,
+    paidTimeOverlapWarnings: paidTimeOverlap.warnings,
     shiftStartTime: addOn.shiftStartTime,
     shiftEndTime: addOn.shiftEndTime,
     exactDutyMinutes,
@@ -4354,8 +4562,10 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     timelineWarning: timeline.warning,
     activeLoadCycleMinutes: utilizationUsable ? activeLoadCycleMinutes : null,
     nonLoadDutyMinutes: utilizationUsable ? exactDutyMinutes - activeLoadCycleMinutes : null,
+    classifiedDutyMinutes: classificationUsable ? classifiedDutyMinutes : null,
+    unclassifiedNonLoadDutyMinutes: classificationUsable ? exactDutyMinutes - classifiedDutyMinutes : null,
     activeLoadUtilization: utilizationUsable ? activeLoadCycleMinutes / exactDutyMinutes * 100 : null,
-    totalEstimatedDailyEarnings: totalEstimatedEntryPay + perDiemPay + sleeperBerthPay + trainerPay,
+    totalEstimatedDailyEarnings: totalEstimatedEntryPay + hourlyAdditionalPay + perDiemPay + sleeperBerthPay + trainerPay,
     completedLoadPayPerExactDutyHour: exactDutyMinutes > 0 ? completedLoadPay / (exactDutyMinutes / 60) : null,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
     averageGrossBarrels: completedRecords.length > 0 ? sum(completedRecords, 'grossBarrels') / completedRecords.length : 0,
@@ -4410,6 +4620,7 @@ function refreshAllDailyEarningsRecords() {
     ...Object.keys(dailyEarningsRecords),
     ...Object.keys(dailyAddOns),
     ...savedLoads.map((load) => load.loadDate).filter(Boolean),
+    ...paidTimeRecords.map((item) => item.workDate).filter(Boolean),
     daily.date.value
   ]);
 
@@ -4571,6 +4782,13 @@ function updateDailySummary() {
 
   daily.completedLoads.textContent = String(summaryRecord.completedLoadCount);
   daily.rejects.textContent = String(summaryRecord.rejectCount);
+  setElementText(daily.todayCompleted, String(summaryRecord.completedLoadCount));
+  setElementText(daily.todayRejects, String(summaryRecord.rejectCount));
+  setElementText(daily.todayCompletedPay, formatMoney(summaryRecord.completedLoadPay));
+  setElementText(daily.todayHourlyPay, formatMoney(summaryRecord.hourlyAdditionalPay));
+  setElementText(daily.todayWaitPay, formatMoney(summaryRecord.totalWaitPay));
+  setElementText(daily.todayAddOns, formatMoney(summaryRecord.perDiemPay + summaryRecord.sleeperBerthPay + summaryRecord.trainerPay));
+  setElementText(daily.todayDutyTime, formatMaybeDuration(summaryRecord.exactDutyMinutes));
   updateDashboardStats(summaryRecord);
 
   review.dateLabel.textContent = selectedDate || '-';
@@ -5832,6 +6050,13 @@ function downloadDailyEarningsSummary() {
     'Sleeper berth amount',
     'Trainer pay applied',
     'Trainer pay amount',
+    'Deadhead pay',
+    'Truck wash pay',
+    'Breakdown pay',
+    'Other hourly work pay',
+    'Total hourly additional pay',
+    'Paid-time overlap status',
+    'Paid-time overlap minutes',
     'Total estimated daily earnings',
     'Daily earnings notes'
   ];
@@ -5876,6 +6101,13 @@ function downloadDailyEarningsSummary() {
       formatCsvNumber(record.sleeperBerthPay),
       record.trainerPayApplied ? 'Yes' : 'No',
       formatCsvNumber(record.trainerPay),
+      formatCsvNumber(record.deadheadPay),
+      formatCsvNumber(record.truckWashPay),
+      formatCsvNumber(record.breakdownPay),
+      formatCsvNumber(record.otherHourlyPay),
+      formatCsvNumber(record.hourlyAdditionalPay),
+      record.paidTimeOverlapStatus,
+      formatCsvNumber(record.paidTimeOverlapMinutes),
       formatCsvNumber(record.totalEstimatedDailyEarnings),
       record.notes
     ];
@@ -5918,6 +6150,7 @@ function getTrackerSnapshot() {
       metadata: appMeta,
       settings: appSettings,
       favoriteRoutes
+      ,paidTime: paidTimeRecords
     }
   };
 }
@@ -6007,7 +6240,8 @@ function parseBackupText(text) {
     profile: normalizeDriverProfile(data.profile || {}),
     metadata: isPlainObject(data.metadata) ? data.metadata : {},
     settings: normalizeAppSettings(data.settings || {}),
-    favoriteRoutes: normalizeFavoriteRoutes(data.favoriteRoutes || [])
+    favoriteRoutes: normalizeFavoriteRoutes(data.favoriteRoutes || []),
+    paidTime: normalizePaidTimeRecords(data.paidTime || [])
   };
 }
 
@@ -6042,6 +6276,7 @@ function buildImportedState(imported, mode) {
       profile: imported.profile,
       settings: imported.settings,
       favoriteRoutes: imported.favoriteRoutes,
+      paidTime: imported.paidTime,
       metadata: {
         ...imported.metadata,
         importedAt: new Date().toISOString(),
@@ -6085,6 +6320,7 @@ function buildImportedState(imported, mode) {
       }
     }),
     favoriteRoutes: normalizeFavoriteRoutes([...favoriteRoutes, ...imported.favoriteRoutes]),
+    paidTime: [...new Map([...paidTimeRecords, ...imported.paidTime].map((item) => [item.id, item])).values()],
     metadata: {
       ...appMeta,
       lastImport: {
@@ -6111,6 +6347,7 @@ function commitImportedState(nextState) {
     appMeta,
     appSettings,
     favoriteRoutes
+    ,paidTimeRecords
   };
   const previousStorage = {
     [STORAGE_KEY]: localStorage.getItem(STORAGE_KEY),
@@ -6120,6 +6357,7 @@ function commitImportedState(nextState) {
     [META_STORAGE_KEY]: localStorage.getItem(META_STORAGE_KEY),
     [SETTINGS_STORAGE_KEY]: localStorage.getItem(SETTINGS_STORAGE_KEY),
     [FAVORITE_ROUTES_STORAGE_KEY]: localStorage.getItem(FAVORITE_ROUTES_STORAGE_KEY)
+    ,[PAID_TIME_STORAGE_KEY]: localStorage.getItem(PAID_TIME_STORAGE_KEY)
   };
 
   try {
@@ -6130,6 +6368,7 @@ function commitImportedState(nextState) {
     localStorage.setItem(META_STORAGE_KEY, JSON.stringify(nextState.metadata));
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextState.settings));
     localStorage.setItem(FAVORITE_ROUTES_STORAGE_KEY, JSON.stringify(nextState.favoriteRoutes));
+    localStorage.setItem(PAID_TIME_STORAGE_KEY, JSON.stringify(nextState.paidTime || []));
   } catch {
     Object.entries(previousStorage).forEach(([key, value]) => {
       try {
@@ -6148,6 +6387,7 @@ function commitImportedState(nextState) {
     appMeta = previousState.appMeta;
     appSettings = previousState.appSettings;
     favoriteRoutes = previousState.favoriteRoutes;
+    paidTimeRecords = previousState.paidTimeRecords;
     return false;
   }
 
@@ -6158,11 +6398,13 @@ function commitImportedState(nextState) {
   appMeta = isPlainObject(nextState.metadata) ? nextState.metadata : {};
   appSettings = normalizeAppSettings(nextState.settings);
   favoriteRoutes = normalizeFavoriteRoutes(nextState.favoriteRoutes);
+  paidTimeRecords = normalizePaidTimeRecords(nextState.paidTime || []);
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
   applyDailyAddOnsToControls();
   applyPaySettingsToControls();
   renderFavoriteRoutes();
+  renderPaidTimeRecords();
   renderSummary();
   updateDailySummary();
   saveAppMeta();
@@ -6250,6 +6492,12 @@ function printDailyReport() {
     ['Reject pay', formatMoney(record.rejectPay)],
     ['Wait-time earnings', formatMoney(record.totalWaitPay)],
     ['Trainer pay', formatMoney(record.trainerPay)],
+    ['Deadhead pay', formatMoney(record.deadheadPay)],
+    ['Truck wash pay', formatMoney(record.truckWashPay)],
+    ['Breakdown pay', formatMoney(record.breakdownPay)],
+    ['Other hourly work pay', formatMoney(record.otherHourlyPay)],
+    ['Total hourly additional pay', formatMoney(record.hourlyAdditionalPay)],
+    ['Paid-time overlap review', record.paidTimeOverlapStatus === 'review' ? `Needs review (${formatDuration(record.paidTimeOverlapMinutes)})` : 'No overlap found'],
     ['Total earnings', formatMoney(record.totalEstimatedDailyEarnings)],
     ['Total gross barrels', formatBarrels(record.totalGrossBarrels)],
     ['Total mileage', formatMiles(record.totalMilesIncludingReRoute)],
@@ -6429,7 +6677,9 @@ function summarizeDayRows(days, name = '') {
     exactDays: exactDays.length, estimatedDays: estimatedDays.length, missingTimeDays: missingDays.length,
     exactDutyMinutes, estimatedSpanMinutes, usableDutyMinutes,
     completedBasePay: sum(days, 'completedLoadPay'), rejectPay: sum(days, 'rejectPay'), waitPay: sum(days, 'totalWaitPay'),
-    perDiemPay: sum(days, 'perDiemPay'), sleeperPay: sum(days, 'sleeperBerthPay'), trainerPay: sum(days, 'trainerPay'), totalEarnings,
+    perDiemPay: sum(days, 'perDiemPay'), sleeperPay: sum(days, 'sleeperBerthPay'), trainerPay: sum(days, 'trainerPay'),
+    deadheadPay: sum(days, 'deadheadPay'), truckWashPay: sum(days, 'truckWashPay'), breakdownPay: sum(days, 'breakdownPay'),
+    otherHourlyPay: sum(days, 'otherHourlyPay'), hourlyAdditionalPay: sum(days, 'hourlyAdditionalPay'), totalEarnings,
     averageEarningsPerWorkday: days.length ? totalEarnings / days.length : null,
     effectiveHourlyEarnings: usableDutyMinutes > 0 ? totalEarnings / (usableDutyMinutes / 60) : null,
     completedLoadsPerDutyHour: usableDutyMinutes > 0 ? completedLoads / (usableDutyMinutes / 60) : null,
@@ -6627,7 +6877,10 @@ function renderDispatchAnalysis(startDate, endDate) {
     ['Completed loads', result.completedLoads], ['Rejects', result.rejects], ['Total assignments', result.totalAssignments],
     ['Completion rate', formatPercentValue(result.completionRate)], ['Completed-load base pay', formatMoney(result.completedBasePay)],
     ['Reject pay', formatMoney(result.rejectPay)], ['Wait pay', formatMoney(result.waitPay)], ['Per diem', formatMoney(result.perDiemPay)],
-    ['Sleeper pay', formatMoney(result.sleeperPay)], ['Trainer pay', formatMoney(result.trainerPay)], ['Total estimated earnings', formatMoney(result.totalEarnings)],
+    ['Sleeper pay', formatMoney(result.sleeperPay)], ['Trainer pay', formatMoney(result.trainerPay)],
+    ['Deadhead pay', formatMoney(result.deadheadPay)], ['Truck wash pay', formatMoney(result.truckWashPay)],
+    ['Breakdown pay', formatMoney(result.breakdownPay)], ['Other hourly work pay', formatMoney(result.otherHourlyPay)],
+    ['Total hourly additional pay', formatMoney(result.hourlyAdditionalPay)], ['Total estimated earnings', formatMoney(result.totalEarnings)],
     ['Exact-duty days', result.exactDays], ['Estimated-span days', result.estimatedDays], ['Missing-time days', result.missingTimeDays],
     ['Exact duty time', formatMaybeDuration(result.exactDays ? result.exactDutyMinutes : null)], ['Estimated tracked span', formatMaybeDuration(result.estimatedDays ? result.estimatedSpanMinutes : null)],
     ['Combined usable duty time', formatMaybeDuration(result.usableDutyMinutes || null)], ['Exact-duty hourly earnings', formatMaybeMoney(result.exactHourlyEarnings)],
@@ -6844,7 +7097,10 @@ function downloadDispatchAnalysis() {
   const baselineMetrics = [
     ['Completed loads',result.completedLoads,'loads'],['Rejects',result.rejects,'loads'],['Total assignments',result.totalAssignments,'assignments'],['Completion rate',formatCsvNumber(result.completionRate),'percent'],
     ['Completed-load base pay',formatCsvNumber(result.completedBasePay),'USD'],['Reject pay',formatCsvNumber(result.rejectPay),'USD'],['Wait pay',formatCsvNumber(result.waitPay),'USD'],
-    ['Per diem',formatCsvNumber(result.perDiemPay),'USD'],['Sleeper pay',formatCsvNumber(result.sleeperPay),'USD'],['Trainer pay',formatCsvNumber(result.trainerPay),'USD'],['Total estimated earnings',formatCsvNumber(result.totalEarnings),'USD'],
+    ['Per diem',formatCsvNumber(result.perDiemPay),'USD'],['Sleeper pay',formatCsvNumber(result.sleeperPay),'USD'],['Trainer pay',formatCsvNumber(result.trainerPay),'USD'],
+    ['Deadhead pay',formatCsvNumber(result.deadheadPay),'USD'],['Truck wash pay',formatCsvNumber(result.truckWashPay),'USD'],
+    ['Breakdown pay',formatCsvNumber(result.breakdownPay),'USD'],['Other hourly work pay',formatCsvNumber(result.otherHourlyPay),'USD'],
+    ['Total hourly additional pay',formatCsvNumber(result.hourlyAdditionalPay),'USD'],['Total estimated earnings',formatCsvNumber(result.totalEarnings),'USD'],
     ['Exact-duty days',result.exactDays,'days'],['Estimated-span days',result.estimatedDays,'days'],['Missing-time days',result.missingTimeDays,'days'],['Exact duty time',result.exactDutyMinutes,'minutes'],
     ['Days goal met',result.daysGoalMet,'days'],['Days below goal',result.daysBelowGoal,'days'],['Days with insufficient goal data',result.daysInsufficientData,'days'],
     ['Usable days meeting goal',formatCsvNumber(result.percentUsableDaysMeetingGoal),'percent'],['Total amount above goal',formatCsvNumber(result.totalAmountAboveGoal),'USD'],
@@ -6870,7 +7126,7 @@ function downloadDispatchAnalysis() {
       ['Total estimated earnings',formatCsvNumber(row.totalEarnings),'USD'],['Average earnings per workday',formatCsvNumber(row.averageEarningsPerWorkday),'USD'],
       ['Effective hourly earnings',formatCsvNumber(row.effectiveHourlyEarnings),'USD/hour'],['Completed loads per duty hour',formatCsvNumber(row.completedLoadsPerDutyHour),'loads/hour']
     ], row.name)),
-    ...result.days.flatMap((day) => metricRows('Duty-Time Review', [['Dispatcher',day.dispatcher === 'Mixed Dispatchers' ? 'Mixed Dispatch' : day.dispatcher,''],['Completed loads',day.completedLoadCount,'loads'],['Completed-load pay',formatCsvNumber(day.completedLoadPay),'USD'],['Daily completed-load-pay goal',formatCsvNumber(day.dailyGoal),'USD'],['Goal status',day.goalStatus,''],['Goal difference',formatCsvNumber(day.goalDifference),'USD'],['Total estimated daily earnings',formatCsvNumber(day.totalEstimatedDailyEarnings),'USD'],['Duty-time basis',day.dutyTimeSource,''],['Exact duty time',day.exactDutyMinutes,'minutes'],['Estimated tracked span',day.estimatedTrackedSpanMinutes,'minutes'],['Active load-cycle time',day.activeLoadCycleMinutes,'minutes'],['Non-load duty time',day.nonLoadDutyMinutes,'minutes'],['Active utilization',formatCsvNumber(day.activeLoadUtilization),'percent'],['Completed-load pay per duty hour',formatCsvNumber(day.completedLoadPayPerExactDutyHour),'USD/hour'],['Duty-time status',getDutyTimeStatus(day),''],['Workload observation',getWorkloadObservation(day),'']], day.date)),
+    ...result.days.flatMap((day) => metricRows('Duty-Time Review', [['Dispatcher',day.dispatcher === 'Mixed Dispatchers' ? 'Mixed Dispatch' : day.dispatcher,''],['Completed loads',day.completedLoadCount,'loads'],['Completed-load pay',formatCsvNumber(day.completedLoadPay),'USD'],['Daily completed-load-pay goal',formatCsvNumber(day.dailyGoal),'USD'],['Goal status',day.goalStatus,''],['Goal difference',formatCsvNumber(day.goalDifference),'USD'],['Deadhead pay',formatCsvNumber(day.deadheadPay),'USD'],['Truck wash pay',formatCsvNumber(day.truckWashPay),'USD'],['Breakdown pay',formatCsvNumber(day.breakdownPay),'USD'],['Other hourly work pay',formatCsvNumber(day.otherHourlyPay),'USD'],['Total hourly additional pay',formatCsvNumber(day.hourlyAdditionalPay),'USD'],['Total estimated daily earnings',formatCsvNumber(day.totalEstimatedDailyEarnings),'USD'],['Duty-time basis',day.dutyTimeSource,''],['Exact duty time',day.exactDutyMinutes,'minutes'],['Estimated tracked span',day.estimatedTrackedSpanMinutes,'minutes'],['Active load-cycle time',day.activeLoadCycleMinutes,'minutes'],['Non-load duty time',day.nonLoadDutyMinutes,'minutes'],['Active utilization',formatCsvNumber(day.activeLoadUtilization),'percent'],['Completed-load pay per duty hour',formatCsvNumber(day.completedLoadPayPerExactDutyHour),'USD/hour'],['Duty-time status',getDutyTimeStatus(day),''],['Workload observation',getWorkloadObservation(day),'']], day.date)),
     ...loadMetricRows('Dispatcher Load Comparison',dispatcherRows),...loadMetricRows('Pickup State Comparison',pickupRows),...loadMetricRows('Drop-off State Comparison',dropoffRows),...loadMetricRows('State Route Comparison',stateRows),...loadMetricRows('Exact Route Comparison',routeRows),
     ...metricRows('Workday Indicators', [
       ['Weighted exact-duty range hourly earnings',formatCsvNumber(weightedStats.weightedHourly),'USD/hour'],
@@ -6901,6 +7157,101 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function getPaidTimeDefaultRate(category) {
+  const map = { Deadhead: 'deadheadHourlyRate', 'Truck Wash': 'truckWashHourlyRate', Breakdown: 'breakdownHourlyRate', 'Other Hourly Work': 'otherHourlyRate' };
+  return getPayRate(map[category] || 'otherHourlyRate');
+}
+
+function readPaidTimeForm() {
+  return normalizePaidTimeRecord({
+    workDate: paidTimeControls.date?.value, category: paidTimeControls.category?.value,
+    customCategoryName: paidTimeControls.custom?.value, startTime: paidTimeControls.start?.value,
+    endTime: paidTimeControls.end?.value, hourlyRate: paidTimeControls.rate?.value,
+    dispatcher: paidTimeControls.dispatcher?.value, truckNumber: paidTimeControls.truck?.value,
+    trailerNumber: paidTimeControls.trailer?.value, relatedLoadId: paidTimeControls.relatedLoad?.value,
+    deadheadMiles: paidTimeControls.miles?.value, location: paidTimeControls.location?.value, notes: paidTimeControls.notes?.value
+  });
+}
+
+function renderPaidTimeCalculation() {
+  const record = readPaidTimeForm();
+  setElementText(paidTimeControls.duration, formatMaybeDuration(record.durationMinutes));
+  setElementText(paidTimeControls.pay, formatMaybeMoney(record.estimatedPay));
+}
+
+function renderPaidTimeRecords() {
+  const container = document.getElementById('paid-time-records');
+  if (!container) return;
+  container.innerHTML = paidTimeRecords.length ? paidTimeRecords.map((item) => `<article class="saved-load-card"><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.workDate)} · ${escapeHtml(item.startTime)}–${escapeHtml(item.endTime)}</span><span>${escapeHtml(formatDuration(item.durationMinutes))} at ${escapeHtml(formatMoney(item.hourlyRate))}/hr · ${escapeHtml(formatMoney(item.estimatedPay))}</span><span>${escapeHtml(item.dispatcher || 'No dispatcher')} · Truck ${escapeHtml(item.truckNumber || '-')}</span><div class="button-row compact"><button type="button" class="button secondary" data-edit-paid-time="${escapeHtml(item.id)}">Edit</button><button type="button" class="button ghost" data-duplicate-paid-time="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="button ghost" data-print-paid-time="${escapeHtml(item.id)}">Print</button><button type="button" class="button danger" data-delete-paid-time="${escapeHtml(item.id)}">Delete</button></div></article>`).join('') : '<article class="empty-card">No paid-time records yet.</article>';
+}
+
+function fillPaidTimeForm(record, duplicate = false) {
+  const mapping = { date:'workDate', category:'category', custom:'customCategoryName', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
+  Object.entries(mapping).forEach(([control, key]) => {
+    if (paidTimeControls[control]) paidTimeControls[control].value = record[key] ?? '';
+  });
+  editingPaidTimeId = duplicate ? null : record.id;
+  if (paidTimeControls.panel) paidTimeControls.panel.open = true;
+  renderPaidTimeCalculation();
+}
+
+function printPaidTimeRecord(record) {
+  const rows = [
+    ['Date', record.workDate], ['Category', record.category], ['Custom category', record.customCategoryName || '-'],
+    ['Start', record.startTime], ['End', record.endTime], ['Duration', formatDuration(record.durationMinutes)],
+    ['Hourly rate', `${formatMoney(record.hourlyRate)}/hr`], ['Estimated pay', formatMoney(record.estimatedPay)],
+    ['Deadhead miles', isFiniteNumber(record.deadheadMiles) ? record.deadheadMiles : '-'], ['Dispatcher', record.dispatcher || '-'],
+    ['Truck', record.truckNumber || '-'], ['Trailer', record.trailerNumber || '-'], ['Related load', record.relatedLoadId || '-'],
+    ['Location', record.location || '-'], ['Notes', record.notes || '-']
+  ];
+  openPrintWindow('Paid Time Record', `<h1>Paid Time Record</h1><div class="print-grid">${rows.map(([label, value]) => `<div class="print-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</div>`);
+}
+
+function downloadPaidTimeCsv() {
+  const headers = ['ID','Date','Category','Custom category','Start','End','Duration minutes','Duration formatted','Hourly rate','Estimated pay','Dispatcher','Truck','Trailer','Related load ID','Deadhead miles','Location','Notes','Created','Updated'];
+  const rows = paidTimeRecords.map((item) => [item.id,item.workDate,item.category,item.customCategoryName,item.startTime,item.endTime,item.durationMinutes,formatDuration(item.durationMinutes),formatCsvNumber(item.hourlyRate),formatCsvNumber(item.estimatedPay),item.dispatcher,item.truckNumber,item.trailerNumber,item.relatedLoadId,formatCsvNumber(item.deadheadMiles),item.location,item.notes,item.createdAt,item.updatedAt]);
+  downloadCsv(`paid-time-${todayLocal()}.csv`, headers, rows);
+}
+
+function syncPaidTimeToCloud(record) {
+  if (!isCloudSignedIn()) return;
+  queueCloudWrite(() => cloudSync.sdk.setDoc(cloudDocument('paidTime', toCloudDocumentId(record.id)), sanitizeForFirestore({ ...record, appVersion: APP_VERSION, dataSchemaVersion: DATA_SCHEMA_VERSION, cloudUpdatedAt: cloudSync.sdk.serverTimestamp() }), { merge: true }), 'Paid time could not be synced to Firebase yet.');
+}
+
+function savePaidTime(event) {
+  event?.preventDefault?.();
+  const formRecord = readPaidTimeForm();
+  const previous = editingPaidTimeId ? paidTimeRecords.find((item) => item.id === editingPaidTimeId) : null;
+  const record = normalizePaidTimeRecord({
+    ...formRecord,
+    id: previous?.id || formRecord.id,
+    createdAt: previous?.createdAt || formRecord.createdAt,
+    updatedAt: new Date().toISOString()
+  });
+  if (!record.workDate || !record.category || !record.startTime || !record.endTime || !isFiniteNumber(record.durationMinutes) || record.durationMinutes <= 0 || record.hourlyRate < 0) {
+    if (paidTimeControls.error) { paidTimeControls.error.textContent = 'Enter a date, category, valid start and end times, and a nonnegative rate.'; paidTimeControls.error.className = 'validation-summary show'; }
+    return;
+  }
+  const duplicate = paidTimeRecords.find((item) => item.id !== editingPaidTimeId
+    && item.workDate === record.workDate && item.category === record.category
+    && item.startTime === record.startTime && item.endTime === record.endTime
+    && item.truckNumber === record.truckNumber);
+  if (duplicate && globalThis.confirm && !globalThis.confirm('A similar paid-time record already exists. Save anyway?')) return;
+  paidTimeRecords = editingPaidTimeId
+    ? [record, ...paidTimeRecords.filter((item) => item.id !== editingPaidTimeId)]
+    : [record, ...paidTimeRecords];
+  editingPaidTimeId = null;
+  storeJson(PAID_TIME_STORAGE_KEY, paidTimeRecords, 'paid-time records');
+  localStorage.removeItem(PAID_TIME_DRAFT_STORAGE_KEY);
+  markLocalChangesPending('Paid time saved locally and is pending sync.');
+  syncPaidTimeToCloud(record);
+  refreshAllDailyEarningsRecords();
+  updateDailySummary();
+  renderPaidTimeRecords();
+  paidTimeControls.form?.reset();
+  if (paidTimeControls.panel) paidTimeControls.panel.open = false;
+}
+
 function initialize() {
   const today = todayLocal();
   initializeAnalysisInputs();
@@ -6917,6 +7268,14 @@ function initialize() {
   }
 
   daily.date.value = daily.date.value || today;
+  if (paidTimeControls.date) paidTimeControls.date.value = daily.date.value;
+  if (paidTimeControls.rate) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Deadhead'));
+  const paidDraft = loadJson(PAID_TIME_DRAFT_STORAGE_KEY, null, 'paid-time draft');
+  if (isPlainObject(paidDraft)) {
+    const mapping = { date:'workDate', category:'category', custom:'customCategoryName', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
+    Object.entries(mapping).forEach(([control,key]) => { if (paidTimeControls[control] && paidDraft[key] !== null && paidDraft[key] !== undefined) paidTimeControls[control].value = paidDraft[key]; });
+  }
+  renderPaidTimeRecords();
   const initialPayPeriod = getCompanyPayPeriodRange(daily.date.value);
   daily.payPeriodStart.value = initialPayPeriod.start;
   daily.payPeriodEnd.value = initialPayPeriod.end;
@@ -6957,6 +7316,35 @@ function initializeAnalysisInputs() {
 }
 
 form?.addEventListener('submit', saveLoad);
+paidTimeControls.form?.addEventListener('submit', savePaidTime);
+paidTimeControls.form?.addEventListener('input', renderPaidTimeCalculation);
+paidTimeControls.category?.addEventListener('change', () => { paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category.value)); renderPaidTimeCalculation(); });
+document.getElementById('show-paid-time-button')?.addEventListener('click', () => {
+  if (paidTimeControls.date && !paidTimeControls.date.value) paidTimeControls.date.value = daily.date.value;
+  if (paidTimeControls.rate && !paidTimeControls.rate.value) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Deadhead'));
+  if (paidTimeControls.panel) paidTimeControls.panel.open = true;
+});
+document.getElementById('save-paid-time-draft-button')?.addEventListener('click', () => storeJson(PAID_TIME_DRAFT_STORAGE_KEY, readPaidTimeForm(), 'paid-time draft'));
+document.getElementById('download-paid-time-button')?.addEventListener('click', downloadPaidTimeCsv);
+document.getElementById('cancel-paid-time-button')?.addEventListener('click', () => { editingPaidTimeId = null; paidTimeControls.form?.reset(); if (paidTimeControls.panel) paidTimeControls.panel.open = false; });
+document.getElementById('paid-time-records')?.addEventListener('click', (event) => {
+  const editButton = event.target.closest?.('[data-edit-paid-time]');
+  const duplicateButton = event.target.closest?.('[data-duplicate-paid-time]');
+  const printButton = event.target.closest?.('[data-print-paid-time]');
+  const actionId = editButton?.dataset.editPaidTime || duplicateButton?.dataset.duplicatePaidTime || printButton?.dataset.printPaidTime;
+  const actionRecord = paidTimeRecords.find((item) => item.id === actionId);
+  if (editButton && actionRecord) { fillPaidTimeForm(actionRecord); return; }
+  if (duplicateButton && actionRecord) { fillPaidTimeForm(actionRecord, true); return; }
+  if (printButton && actionRecord) { printPaidTimeRecord(actionRecord); return; }
+  const button = event.target.closest?.('[data-delete-paid-time]');
+  if (!button || !globalThis.confirm?.('Delete this paid-time record?')) return;
+  const id = button.dataset.deletePaidTime;
+  paidTimeRecords = paidTimeRecords.filter((item) => item.id !== id);
+  storeJson(PAID_TIME_STORAGE_KEY, paidTimeRecords, 'paid-time records');
+  queuePendingDelete('paidTime', id);
+  if (isCloudSignedIn()) queueCloudWrite(() => cloudSync.sdk.deleteDoc(cloudDocument('paidTime', toCloudDocumentId(id))).then(() => clearPendingDelete('paidTime', id)));
+  refreshAllDailyEarningsRecords(); updateDailySummary(); renderPaidTimeRecords();
+});
 form?.addEventListener('input', handleFormInput);
 form?.addEventListener('change', handleFormInput);
 navButtons.forEach((button) => button.addEventListener('click', handleNavigationClick));

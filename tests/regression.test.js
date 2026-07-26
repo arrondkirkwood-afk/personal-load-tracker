@@ -740,6 +740,36 @@ assert.ok(html.includes('Official ELD and company records control'), 'Duty-Time 
 assert.ok(script.includes("'Duty-Time Review'") && script.includes("'Duty-time status'"), 'analysis CSV includes duty-time review data');
 assert.ok(script.includes("['Workload observation', getWorkloadObservation(record)]"), 'printed daily report includes workload observation');
 assert.ok(script.includes("defaultDispatcher: String(addOn.defaultDispatcher"), 'daily default dispatcher participates in normalization');
+
+const deadheadHour = context.normalizePaidTimeRecord({ id: 'pt-1', workDate: '2026-09-03', category: 'Deadhead', startTime: '13:30', endTime: '14:30', hourlyRate: 24, deadheadMiles: 35 });
+assert.strictEqual(deadheadHour.durationMinutes, 60, 'one-hour deadhead duration calculates');
+assert.strictEqual(deadheadHour.estimatedPay, 24, 'deadhead pay uses hours at $24');
+assert.strictEqual(deadheadHour.deadheadMiles, 35, 'deadhead miles remain separate from pay');
+const fractionalPaid = context.normalizePaidTimeRecord({ id: 'pt-2', workDate: '2026-09-03', category: 'Truck Wash', startTime: '13:30', endTime: '15:45', hourlyRate: 24 });
+assert.strictEqual(fractionalPaid.durationMinutes, 135, 'fractional paid time calculates');
+assert.strictEqual(fractionalPaid.estimatedPay, 54, 'fractional paid time pay calculates');
+assert.strictEqual(context.normalizePaidTimeRecord({ id: 'pt-midnight', category: 'Breakdown', startTime: '23:00', endTime: '01:00', hourlyRate: 24 }).durationMinutes, 120, 'paid time crosses midnight');
+assert.strictEqual(context.normalizePaidTimeRecord({ id: 'pt-custom', category: 'Other Hourly Work', startTime: '08:00', endTime: '09:30', hourlyRate: 30 }).estimatedPay, 45, 'other hourly work supports custom rate');
+const paidOverlap = context.getPaidTimeOverlapReview(
+  [analysisLoad({ id: 'overlap-load', arrivedPickupTime: '14:00', completedTime: '16:00' })],
+  [context.normalizePaidTimeRecord({ id: 'overlap-paid', category: 'Deadhead', startTime: '13:30', endTime: '15:00', hourlyRate: 24 })]
+);
+assert.strictEqual(paidOverlap.status, 'review', 'paid time overlapping a load is flagged for review');
+assert.strictEqual(paidOverlap.overlapMinutes, 60, 'paid-time overlap minutes are calculated without silently changing pay');
+assert.strictEqual(context.getPaidTimeOverlapReview([], [deadheadHour]).status, 'clear', 'paid time without a load overlap remains clear');
+assert.strictEqual(context.getPaidTimeOverlapReview([], [
+  context.normalizePaidTimeRecord({ id: 'paid-a', category: 'Deadhead', startTime: '08:00', endTime: '10:00', hourlyRate: 24 }),
+  context.normalizePaidTimeRecord({ id: 'paid-b', category: 'Breakdown', startTime: '09:30', endTime: '11:00', hourlyRate: 24 })
+]).overlapMinutes, 30, 'overlapping paid-time records are disclosed');
+assert.strictEqual(context.getMergedClassifiedDutyMinutes(
+  [analysisLoad({ id: 'classified-load', arrivedPickupTime: '08:00', completedTime: '10:00' })],
+  [context.normalizePaidTimeRecord({ id: 'classified-paid', category: 'Deadhead', startTime: '09:00', endTime: '11:00', hourlyRate: 24 })]
+), 180, 'classified duty intervals are merged instead of double-counted');
+assert.ok(script.includes("const PAID_TIME_STORAGE_KEY = 'personalOilfieldLoadTracker.paidTime'"), 'paid time uses dedicated localStorage key');
+assert.ok(script.includes("cloudDocument('paidTime'"), 'paid time uses dedicated Firebase documents');
+assert.ok(script.includes("getPendingDeletes().paidTime") && script.includes("clearPendingDelete('paidTime'"), 'paid-time deletion tombstones are retried after reconnection');
+assert.ok(script.includes("'Deadhead pay'") && script.includes("'Total hourly additional pay'"), 'daily and analysis exports include paid-time earnings');
+assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Add Paid Time'), 'new app identity and paid-time workflow are visible');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
@@ -767,7 +797,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.5.1'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.6.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -776,7 +806,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.5.1', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.6.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');

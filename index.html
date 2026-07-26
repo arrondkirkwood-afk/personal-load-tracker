@@ -3,35 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Oilfield Load Tracker</title>
+  <title>Oilfield Load &amp; Workday Tracker</title>
   <meta name="theme-color" content="#12343b">
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Oilfield Tracker">
-  <link rel="manifest" href="manifest.json?v=1.5.1">
+  <meta name="apple-mobile-web-app-title" content="Load &amp; Workday">
+  <link rel="manifest" href="manifest.json?v=1.6.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.5.1">
+  <link rel="stylesheet" href="style.css?v=1.6.0">
 </head>
 <body>
   <main class="app">
     <section class="tracker" aria-labelledby="app-title">
       <header class="app-header">
         <div>
-          <p class="eyebrow">Personal Field Records</p>
-          <h1 id="app-title">Oilfield Load Tracker</h1>
+          <p class="eyebrow">Personal loads, time, pay and dispatch analysis</p>
+          <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.5.1</strong></span>
+          <span>Version <strong id="app-version">1.6.0</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
 
       <nav class="app-nav" aria-label="Primary">
-        <button class="nav-item active" type="button" data-view-target="dashboard">Dashboard</button>
-        <button class="nav-item" type="button" data-view-target="new-load">New Load</button>
+        <button class="nav-item active" type="button" data-view-target="dashboard">Today</button>
+        <button class="nav-item" type="button" data-view-target="new-load">Add Load</button>
         <button class="nav-item" type="button" data-view-target="records">Records</button>
-        <button class="nav-item" type="button" data-view-target="reports">Reports</button>
+        <button class="nav-item" type="button" data-view-target="reports">Analysis</button>
         <button class="nav-item" type="button" data-view-target="settings">Settings</button>
       </nav>
 
@@ -108,10 +108,17 @@
               <span class="status-pill"><strong id="loads-hauled-selected-date">0</strong>&nbsp;completed</span>
             </div>
             <div class="metric-strip">
+              <article><span>Completed loads</span><strong id="today-completed-loads">0</strong></article>
+              <article><span>Rejects</span><strong id="today-rejects">0</strong></article>
+              <article><span>Completed-load pay</span><strong id="today-completed-pay">$0.00</strong></article>
+              <article><span>Hourly additional pay</span><strong id="today-hourly-pay">$0.00</strong></article>
+              <article><span>Wait pay</span><strong id="today-wait-pay">$0.00</strong></article>
+              <article><span>Daily add-ons</span><strong id="today-add-ons">$0.00</strong></article>
               <article><span>Gross barrels</span><strong id="daily-gross-barrels">0.00 bbl</strong></article>
               <article><span>Offloaded</span><strong id="daily-barrels-offloaded">0.00 bbl</strong></article>
-              <article><span>Earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
+              <article><span>Total estimated earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
               <article><span>Paid wait</span><strong id="daily-paid-wait">0 hr 0 min</strong></article>
+              <article><span>Duty time</span><strong id="today-duty-time">Not enough time data</strong></article>
             </div>
             <article class="daily-goal-card goal-insufficient" id="daily-goal-card" aria-live="polite">
               <h3>Completed-Load Pay Goal</h3>
@@ -183,6 +190,29 @@
             <article class="empty-card">No recent loads yet.</article>
           </div>
         </section>
+        <details class="panel paid-time-panel" id="paid-time-entry-panel">
+          <summary><strong>Add Paid Time</strong></summary>
+          <form id="paid-time-form">
+            <div class="field-grid">
+              <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
+              <label for="paid-time-category"><span>Category</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Other Hourly Work</option></select></label>
+              <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
+              <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
+              <label for="paid-time-end"><span>End time</span><input id="paid-time-end" type="time" required></label>
+              <label for="paid-time-rate"><span>Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
+              <label for="paid-time-dispatcher"><span>Dispatcher</span><input id="paid-time-dispatcher" type="text" list="dispatcher-options"></label>
+              <label for="paid-time-truck"><span>Truck</span><input id="paid-time-truck" type="text"></label>
+              <label for="paid-time-trailer"><span>Trailer</span><input id="paid-time-trailer" type="text"></label>
+              <label for="paid-time-related-load"><span>Related load ID</span><input id="paid-time-related-load" type="text"></label>
+              <label for="paid-time-miles"><span>Deadhead miles</span><input id="paid-time-miles" type="number" min="0" step="0.1"></label>
+              <label for="paid-time-location"><span>Location</span><input id="paid-time-location" type="text"></label>
+              <label class="full-width" for="paid-time-notes"><span>Notes</span><textarea id="paid-time-notes"></textarea></label>
+            </div>
+            <div class="calculated-strip"><article><span>Duration</span><strong id="paid-time-duration">Not enough time data</strong></article><article><span>Estimated pay</span><strong id="paid-time-pay">$0.00</strong></article></div>
+            <p class="validation-summary" id="paid-time-error" role="alert"></p>
+            <div class="button-row"><button class="button primary" type="submit">Save Paid Time</button><button class="button secondary" type="button" id="download-paid-time-button">Paid Time CSV</button><button class="button ghost" type="button" id="save-paid-time-draft-button">Save Draft</button><button class="button ghost" type="button" id="cancel-paid-time-button">Cancel</button></div>
+          </form>
+        </details>
       </section>
 
       <section class="app-view" id="new-load-view" data-view="new-load" aria-labelledby="entry-title">
@@ -562,6 +592,15 @@
           <div id="saved-load-cards" class="saved-card-list">
             <article class="empty-card">No saved loads match the current filter.</article>
           </div>
+          <div class="section-heading paid-time-records-heading">
+            <div>
+              <p class="section-kicker">Hourly work</p>
+              <h3>Paid-time records</h3>
+            </div>
+          </div>
+          <div id="paid-time-records" class="saved-card-list">
+            <article class="empty-card">No paid-time records yet.</article>
+          </div>
         </section>
       </section>
 
@@ -700,6 +739,10 @@
               <h3>Pay Rates</h3>
               <div class="field-grid pay-rate-grid">
                 <label class="full-width" for="settings-daily-completed-load-goal"><span>Daily completed-load-pay goal</span><input id="settings-daily-completed-load-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-deadhead-rate"><span>Deadhead hourly rate</span><input id="settings-deadhead-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-truck-wash-rate"><span>Truck-wash hourly rate</span><input id="settings-truck-wash-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-breakdown-rate"><span>Breakdown hourly rate</span><input id="settings-breakdown-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-other-hourly-rate"><span>Other hourly default rate</span><input id="settings-other-hourly-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-wait-rate"><span>Wait-time rate per hour</span><input id="settings-wait-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-per-diem-rate"><span>Per diem rate</span><input id="settings-per-diem-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-sleeper-rate"><span>Sleeper berth rate</span><input id="settings-sleeper-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
@@ -776,7 +819,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.5.1</strong>
+                <span>Application version</span><strong id="settings-app-version">1.6.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -901,10 +944,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.5.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.6.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.5.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.6.0&updated=' + Date.now());
           });
       }
 
@@ -940,6 +983,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.5.1"></script>
+  <script src="script.js?v=1.6.0"></script>
 </body>
 </html>

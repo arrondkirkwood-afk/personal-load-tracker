@@ -49,6 +49,9 @@
 .duty-status-extended { color:#7a4a00; }
 .duty-status-review { color:#731d1d; }
 .dashboard-month-detail { display:none; }
+.paid-time-panel { margin-top:1rem; }
+.paid-time-panel > summary { cursor:pointer; min-height:44px; display:flex; align-items:center; }
+.paid-time-records-heading { margin-top:1.5rem; }
 .goal-result-met { border-color:#24783b; background:#d9f3df; }
 .goal-result-below { border-color:#a92929; background:#fde2e2; }
 .goal-result-insufficient { border-color:#68747b; background:#eef1f2; }
