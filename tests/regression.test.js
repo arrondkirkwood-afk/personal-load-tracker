@@ -112,7 +112,8 @@ const startupSmoke = createStartupSmokeContext({
     loadStatus: 'Completed Load',
     grossBarrels: 100,
     loadedMiles: 42
-  }])
+  }]),
+  'personalOilfieldLoadTracker.favoriteRoutes': JSON.stringify([{ id: 'legacy-route', name: 'Legacy Route', pickupLocation: 'Lease Current', dropoffLocation: 'Station Current' }])
 });
 const startupSnapshot = startupSmoke.context.getTrackerSnapshot();
 assert.strictEqual(startupSnapshot.recordCount, 1, 'existing saved load remains available after startup');
@@ -156,12 +157,6 @@ setSmokeField('settings-reject-rate', '26');
 setSmokeField('settings-wait-rate', '31');
 startupSmoke.context.savePaySettingsFromControls();
 
-setSmokeField('favorite-route-name', 'Current Route');
-setSmokeField('favorite-pickup-location', 'Lease Current');
-setSmokeField('favorite-dropoff-location', 'Station Current');
-setSmokeField('favorite-route-mileage', '44');
-startupSmoke.context.saveFavoriteRouteFromControls();
-
 setSmokeField('daily-date', '2026-07-13');
 startupSmoke.context.applyDailyAddOnsToControls();
 setSmokeChecked('per-diem-checkbox', true);
@@ -174,7 +169,7 @@ const afterSignOutSnapshot = startupSmoke.context.getTrackerSnapshot();
 assert.strictEqual(afterSignOutSnapshot.recordCount, beforeSignOutSnapshot.recordCount, 'signing out does not revert loads to startup state');
 assert.strictEqual(afterSignOutSnapshot.data.settings.payRates.waitPayRate, 31, 'signing out does not revert app settings');
 assert.strictEqual(afterSignOutSnapshot.data.profile.driverName, 'Current Driver', 'signing out does not revert driver profile');
-assert.strictEqual(afterSignOutSnapshot.data.favoriteRoutes.length, 1, 'signing out does not revert favorite routes');
+assert.strictEqual(afterSignOutSnapshot.data.favoriteRoutes.length, 1, 'legacy favorite-route backup data remains compatible after its UI is removed');
 assert.ok(afterSignOutSnapshot.data.dailyAddOns['2026-07-13'], 'signing out does not revert daily add-ons');
 
 function getElement(id) {
@@ -427,19 +422,6 @@ assert.ok(storage.has('personalOilfieldLoadTracker.currentDraft'), 'draft is sto
 context.clearDraft();
 assert.ok(!storage.has('personalOilfieldLoadTracker.currentDraft'), 'draft can be cleared without deleting loads');
 
-setField('favorite-route-name', 'Delete Me Route');
-setField('favorite-pickup-location', 'Lease Delete');
-setField('favorite-dropoff-location', 'Station Delete');
-setField('favorite-route-mileage', '32');
-context.saveFavoriteRouteFromControls();
-const favoriteRoutesBeforeDelete = JSON.parse(storage.get('personalOilfieldLoadTracker.favoriteRoutes'));
-const favoriteRouteToDelete = favoriteRoutesBeforeDelete[0];
-context.deleteFavoriteRoute(favoriteRouteToDelete.id);
-pendingDeleteMeta = JSON.parse(storage.get('personalOilfieldLoadTracker.meta'));
-assert.ok(pendingDeleteMeta.cloudSync.pendingDeletes.favoriteRoutes[favoriteRouteToDelete.id], 'deleting a favorite route creates a pending-delete tombstone');
-assert.strictEqual(JSON.parse(storage.get('personalOilfieldLoadTracker.favoriteRoutes')).length, 0, 'favorite route is removed locally immediately');
-assert.strictEqual(context.mergeFavoriteRoutes([favoriteRouteToDelete]).length, 0, 'tombstoned favorite route cannot return through mergeFavoriteRoutes');
-
 storedLoads = JSON.parse(storage.get('personalOilfieldLoadTracker.loads'));
 const secondLoadId = storedLoads.find((load) => load.id !== firstLoadId).id;
 context.deleteLoadEntry(secondLoadId);
@@ -463,7 +445,7 @@ assert.ok(pendingDeleteMeta.cloudSync.pendingDeletes.loads['delete-two'], 'clear
 const backup = context.getTrackerSnapshot();
 assert.strictEqual(backup.recordCount, 1, 'backup reports current record count');
 assert.ok(backup.data.settings, 'backup includes app settings');
-assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup includes favorite routes');
+assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup safely preserves legacy favorite-route data');
 
 const legacyLoad = context.normalizeSavedLoad({ id: 'legacy', loadDate: '2026-07-01', pickupLocation: 'Old Lease', dropoffLocation: 'Old Station' });
 assert.strictEqual(legacyLoad.dispatcher, '', 'existing records without dispatcher remain valid');
@@ -482,20 +464,6 @@ setField('shift-start-time', '20:00');
 setField('shift-end-time', '06:00');
 context.saveDailyAddOnFromControls();
 assert.strictEqual(context.getDailyEarningsSummary('2026-07-12').exactDutyMinutes, 600, 'exact duty time uses daily shift times and crosses midnight');
-
-setField('favorite-route-name', 'State Route');
-setField('favorite-pickup-location', 'Lease State');
-setField('favorite-pickup-state', 'LA');
-setField('favorite-dropoff-location', 'Station State');
-setField('favorite-dropoff-state', 'TX');
-setField('favorite-route-mileage', '30');
-context.saveFavoriteRouteFromControls();
-const stateFavorite = JSON.parse(storage.get('personalOilfieldLoadTracker.favoriteRoutes'))[0];
-assert.strictEqual(stateFavorite.pickupState, 'LA', 'favorite routes preserve pickup state');
-assert.strictEqual(stateFavorite.dropoffState, 'TX', 'favorite routes preserve drop-off state');
-context.applyFavoriteRoute(stateFavorite.id);
-assert.strictEqual(getElement('pickup-state').value, 'LA', 'favorite route populates pickup state');
-assert.strictEqual(getElement('dropoff-state').value, 'TX', 'favorite route populates drop-off state');
 
 const simulatedCloudLoad = context.buildSynchronizedLoadPayload(context.normalizeSavedLoad({
   id: 'cross-device-load', loadDate: '2026-07-20', loadNumber: '1', ticketNumber: 'CLOUD-1', loadStatus: 'Completed Load',
@@ -526,7 +494,7 @@ const completedAndReject = [
 const analysis = context.summarizeAnalysisRecords(completedAndReject);
 assert.strictEqual(analysis.completedLoads, 1, 'rejects are excluded from completed-load counts');
 assert.strictEqual(analysis.rejects, 1, 'rejects are counted separately');
-assert.strictEqual(analysis.totalAssignments, 2, 'rejects remain included in total assignments');
+assert.strictEqual(analysis.totalLoads, 2, 'rejects remain included in total assignments');
 assert.ok(analysis.rejectPay > 0, 'reject pay remains included');
 assert.strictEqual(context.groupAnalysis([simulatedCloudLoad], (load) => load.dispatcher)[0].name, 'Morgan', 'dispatcher grouping is correct');
 assert.strictEqual(context.groupAnalysis([simulatedCloudLoad], context.getStateRoute)[0].name, 'LA → LA', 'state-route grouping is correct');
@@ -596,7 +564,7 @@ assert.ok(!Object.hasOwn(loadOnly, 'exactDutyMinutes'), 'load comparison exclude
 assert.strictEqual(loadOnly.averageBasePayPerCompletedLoad, loadOnly.completedBasePay / loadOnly.completedLoads, 'average base pay excludes wait pay');
 assert.strictEqual(loadOnly.averageAllInCompletedEarnings, loadOnly.loadEntryEarnings / loadOnly.completedLoads, 'average all-in completed earnings includes wait pay');
 assert.ok(isFinite(loadOnly.cycleHourEarnings), 'cycle-hour earnings use valid load cycles');
-assert.strictEqual(context.groupLoadAnalysis(mixedDay, context.getStateRoute).reduce((total, row) => total + row.totalAssignments, 0), mixedDay.length, 'each load appears once in route grouping');
+assert.strictEqual(context.groupLoadAnalysis(mixedDay, context.getStateRoute).reduce((total, row) => total + row.totalLoads, 0), mixedDay.length, 'each load appears once in route grouping');
 
 const filterRecords = [
   analysisLoad({ id: 'filter-brandon', loadDate: '2026-08-02', dispatcher: 'Brandon', pickupState: 'LA', dropoffState: 'TX' }),
@@ -605,19 +573,19 @@ const filterRecords = [
 ];
 const filterBaseline = context.summarizeAnalysisRecords(filterRecords, '2026-08-02', '2026-08-03');
 const noFilterRecords = context.filterAnalysisRecords(filterRecords, { dispatcher: '', pickupState: '', dropoffState: '', stateRoute: '', exactRoute: '' });
-assert.strictEqual(context.summarizeLoadLevelRecords(noFilterRecords).totalAssignments, filterBaseline.totalAssignments, 'no active filter produces matching baseline and load totals');
+assert.strictEqual(context.summarizeLoadLevelRecords(noFilterRecords).totalLoads, filterBaseline.totalLoads, 'no active filter produces matching baseline and load totals');
 const brandonFiltered = context.filterAnalysisRecords(filterRecords, { dispatcher: 'Brandon', pickupState: '', dropoffState: '', stateRoute: '', exactRoute: '' });
 const filterSummary = context.summarizeLoadLevelRecords(brandonFiltered);
-assert.strictEqual(filterBaseline.totalAssignments, 3, 'baseline contains all date-range records');
-assert.strictEqual(filterSummary.totalAssignments, 2, 'dispatcher filter creates a separate filtered load scope');
-assert.strictEqual(filterBaseline.totalAssignments, 3, 'baseline remains unchanged after filtering');
+assert.strictEqual(filterBaseline.totalLoads, 3, 'baseline contains all date-range records');
+assert.strictEqual(filterSummary.totalLoads, 2, 'dispatcher filter creates a separate filtered load scope');
+assert.strictEqual(filterBaseline.totalLoads, 3, 'baseline remains unchanged after filtering');
 assert.ok(brandonFiltered.every((load) => load.dispatcher === 'Brandon'), 'underlying filtered records contain only matching loads');
 const filterGroups = [
   context.groupLoadAnalysis(brandonFiltered, (load) => load.dispatcher), context.groupLoadAnalysis(brandonFiltered, (load) => context.displayState(load.pickupState)),
   context.groupLoadAnalysis(brandonFiltered, (load) => context.displayState(load.dropoffState)), context.groupLoadAnalysis(brandonFiltered, context.getStateRoute),
   context.groupLoadAnalysis(brandonFiltered, context.formatRoute)
 ];
-assert.ok(filterGroups.every((rows) => rows.reduce((total, row) => total + row.totalAssignments, 0) === 2), 'all load comparisons use the filtered records');
+assert.ok(filterGroups.every((rows) => rows.reduce((total, row) => total + row.totalLoads, 0) === 2), 'all load comparisons use the filtered records');
 assert.strictEqual(context.filterDispatcherDays(filterRecords, 'Brandon').length, 1, 'dispatcher day filtering selects whole-day groups only');
 assert.strictEqual(context.filterDispatcherDays(filterRecords, 'Mixed Dispatchers').length, 1, 'Mixed Dispatchers remains a separate whole-day group');
 assert.strictEqual(context.filterDispatcherDays(filterRecords, '').length, 2, 'state and route filters do not alter dispatcher-day records');
@@ -680,7 +648,7 @@ assert.strictEqual(context.getDailyEarningsSummary('2026-08-01', overlapping).ti
 const counts = context.summarizeLoadLevelRecords([
   analysisLoad({ id: 'count-1' }), analysisLoad({ id: 'count-2' }), analysisLoad({ id: 'count-r', loadStatus: 'Reject' })
 ]);
-assert.deepStrictEqual([counts.completedLoads, counts.rejects, counts.totalAssignments], [2, 1, 3], 'completed, reject, and assignment counts reconcile');
+assert.deepStrictEqual([counts.completedLoads, counts.rejects, counts.totalLoads], [2, 1, 3], 'completed, reject, and assignment counts reconcile');
 
 const goalLoad = (id, pay, status = 'Completed Load') => ({ id, loadDate: '2026-09-01', loadStatus: status, estimatedPay: pay });
 const belowGoal = context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-249', 249)], 300);
@@ -773,12 +741,28 @@ assert.strictEqual(context.normalizePaidTimeRecord({ id: 'pt-midnight', category
 assert.strictEqual(context.normalizePaidTimeRecord({ id: 'pt-custom', category: 'Other Hourly Work', startTime: '08:00', endTime: '09:30', hourlyRate: 30 }).estimatedPay, 45, 'other hourly work supports custom rate');
 const vacationPaid = context.normalizePaidTimeRecord({ id: 'pt-vacation', workDate: '2026-09-04', category: 'Vacation Time' });
 assert.strictEqual(vacationPaid.estimatedPay, 270, 'vacation time pays the fixed $270 daily rate');
+assert.strictEqual(vacationPaid.quantity, 1, 'vacation time is one date-specific day');
+assert.strictEqual(vacationPaid.quantityUnit, 'day', 'vacation quantity is stored as days');
+assert.strictEqual(vacationPaid.rate, 270, 'vacation stores its applicable daily rate');
+assert.strictEqual(vacationPaid.calculatedAmount, 270, 'vacation stores its calculated amount');
 assert.strictEqual(vacationPaid.durationMinutes, null, 'vacation time does not require artificial hourly duration');
+assert.strictEqual(context.normalizeDateKey('2026-03-08'), '2026-03-08', 'spring daylight-saving date remains a date-only key');
+assert.strictEqual(context.normalizeDateKey('2026-11-01'), '2026-11-01', 'fall daylight-saving date remains a date-only key');
+assert.strictEqual(context.normalizeDateKey('2026-02-30'), '', 'invalid date-only keys are rejected instead of shifted');
 setField('paid-time-date', '2026-09-04');
 setField('paid-time-category', 'Vacation Time');
 context.savePaidTime({ preventDefault() {} });
 assert.strictEqual(context.getDailyEarningsSummary('2026-09-04').vacationPay, 270, 'saved vacation time flows into the daily summary');
 assert.strictEqual(context.getDailyEarningsSummary('2026-09-04').totalEstimatedDailyEarnings, 270, 'vacation pay flows into total daily earnings');
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-03').vacationPay, 0, 'vacation does not shift to the previous date');
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-05').vacationPay, 0, 'vacation does not shift to the next date');
+const vacationId = JSON.parse(storage.get('personalOilfieldLoadTracker.paidTime'))[0].id;
+setField('paid-time-date', '2026-09-04');
+setField('paid-time-category', 'Vacation Time');
+context.savePaidTime({ preventDefault() {} });
+const vacationRows = JSON.parse(storage.get('personalOilfieldLoadTracker.paidTime')).filter((item) => item.workDate === '2026-09-04' && item.category === 'Vacation Time');
+assert.strictEqual(vacationRows.length, 1, 'a second vacation entry on the same date updates instead of duplicates');
+assert.strictEqual(vacationRows[0].id, vacationId, 'vacation update retains the original record ID');
 const paidOverlap = context.getPaidTimeOverlapReview(
   [analysisLoad({ id: 'overlap-load', arrivedPickupTime: '14:00', completedTime: '16:00' })],
   [context.normalizePaidTimeRecord({ id: 'overlap-paid', category: 'Deadhead', startTime: '13:30', endTime: '15:00', hourlyRate: 24 })]
@@ -800,6 +784,10 @@ assert.ok(script.includes("getPendingDeletes().paidTime") && script.includes("cl
 assert.ok(script.includes("'Deadhead pay'") && script.includes("'Total hourly additional pay'"), 'daily and analysis exports include paid-time earnings');
 assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Add Paid Time'), 'new app identity and paid-time workflow are visible');
 assert.ok(html.includes('<option>Vacation Time</option>'), 'Paid Time includes Vacation Time');
+assert.ok(html.includes('<option>Deadhead</option>') && html.includes('<option>Truck Wash</option>') && html.includes('<option>Breakdown</option>'), 'existing hourly paid-time categories remain available');
+assert.ok(html.includes('Total Daily Earnings') && html.includes('Effective hourly earnings'), 'dashboard exposes unified daily earnings and hourly results');
+assert.ok(!html.match(/Favorite Route/i), 'Favorite Route controls are removed from the interface');
+assert.ok(!html.match(/>[^<]*Assignments?[^<]*</i), 'user-facing interface uses Loads instead of Assignments');
 ['Load Details', 'Loading/Unloading Time', 'Paid Time', 'Notes'].forEach((section) => {
   assert.ok(html.includes(section), `${section} section is visible in the load-entry workflow`);
 });
@@ -835,7 +823,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.6.1'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.7.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -844,7 +832,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.6.1', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.7.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
