@@ -601,6 +601,14 @@ textarea.invalid {
   margin-bottom: 12px;
 }
 
+.form-subsection-title {
+  margin: 18px 0 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .form-section-title span,
 .optional-section summary span {
   width: 24px;

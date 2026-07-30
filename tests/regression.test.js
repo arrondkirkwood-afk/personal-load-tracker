@@ -800,6 +800,14 @@ assert.ok(script.includes("getPendingDeletes().paidTime") && script.includes("cl
 assert.ok(script.includes("'Deadhead pay'") && script.includes("'Total hourly additional pay'"), 'daily and analysis exports include paid-time earnings');
 assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Add Paid Time'), 'new app identity and paid-time workflow are visible');
 assert.ok(html.includes('<option>Vacation Time</option>'), 'Paid Time includes Vacation Time');
+['Load Details', 'Loading/Unloading Time', 'Paid Time', 'Notes'].forEach((section) => {
+  assert.ok(html.includes(section), `${section} section is visible in the load-entry workflow`);
+});
+assert.ok(html.includes('Start and End Workday'), 'daily workday controls use the requested name');
+assert.ok(html.includes('saved once for the selected work date—not once per load'), 'workday timing explains its once-per-date behavior');
+assert.ok(html.includes('Save Load &amp; Start Next Load'), 'next-load action uses the requested wording');
+assert.ok(!html.includes('Daily Shift Times'), 'old Daily Shift Times wording is removed');
+assert.ok(!html.includes('<h3>Load Basics</h3>') && !html.includes('<h3>Load Measurements</h3>'), 'load basics and measurements are consolidated under Load Details');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
@@ -827,7 +835,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.6.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.6.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -836,7 +844,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.6.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.6.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
