@@ -1,0 +1,38 @@
+name: Apply daily form simplification
+
+on:
+  push:
+    branches:
+      - daily-form-analysis-simplification
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    if: ${{ !contains(github.event.head_commit.message, '[applied daily simplification]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: daily-form-analysis-simplification
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply requested changes
+        run: node tools/apply-daily-form-simplification.cjs
+      - name: Run regression tests
+        run: node tests/regression.test.js
+      - name: Commit generated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md index.html manifest.json repair.html script.js service-worker.js style.css tests/regression.test.js
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
+            git commit -m "Simplify daily load workflow [applied daily simplification]"
+            git push origin HEAD:daily-form-analysis-simplification
+          fi
