@@ -11,6 +11,7 @@ Oilfield Load Tracker is a separate phone-friendly app for keeping your own crud
 - Calculates water barrels, oil barrels, crude weight per barrel, load weight, and estimated gross truck weight.
 - Calculates completed-load pay from the loaded miles pay table only.
 - Tracks rejects with estimated reject pay.
+- Tracks Vacation Time under Paid Time at a fixed `$270.00` per day.
 - Calculates estimated wait pay per load after the first unpaid hour on pickup and drop off.
 - Stores per diem, sleeper berth, and trainer pay as once-per-day add-ons.
 - Compares drop off meter barrels against gross barrels hauled.

@@ -1,5 +1,6 @@
 const APP_VERSION = "1.6.0";
 const DATA_SCHEMA_VERSION = 2;
+const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
 const APP_RUNTIME = detectAppRuntime();
@@ -497,20 +498,22 @@ const storageAudit = {
 };
 
 function normalizePaidTimeRecord(raw = {}) {
+  const category = ['Deadhead','Truck Wash','Breakdown','Other Hourly Work','Vacation Time'].includes(raw.category) ? raw.category : 'Other Hourly Work';
+  const isVacation = category === 'Vacation Time';
   const startTime = String(raw.startTime || '');
   const endTime = String(raw.endTime || '');
-  const durationMinutes = durationBetween(startTime, endTime);
-  const hourlyRate = normalizePayRate(raw.hourlyRate, 0);
+  const durationMinutes = isVacation ? null : durationBetween(startTime, endTime);
+  const hourlyRate = isVacation ? VACATION_DAILY_RATE : normalizePayRate(raw.hourlyRate, 0);
   return {
     ...raw,
     id: String(raw.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
     workDate: String(raw.workDate || raw.date || ''),
-    category: ['Deadhead','Truck Wash','Breakdown','Other Hourly Work'].includes(raw.category) ? raw.category : 'Other Hourly Work',
+    category,
     customCategoryName: String(raw.customCategoryName || ''),
     startTime, endTime,
     durationMinutes,
     hourlyRate,
-    estimatedPay: isFiniteNumber(durationMinutes) ? durationMinutes / 60 * hourlyRate : null,
+    estimatedPay: isVacation ? VACATION_DAILY_RATE : (isFiniteNumber(durationMinutes) ? durationMinutes / 60 * hourlyRate : null),
     dispatcher: String(raw.dispatcher || '').trim(),
     truckNumber: String(raw.truckNumber || ''),
     trailerNumber: String(raw.trailerNumber || ''),
@@ -4501,6 +4504,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const truckWashPay = paidByCategory('Truck Wash');
   const breakdownPay = paidByCategory('Breakdown');
   const otherHourlyPay = paidByCategory('Other Hourly Work');
+  const vacationPay = paidByCategory('Vacation Time');
   const deadheadMinutes = paidMinutesByCategory('Deadhead');
   const truckWashMinutes = paidMinutesByCategory('Truck Wash');
   const breakdownMinutes = paidMinutesByCategory('Breakdown');
@@ -4548,7 +4552,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     trainerPay,
     paidTimeCount: paidTime.length,
     deadheadMinutes, truckWashMinutes, breakdownMinutes, otherHourlyMinutes, totalHourlyAdditionalMinutes,
-    deadheadPay, truckWashPay, breakdownPay, otherHourlyPay, hourlyAdditionalPay,
+    deadheadPay, truckWashPay, breakdownPay, otherHourlyPay, vacationPay, hourlyAdditionalPay,
     paidTimeOverlapMinutes: paidTimeOverlap.overlapMinutes,
     paidTimeOverlapStatus: paidTimeOverlap.status,
     paidTimeOverlapWarnings: paidTimeOverlap.warnings,
@@ -4565,7 +4569,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     classifiedDutyMinutes: classificationUsable ? classifiedDutyMinutes : null,
     unclassifiedNonLoadDutyMinutes: classificationUsable ? exactDutyMinutes - classifiedDutyMinutes : null,
     activeLoadUtilization: utilizationUsable ? activeLoadCycleMinutes / exactDutyMinutes * 100 : null,
-    totalEstimatedDailyEarnings: totalEstimatedEntryPay + hourlyAdditionalPay + perDiemPay + sleeperBerthPay + trainerPay,
+    totalEstimatedDailyEarnings: totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + perDiemPay + sleeperBerthPay + trainerPay,
     completedLoadPayPerExactDutyHour: exactDutyMinutes > 0 ? completedLoadPay / (exactDutyMinutes / 60) : null,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
     averageGrossBarrels: completedRecords.length > 0 ? sum(completedRecords, 'grossBarrels') / completedRecords.length : 0,
@@ -6054,6 +6058,7 @@ function downloadDailyEarningsSummary() {
     'Truck wash pay',
     'Breakdown pay',
     'Other hourly work pay',
+    'Vacation pay',
     'Total hourly additional pay',
     'Paid-time overlap status',
     'Paid-time overlap minutes',
@@ -6105,6 +6110,7 @@ function downloadDailyEarningsSummary() {
       formatCsvNumber(record.truckWashPay),
       formatCsvNumber(record.breakdownPay),
       formatCsvNumber(record.otherHourlyPay),
+      formatCsvNumber(record.vacationPay),
       formatCsvNumber(record.hourlyAdditionalPay),
       record.paidTimeOverlapStatus,
       formatCsvNumber(record.paidTimeOverlapMinutes),
@@ -6496,6 +6502,7 @@ function printDailyReport() {
     ['Truck wash pay', formatMoney(record.truckWashPay)],
     ['Breakdown pay', formatMoney(record.breakdownPay)],
     ['Other hourly work pay', formatMoney(record.otherHourlyPay)],
+    ['Vacation pay', formatMoney(record.vacationPay)],
     ['Total hourly additional pay', formatMoney(record.hourlyAdditionalPay)],
     ['Paid-time overlap review', record.paidTimeOverlapStatus === 'review' ? `Needs review (${formatDuration(record.paidTimeOverlapMinutes)})` : 'No overlap found'],
     ['Total earnings', formatMoney(record.totalEstimatedDailyEarnings)],
@@ -7158,8 +7165,24 @@ function escapeHtml(value) {
 }
 
 function getPaidTimeDefaultRate(category) {
+  if (category === 'Vacation Time') return VACATION_DAILY_RATE;
   const map = { Deadhead: 'deadheadHourlyRate', 'Truck Wash': 'truckWashHourlyRate', Breakdown: 'breakdownHourlyRate', 'Other Hourly Work': 'otherHourlyRate' };
   return getPayRate(map[category] || 'otherHourlyRate');
+}
+
+function updatePaidTimeCategoryControls() {
+  const isVacation = paidTimeControls.category?.value === 'Vacation Time';
+  [paidTimeControls.start, paidTimeControls.end].forEach((control) => {
+    if (!control) return;
+    control.required = !isVacation;
+    control.disabled = isVacation;
+    if (isVacation) control.value = '';
+  });
+  if (paidTimeControls.rate) {
+    paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value));
+    paidTimeControls.rate.readOnly = isVacation;
+  }
+  setElementText(document.getElementById('paid-time-rate-label'), isVacation ? 'Daily rate' : 'Hourly rate');
 }
 
 function readPaidTimeForm() {
@@ -7182,7 +7205,12 @@ function renderPaidTimeCalculation() {
 function renderPaidTimeRecords() {
   const container = document.getElementById('paid-time-records');
   if (!container) return;
-  container.innerHTML = paidTimeRecords.length ? paidTimeRecords.map((item) => `<article class="saved-load-card"><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.workDate)} · ${escapeHtml(item.startTime)}–${escapeHtml(item.endTime)}</span><span>${escapeHtml(formatDuration(item.durationMinutes))} at ${escapeHtml(formatMoney(item.hourlyRate))}/hr · ${escapeHtml(formatMoney(item.estimatedPay))}</span><span>${escapeHtml(item.dispatcher || 'No dispatcher')} · Truck ${escapeHtml(item.truckNumber || '-')}</span><div class="button-row compact"><button type="button" class="button secondary" data-edit-paid-time="${escapeHtml(item.id)}">Edit</button><button type="button" class="button ghost" data-duplicate-paid-time="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="button ghost" data-print-paid-time="${escapeHtml(item.id)}">Print</button><button type="button" class="button danger" data-delete-paid-time="${escapeHtml(item.id)}">Delete</button></div></article>`).join('') : '<article class="empty-card">No paid-time records yet.</article>';
+  container.innerHTML = paidTimeRecords.length ? paidTimeRecords.map((item) => {
+    const isVacation = item.category === 'Vacation Time';
+    const timing = isVacation ? 'Full paid day' : `${item.startTime}–${item.endTime}`;
+    const payBasis = isVacation ? `${formatMoney(item.estimatedPay)} per day` : `${formatDuration(item.durationMinutes)} at ${formatMoney(item.hourlyRate)}/hr · ${formatMoney(item.estimatedPay)}`;
+    return `<article class="saved-load-card"><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.workDate)} · ${escapeHtml(timing)}</span><span>${escapeHtml(payBasis)}</span><span>${escapeHtml(item.dispatcher || 'No dispatcher')} · Truck ${escapeHtml(item.truckNumber || '-')}</span><div class="button-row compact"><button type="button" class="button secondary" data-edit-paid-time="${escapeHtml(item.id)}">Edit</button><button type="button" class="button ghost" data-duplicate-paid-time="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="button ghost" data-print-paid-time="${escapeHtml(item.id)}">Print</button><button type="button" class="button danger" data-delete-paid-time="${escapeHtml(item.id)}">Delete</button></div></article>`;
+  }).join('') : '<article class="empty-card">No paid-time records yet.</article>';
 }
 
 function fillPaidTimeForm(record, duplicate = false) {
@@ -7192,14 +7220,15 @@ function fillPaidTimeForm(record, duplicate = false) {
   });
   editingPaidTimeId = duplicate ? null : record.id;
   if (paidTimeControls.panel) paidTimeControls.panel.open = true;
+  updatePaidTimeCategoryControls();
   renderPaidTimeCalculation();
 }
 
 function printPaidTimeRecord(record) {
   const rows = [
     ['Date', record.workDate], ['Category', record.category], ['Custom category', record.customCategoryName || '-'],
-    ['Start', record.startTime], ['End', record.endTime], ['Duration', formatDuration(record.durationMinutes)],
-    ['Hourly rate', `${formatMoney(record.hourlyRate)}/hr`], ['Estimated pay', formatMoney(record.estimatedPay)],
+    ['Start', record.startTime || '-'], ['End', record.endTime || '-'], ['Duration', record.category === 'Vacation Time' ? 'Full paid day' : formatDuration(record.durationMinutes)],
+    [record.category === 'Vacation Time' ? 'Daily rate' : 'Hourly rate', record.category === 'Vacation Time' ? formatMoney(record.hourlyRate) : `${formatMoney(record.hourlyRate)}/hr`], ['Estimated pay', formatMoney(record.estimatedPay)],
     ['Deadhead miles', isFiniteNumber(record.deadheadMiles) ? record.deadheadMiles : '-'], ['Dispatcher', record.dispatcher || '-'],
     ['Truck', record.truckNumber || '-'], ['Trailer', record.trailerNumber || '-'], ['Related load', record.relatedLoadId || '-'],
     ['Location', record.location || '-'], ['Notes', record.notes || '-']
@@ -7228,8 +7257,9 @@ function savePaidTime(event) {
     createdAt: previous?.createdAt || formRecord.createdAt,
     updatedAt: new Date().toISOString()
   });
-  if (!record.workDate || !record.category || !record.startTime || !record.endTime || !isFiniteNumber(record.durationMinutes) || record.durationMinutes <= 0 || record.hourlyRate < 0) {
-    if (paidTimeControls.error) { paidTimeControls.error.textContent = 'Enter a date, category, valid start and end times, and a nonnegative rate.'; paidTimeControls.error.className = 'validation-summary show'; }
+  const isVacation = record.category === 'Vacation Time';
+  if (!record.workDate || !record.category || (!isVacation && (!record.startTime || !record.endTime || !isFiniteNumber(record.durationMinutes) || record.durationMinutes <= 0)) || record.hourlyRate < 0) {
+    if (paidTimeControls.error) { paidTimeControls.error.textContent = isVacation ? 'Enter a work date for Vacation Time.' : 'Enter a date, category, valid start and end times, and a nonnegative rate.'; paidTimeControls.error.className = 'validation-summary show'; }
     return;
   }
   const duplicate = paidTimeRecords.find((item) => item.id !== editingPaidTimeId
@@ -7275,6 +7305,7 @@ function initialize() {
     const mapping = { date:'workDate', category:'category', custom:'customCategoryName', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
     Object.entries(mapping).forEach(([control,key]) => { if (paidTimeControls[control] && paidDraft[key] !== null && paidDraft[key] !== undefined) paidTimeControls[control].value = paidDraft[key]; });
   }
+  updatePaidTimeCategoryControls();
   renderPaidTimeRecords();
   const initialPayPeriod = getCompanyPayPeriodRange(daily.date.value);
   daily.payPeriodStart.value = initialPayPeriod.start;
@@ -7318,7 +7349,7 @@ function initializeAnalysisInputs() {
 form?.addEventListener('submit', saveLoad);
 paidTimeControls.form?.addEventListener('submit', savePaidTime);
 paidTimeControls.form?.addEventListener('input', renderPaidTimeCalculation);
-paidTimeControls.category?.addEventListener('change', () => { paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category.value)); renderPaidTimeCalculation(); });
+paidTimeControls.category?.addEventListener('change', () => { updatePaidTimeCategoryControls(); renderPaidTimeCalculation(); });
 document.getElementById('show-paid-time-button')?.addEventListener('click', () => {
   if (paidTimeControls.date && !paidTimeControls.date.value) paidTimeControls.date.value = daily.date.value;
   if (paidTimeControls.rate && !paidTimeControls.rate.value) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Deadhead'));
