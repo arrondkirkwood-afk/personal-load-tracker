@@ -726,7 +726,7 @@ assert.ok(['Analysis Ready', 'Partially Ready', 'Limited Analysis'].includes(con
 assert.ok(html.includes('Start Workday') && html.includes('End Workday'), 'dashboard provides start and end workday actions');
 assert.ok(html.includes('Duty-Time Review'), 'reports include Duty-Time Review');
 assert.ok(html.includes('Official ELD and company records control'), 'Duty-Time Review includes permanent ELD limitation');
-assert.ok(script.includes("'Duty-Time Review'") && script.includes("'Duty-time status'"), 'analysis CSV includes duty-time review data');
+assert.ok(script.includes("'Daily Dispatch Results'") && script.includes("'Duty-time category'"), 'analysis CSV includes dispatch outcome and duty-time data');
 assert.ok(script.includes("['Workload observation', getWorkloadObservation(record)]"), 'printed daily report includes workload observation');
 assert.ok(script.includes("defaultDispatcher: String(addOn.defaultDispatcher"), 'daily default dispatcher participates in normalization');
 
@@ -800,7 +800,7 @@ assert.ok(html.includes('Pay period containing selected date'), 'pay-period labe
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
 assert.ok(script.includes("'Dispatcher Load Comparison'"), 'analysis CSV includes dispatcher-load rows');
-assert.ok(script.includes("'Pickup State Comparison'"), 'analysis CSV includes state rows');
+assert.ok(!script.includes("'Pickup State Comparison'") && script.includes("'Route Performance'"), 'analysis CSV replaces state comparison rows with normalized route performance');
 assert.ok(script.includes("'Underlying Loads'"), 'analysis CSV includes underlying load rows');
 assert.ok(script.includes('Overall Date-Range Baseline') && script.includes('Filtered Load Summary') && script.includes('Time Basis Summary'), 'printed analysis contains baseline, filtered, and time summary sections');
 assert.ok(script.includes('Baseline calculations reconciled.') && script.includes('Filtered load calculations reconciled.'), 'separate reconciliation statuses are displayed');
@@ -823,7 +823,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.8.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.9.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -832,7 +832,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.8.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.9.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -869,8 +869,52 @@ assert.ok(![html, script, serviceWorker, manifest, repairHtml, readme].some((tex
 
 assert.ok(html.includes('header-month-load-count') && html.includes('header-pay-period-load-count'), 'header shows month and pay-period completed-load totals');
 assert.ok(!html.includes('analysis-pickup-state-filter') && !html.includes('analysis-dropoff-state-filter') && !html.includes('analysis-state-route-filter') && !html.includes('analysis-exact-route-filter'), 'confusing state and route analysis filters are removed');
-assert.ok(html.includes('How to use this analysis'), 'dispatch and earnings analysis includes plain-language instructions');
+assert.ok(html.includes('How to Read This Analysis'), 'dispatch and earnings analysis includes plain-language instructions');
 assert.ok(script.includes('const payPeriodRange = getCompanyPayPeriodRange(date)') && script.includes('const nextFromCount = periodLoads.length + 1'), 'new load numbering follows pay-period progression');
 assert.ok(script.includes('Started a clean load form for today. The previous-day draft was cleared.'), 'previous-day load drafts do not reopen automatically');
+const outcomeBase = { completedLoadPay: 300, dailyGoal: 300 };
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: 719 }).dispatchOutcome, 'Productive', 'goal met under 12 hours is Productive');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: 720 }).dispatchOutcome, 'Productive but Extended', 'exactly 12 hours is Productive but Extended');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: 840 }).dispatchOutcome, '14-Hour Review', 'goal met at exactly 14 hours is a 14-Hour Review');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, exactDutyMinutes: 839 }).dispatchOutcome, 'Below Earnings Goal', 'below goal under 14 hours is Below Earnings Goal');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, totalEstimatedDailyEarnings: 1000, exactDutyMinutes: 600 }).dispatchOutcome, 'Below Earnings Goal', 'paid time and add-ons cannot make a below-goal dispatch outcome productive');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, exactDutyMinutes: 840 }).dispatchOutcome, 'Poor Dispatch Outcome — Review', 'below goal at exactly 14 hours is a poor dispatch outcome review');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: null }).dispatchOutcome, 'Insufficient Time Data', 'missing exact workday times are not estimated for the dispatch outcome');
+
+const routeRows = context.buildRoutePerformance([
+  analysisLoad({ id: 'route-normal-a', pickupLocation: ' Burns Point ', dropoffLocation: 'Station One', loadDate: '2026-07-01', estimatedPay: 60 }),
+  analysisLoad({ id: 'route-normal-b', pickupLocation: 'burns   point', dropoffLocation: ' station one ', loadDate: '2026-07-01', estimatedPay: 60 })
+], [{ date: '2026-07-01', goalStatus: 'Goal met', exactDutyMinutes: 600 }]);
+assert.strictEqual(routeRows.length, 1, 'route grouping normalizes capitalization and repeated spacing');
+assert.strictEqual(routeRows[0].completedLoads, 2, 'normalized route group includes both matching completed loads');
+assert.ok(html.includes('How to Read This Analysis'), 'analysis guidance uses the requested plain-language title');
+assert.ok(script.includes('Daily dispatch outcome') && script.includes('Route Performance') && script.includes('Data completeness status'), 'analysis CSV and print paths include the new outcome, route, and readiness metrics');
+assert.ok(script.includes('pickupState:') && script.includes('dropoffState:'), 'legacy pickup and drop-off state fields remain normalized for compatibility');
+assert.ok(!context.getAnalysisReadiness({
+  days: [{ dutyTimeSource: 'exact', loads: [analysisLoad({ id: 'state-free-ready', pickupState: '', dropoffState: '' })] }],
+  totalLoads: 1
+}).detail.toLowerCase().includes('state'), 'analysis readiness does not depend on state fields');
+
+const numberedLoads = Array.from({ length: 32 }, (_, index) => ({
+  id: `period-${index + 1}`, loadDate: '2026-07-16', loadNumber: String(index + 1),
+  loadStatus: 'Completed Load', estimatedPay: 50
+}));
+numberedLoads.push({ id: 'older-high-number', loadDate: '2026-07-20', loadNumber: '40', loadStatus: 'Completed Load', estimatedPay: 50 });
+const numberingSmoke = createStartupSmokeContext({
+  'personalOilfieldLoadTracker.loads': JSON.stringify(numberedLoads)
+});
+assert.strictEqual(numberingSmoke.context.getNextLoadNumber('2026-07-30'), '41', 'pay-period numbering uses the higher of record count and highest valid saved number');
+
+const staleDraftSmoke = createStartupSmokeContext({
+  'personalOilfieldLoadTracker.loads': JSON.stringify([{ id: 'saved-intact', loadDate: '2026-07-29', loadNumber: '1', loadStatus: 'Completed Load', estimatedPay: 50 }]),
+  'personalOilfieldLoadTracker.currentDraft': JSON.stringify({
+    savedAt: '2026-07-29T12:00:00.000Z',
+    selectedDate: '2026-07-29',
+    formValues: { loadDate: '2026-07-29', ticketNumber: 'STALE-TICKET', notes: 'stale notes' }
+  })
+});
+assert.strictEqual(JSON.parse(staleDraftSmoke.storage.get('personalOilfieldLoadTracker.loads')).length, 1, 'clearing a previous-day draft leaves saved loads intact');
+assert.ok(!staleDraftSmoke.storage.has('personalOilfieldLoadTracker.currentDraft'), 'previous-day draft is removed from the active form');
+assert.strictEqual(staleDraftSmoke.context.document.getElementById('ticket-number').value, '', 'previous-day ticket does not reopen in today’s form');
 
 console.log('Personal Load Tracker regression tests passed');
