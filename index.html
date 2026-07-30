@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Load &amp; Workday">
-  <link rel="manifest" href="manifest.json?v=1.6.0">
+  <link rel="manifest" href="manifest.json?v=1.6.1">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.6.0">
+  <link rel="stylesheet" href="style.css?v=1.6.1">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.6.0</strong></span>
+          <span>Version <strong id="app-version">1.6.1</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -195,11 +195,11 @@
           <form id="paid-time-form">
             <div class="field-grid">
               <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
-              <label for="paid-time-category"><span>Category</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Other Hourly Work</option></select></label>
+              <label for="paid-time-category"><span>Category</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
               <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
               <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
               <label for="paid-time-end"><span>End time</span><input id="paid-time-end" type="time" required></label>
-              <label for="paid-time-rate"><span>Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
+              <label for="paid-time-rate"><span id="paid-time-rate-label">Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
               <label for="paid-time-dispatcher"><span>Dispatcher</span><input id="paid-time-dispatcher" type="text" list="dispatcher-options"></label>
               <label for="paid-time-truck"><span>Truck</span><input id="paid-time-truck" type="text"></label>
               <label for="paid-time-trailer"><span>Trailer</span><input id="paid-time-trailer" type="text"></label>
@@ -253,8 +253,9 @@
             <div class="form-section">
               <div class="form-section-title">
                 <span>A</span>
-                <h3>Load Basics</h3>
+                <h3>Load Details</h3>
               </div>
+              <h4 class="form-subsection-title">Load basics</h4>
               <div class="field-grid basics-grid">
                 <label for="load-date">
                   <span>Work date <em>required</em></span>
@@ -313,13 +314,7 @@
                   <input id="jotform-confirmation-number" type="text" autocomplete="off">
                 </label>
               </div>
-            </div>
-
-            <div class="form-section">
-              <div class="form-section-title">
-                <span>B</span>
-                <h3>Load Measurements</h3>
-              </div>
+              <h4 class="form-subsection-title">Load measurements</h4>
               <div class="field-grid measurement-grid">
                 <label for="gross-barrels">
                   <span>Gross barrels <em>required</em></span>
@@ -384,20 +379,20 @@
               </details>
             </div>
 
-            <details class="form-section optional-section daily-shift-details">
-              <summary><span>D</span><strong>Daily Shift Times</strong></summary>
-              <p class="helper-text">Optional and saved once for the selected work date.</p>
-              <div class="field-grid two">
-                <label for="shift-start-time"><span>Shift start time</span><input id="shift-start-time" type="time"></label>
-                <label for="shift-end-time"><span>Shift end time</span><input id="shift-end-time" type="time"></label>
-              </div>
-            </details>
-
             <div class="form-section">
               <div class="form-section-title">
-                <span>C</span>
-                <h3>Time and Wait</h3>
+                <span>B</span>
+                <h3>Loading/Unloading Time</h3>
               </div>
+              <details class="optional-section daily-shift-details">
+                <summary><strong>Start and End Workday</strong></summary>
+                <p class="helper-text">Optional and saved once for the selected work date—not once per load.</p>
+                <div class="field-grid two">
+                  <label for="shift-start-time"><span>Start workday</span><input id="shift-start-time" type="time"></label>
+                  <label for="shift-end-time"><span>End workday</span><input id="shift-end-time" type="time"></label>
+                </div>
+              </details>
+              <h4 class="form-subsection-title">Load timing and wait</h4>
               <div class="stop-grid">
                 <article class="stop-card">
                   <h4>Loading</h4>
@@ -443,10 +438,10 @@
 
             <div class="form-section">
               <div class="form-section-title">
-                <span>D</span>
-                <h3>Additional Pay</h3>
+                <span>C</span>
+                <h3>Paid Time</h3>
               </div>
-              <p class="helper-text">These daily add-ons are saved once for the selected work date.</p>
+              <p class="helper-text">These paid-time add-ons are saved once for the selected work date. Hourly work and Vacation Time are available from Today.</p>
               <div class="toggle-grid">
                 <label class="toggle-field" for="per-diem-checkbox">
                   <input id="per-diem-checkbox" type="checkbox">
@@ -472,8 +467,8 @@
 
             <details class="form-section optional-section">
               <summary>
-                <span>E</span>
-                <strong>Notes and Optional Details</strong>
+                <span>D</span>
+                <strong>Notes</strong>
               </summary>
               <div class="field-grid optional-grid">
                 <label for="bol-number">
@@ -498,7 +493,7 @@
 
             <div class="calculation-panel" aria-labelledby="calculation-title">
               <div class="form-section-title review-title">
-                <span>F</span>
+                <span>✓</span>
                 <h3 id="calculation-title">Review and Save</h3>
               </div>
               <div class="review-summary-grid">
@@ -526,7 +521,7 @@
 
             <div class="button-row form-actions four">
               <button class="button primary" id="save-load-button" type="submit">Save Load</button>
-              <button class="button secondary" id="save-next-button" type="button">Save and Start Next</button>
+              <button class="button secondary" id="save-next-button" type="button">Save Load &amp; Start Next Load</button>
               <button class="button ghost" id="save-draft-button" type="button">Save Draft</button>
               <button class="button danger" id="clear-form-button" type="button">Cancel</button>
             </div>
@@ -594,7 +589,7 @@
           </div>
           <div class="section-heading paid-time-records-heading">
             <div>
-              <p class="section-kicker">Hourly work</p>
+              <p class="section-kicker">Paid time</p>
               <h3>Paid-time records</h3>
             </div>
           </div>
@@ -819,7 +814,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.6.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.6.1</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -944,10 +939,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.6.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.6.1&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.6.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.6.1&updated=' + Date.now());
           });
       }
 
@@ -983,6 +978,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.6.0"></script>
+  <script src="script.js?v=1.6.1"></script>
 </body>
 </html>

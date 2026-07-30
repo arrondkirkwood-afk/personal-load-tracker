@@ -396,6 +396,27 @@ assert.strictEqual(dailySummary.trainerPay, 55, 'trainer pay can be edited throu
 assert.strictEqual(dailySummary.perDiemPay, 52, 'per diem can be edited through settings');
 assert.strictEqual(dailySummary.sleeperBerthPay, 65, 'sleeper pay can be edited through settings');
 
+const nextWorkflow = createStartupSmokeContext({});
+Object.entries({
+  'driver-name': 'Next Driver',
+  'truck-number': 'NEXT-TRUCK',
+  'trailer-number': 'NEXT-TRAILER',
+  'load-date': '2026-07-14',
+  'load-number': '1',
+  'ticket-number': 'NEXT-TK-1',
+  'bol-number': 'NEXT-BOL-1',
+  'load-status': 'Completed Load',
+  'gross-barrels': '115',
+  'loaded-miles': '15',
+  'notes': 'Clear this note'
+}).forEach(([id, value]) => { nextWorkflow.context.document.getElementById(id).value = value; });
+nextWorkflow.context.saveAndStartNextLoad();
+assert.strictEqual(nextWorkflow.context.document.getElementById('load-date').value, '2026-07-14', 'Save Load & Start Next Load preserves the work date');
+assert.strictEqual(nextWorkflow.context.document.getElementById('load-number').value, '2', 'Save Load & Start Next Load increments the load number');
+assert.strictEqual(nextWorkflow.context.document.getElementById('ticket-number').value, '', 'Save Load & Start Next Load clears the prior ticket');
+assert.strictEqual(nextWorkflow.context.document.getElementById('gross-barrels').value, '', 'Save Load & Start Next Load clears prior load measurements');
+assert.strictEqual(nextWorkflow.context.document.getElementById('notes').value, '', 'Save Load & Start Next Load clears prior notes');
+
 context.clearForm();
 setField('load-date', '2026-07-12');
 setField('pickup-location', 'Lease A');
@@ -750,6 +771,14 @@ assert.strictEqual(fractionalPaid.durationMinutes, 135, 'fractional paid time ca
 assert.strictEqual(fractionalPaid.estimatedPay, 54, 'fractional paid time pay calculates');
 assert.strictEqual(context.normalizePaidTimeRecord({ id: 'pt-midnight', category: 'Breakdown', startTime: '23:00', endTime: '01:00', hourlyRate: 24 }).durationMinutes, 120, 'paid time crosses midnight');
 assert.strictEqual(context.normalizePaidTimeRecord({ id: 'pt-custom', category: 'Other Hourly Work', startTime: '08:00', endTime: '09:30', hourlyRate: 30 }).estimatedPay, 45, 'other hourly work supports custom rate');
+const vacationPaid = context.normalizePaidTimeRecord({ id: 'pt-vacation', workDate: '2026-09-04', category: 'Vacation Time' });
+assert.strictEqual(vacationPaid.estimatedPay, 270, 'vacation time pays the fixed $270 daily rate');
+assert.strictEqual(vacationPaid.durationMinutes, null, 'vacation time does not require artificial hourly duration');
+setField('paid-time-date', '2026-09-04');
+setField('paid-time-category', 'Vacation Time');
+context.savePaidTime({ preventDefault() {} });
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-04').vacationPay, 270, 'saved vacation time flows into the daily summary');
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-04').totalEstimatedDailyEarnings, 270, 'vacation pay flows into total daily earnings');
 const paidOverlap = context.getPaidTimeOverlapReview(
   [analysisLoad({ id: 'overlap-load', arrivedPickupTime: '14:00', completedTime: '16:00' })],
   [context.normalizePaidTimeRecord({ id: 'overlap-paid', category: 'Deadhead', startTime: '13:30', endTime: '15:00', hourlyRate: 24 })]
@@ -770,6 +799,15 @@ assert.ok(script.includes("cloudDocument('paidTime'"), 'paid time uses dedicated
 assert.ok(script.includes("getPendingDeletes().paidTime") && script.includes("clearPendingDelete('paidTime'"), 'paid-time deletion tombstones are retried after reconnection');
 assert.ok(script.includes("'Deadhead pay'") && script.includes("'Total hourly additional pay'"), 'daily and analysis exports include paid-time earnings');
 assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Add Paid Time'), 'new app identity and paid-time workflow are visible');
+assert.ok(html.includes('<option>Vacation Time</option>'), 'Paid Time includes Vacation Time');
+['Load Details', 'Loading/Unloading Time', 'Paid Time', 'Notes'].forEach((section) => {
+  assert.ok(html.includes(section), `${section} section is visible in the load-entry workflow`);
+});
+assert.ok(html.includes('Start and End Workday'), 'daily workday controls use the requested name');
+assert.ok(html.includes('saved once for the selected work date—not once per load'), 'workday timing explains its once-per-date behavior');
+assert.ok(html.includes('Save Load &amp; Start Next Load'), 'next-load action uses the requested wording');
+assert.ok(!html.includes('Daily Shift Times'), 'old Daily Shift Times wording is removed');
+assert.ok(!html.includes('<h3>Load Basics</h3>') && !html.includes('<h3>Load Measurements</h3>'), 'load basics and measurements are consolidated under Load Details');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
@@ -797,7 +835,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.6.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.6.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -806,7 +844,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.6.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.6.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
