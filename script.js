@@ -1,4 +1,4 @@
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.8.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -3551,16 +3551,19 @@ function handleNavigationClick(event) {
 }
 
 function getNextLoadNumber(date = daily.date?.value || todayLocal()) {
-  const numbers = getLoadsForDate(date)
+  const payPeriodRange = getCompanyPayPeriodRange(date);
+  const periodLoads = getLoadsForRange(payPeriodRange.start, payPeriodRange.end);
+  const savedNumbers = periodLoads
     .map((load) => String(load.loadNumber || '').match(/\d+/g)?.pop())
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value));
-  const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-  return String(nextNumber);
+  const nextFromCount = periodLoads.length + 1;
+  const nextFromSavedNumbers = savedNumbers.length > 0 ? Math.max(...savedNumbers) + 1 : 1;
+  return String(Math.max(nextFromCount, nextFromSavedNumbers));
 }
 
 function ensureLoadNumber() {
-  if (!fields.loadNumber?.value && !editingLoadId) {
+  if (fields.loadNumber && !editingLoadId) {
     fields.loadNumber.value = getNextLoadNumber(fields.loadDate?.value || daily.date?.value || todayLocal());
   }
 }
@@ -3820,6 +3823,15 @@ function restoreDraftIfAvailable() {
   updateDraftButtonState(Boolean(draft));
 
   if (!draft) {
+    return;
+  }
+
+  const draftDate = normalizeDateKey(draft.formValues?.loadDate || draft.selectedDate || String(draft.savedAt || '').slice(0, 10));
+  if (!draft.editingLoadId && draftDate && draftDate !== todayLocal()) {
+    clearDraft();
+    daily.date.value = todayLocal();
+    clearForm();
+    setStatusMessage(draftStatus, 'Started a clean load form for today. The previous-day draft was cleared.');
     return;
   }
 
@@ -4627,7 +4639,9 @@ function updateDashboardStats(summaryRecord) {
   dashboard.loadsHauledPayPeriod.textContent = String(payPeriodRecords.filter(isCompleted).length);
   dashboard.loadsHauledMonth.textContent = String(monthCompleted.length);
   dashboard.loadsHauledSelectedDate.textContent = String(selectedDateRecords.filter(isCompleted).length);
-  setElementText(headerRecordCount, `${countUniqueLoads()} ${countUniqueLoads() === 1 ? 'load' : 'loads'}`);
+  setElementText(headerRecordCount, '');
+  setElementText(document.getElementById('header-month-load-count'), `Month: ${monthCompleted.length} completed`);
+  setElementText(document.getElementById('header-pay-period-load-count'), `Pay period: ${payPeriodRecords.filter(isCompleted).length} completed`);
   setElementText(payPeriodSummary.totalEarnings, formatMoney(payPeriodRecord.totalEstimatedEarnings));
   setElementText(payPeriodSummary.completedCount, String(payPeriodRecord.completedLoadCount));
   setElementText(payPeriodSummary.rejectCount, String(payPeriodRecord.rejectCount));
@@ -6867,10 +6881,6 @@ function renderDispatchAnalysis(startDate, endDate) {
     ...rangeRecords.map((load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown'),
     ...buildAnalysisDays(rangeRecords, startDate, endDate).map((day) => day.dispatcher)
   ]);
-  setFilterOptions(reportControls.pickupState, rangeRecords.map((load) => displayState(load.pickupState)));
-  setFilterOptions(reportControls.dropoffState, rangeRecords.map((load) => displayState(load.dropoffState)));
-  setFilterOptions(reportControls.stateRoute, rangeRecords.map(getStateRoute));
-  setFilterOptions(reportControls.exactRoute, rangeRecords.map(formatRoute));
   const filters = getAnalysisFilters();
   const filtersActive = hasActiveAnalysisFilters(filters);
   const records = filterAnalysisRecords(rangeRecords, filters);
@@ -6938,18 +6948,13 @@ function renderDispatchAnalysis(startDate, endDate) {
     ${result.timelineErrorDays ? `<p class="validation-summary show warning">${escapeHtml(result.days.filter((day) => day.timelineStatus === 'review').map((day) => `${day.date}: Timeline needs review`).join(' · '))}</p>` : ''}
     ${dispatcherDayTable(dayRows)}
     ${loadAnalysisTable('Dispatcher Load Comparison', dispatcherLoadRows)}
-    ${loadAnalysisTable('Pickup State Comparison', pickupRows)}
-    ${loadAnalysisTable('Drop-off State Comparison', dropoffRows)}
-    ${loadAnalysisTable('State Route Comparison', stateRouteRows)}
-    ${loadAnalysisTable('Exact Route Comparison', exactRouteRows)}
     <details class="workday-indicators"><summary><strong>Workday Indicators</strong></summary><div class="review-grid">${Object.entries(indicators).map(([label, value]) => reportMetric(label, String(value))).join('')}</div></details>
     <details><summary><strong>View Detailed Completeness</strong></summary><div class="review-grid">${[
       ['Total loads in range', result.totalLoads], ['Completed loads', result.completedLoads], ['Rejects', result.rejects],
-      ['Loads with dispatcher', result.dispatcherCount], ['Loads with pickup state', result.pickupStateCount], ['Loads with drop-off state', result.dropoffStateCount],
-      ['Loads with both states', result.completeStateCount], ['Loads with complete cycle times', result.completeCycleCount], ['Loads missing cycle times', result.totalLoads - result.completeCycleCount],
+      ['Loads with dispatcher', result.dispatcherCount], ['Loads with complete cycle times', result.completeCycleCount], ['Loads missing cycle times', result.totalLoads - result.completeCycleCount],
       ['Days with exact shift times', result.exactDays], ['Days with estimated tracked spans', result.estimatedDays], ['Days with no usable time', result.noUsableTimeDays],
       ['Days with mixed dispatchers', result.mixedDispatcherDays], ['Days with timeline errors', result.timelineErrorDays],
-      ['Report reliability', `${reliability.label} — dispatcher ${reliability.dispatcherPercent.toFixed(1)}%, states ${reliability.statePercent.toFixed(1)}%, cycle time ${reliability.cyclePercent.toFixed(1)}%, exact shifts ${reliability.exactPercent.toFixed(1)}%`]
+      ['Report reliability', `${reliability.label} — dispatcher ${reliability.dispatcherPercent.toFixed(1)}%, cycle time ${reliability.cyclePercent.toFixed(1)}%, exact shifts ${reliability.exactPercent.toFixed(1)}%`]
     ].map(([label, value]) => reportMetric(label, String(value))).join('')}</div></details>
     ${filtersActive ? `<h4>Filtered Data Completeness</h4><div class="review-grid">${completenessMetrics(records).map(([label, value]) => reportMetric(label, String(value))).join('')}</div>` : ''}
     <h4>Underlying Load References</h4><div class="table-scroll"><table><thead><tr><th>Date</th><th>Load</th><th>Ticket</th><th>BOL</th><th>Jotform</th><th>Dispatcher</th><th>Pickup</th><th>Drop-off</th><th>Status</th><th>Base pay</th><th>Wait pay</th><th>Load-entry earnings</th><th>Cycle time</th></tr></thead><tbody>${records.map((load) => `<tr><td>${escapeHtml(load.loadDate)}</td><td>${escapeHtml(load.loadNumber || '-')}</td><td>${escapeHtml(load.ticketNumber || '-')}</td><td>${escapeHtml(load.bolNumber || '-')}</td><td>${escapeHtml(load.jotformConfirmationNumber || '-')}</td><td>${escapeHtml(normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown')}</td><td>${escapeHtml(`${load.pickupLocation || 'Pickup'}, ${displayState(load.pickupState)}`)}</td><td>${escapeHtml(`${load.dropoffLocation || 'Drop-off'}, ${displayState(load.dropoffState)}`)}</td><td>${escapeHtml(load.loadStatus)}</td><td>${escapeHtml(formatMoney(load.estimatedPay))}</td><td>${escapeHtml(formatMoney(load.waitPay))}</td><td>${escapeHtml(formatMoney(load.estimatedEntryPay))}</td><td>${escapeHtml(formatMaybeDuration(load.cycleTimeMinutes))}</td></tr>`).join('')}</tbody></table></div>
@@ -6970,8 +6975,8 @@ function getAnalysisReliability(result) {
   const statePercent = result.completeStateCount / assignmentBase * 100;
   const cyclePercent = result.completeCycleCount / assignmentBase * 100;
   const exactPercent = result.exactDays / dayBase * 100;
-  const label = dispatcherPercent >= 90 && statePercent >= 90 && cyclePercent >= 90 && exactPercent >= 90 ? 'High completeness'
-    : (dispatcherPercent >= 70 && statePercent >= 70 && cyclePercent >= 70 && exactPercent >= 50 ? 'Moderate completeness' : 'Limited completeness');
+  const label = dispatcherPercent >= 90 && cyclePercent >= 90 && exactPercent >= 90 ? 'High completeness'
+    : (dispatcherPercent >= 70 && cyclePercent >= 70 && exactPercent >= 50 ? 'Moderate completeness' : 'Limited completeness');
   return { label, dispatcherPercent, statePercent, cyclePercent, exactPercent };
 }
 

@@ -132,7 +132,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version on the feature branch: `1.7.0`, cache name `personal-oilfield-load-tracker-v1.7.0`.
+Current app version and cache version on the feature branch: `1.8.0`, cache name `personal-oilfield-load-tracker-v1.8.0`.
 
 To update the app:
 
@@ -157,3 +157,11 @@ GitHub is only needed when changing the app files, not for daily use.
 - `icons/icon-192.png`
 - `icons/icon-512.png`
 - `README.md`
+
+
+## Daily Form and Load Numbering
+
+- The Add Load form starts clean when a saved unfinished draft belongs to a previous date. Saved load records are not deleted.
+- New load numbers continue across the selected company pay period. The calculation uses both the number of saved pay-period records and the highest saved numeric load number so older daily-reset records do not restart the sequence.
+- The header shows completed-load totals for the selected month and selected-date pay period.
+- Dispatch and Earnings Analysis keeps the dispatcher filter while removing the pickup-state, drop-off-state, state-route, and exact-route filters from the screen. The underlying saved fields remain compatible with existing records and backups.

@@ -823,7 +823,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.7.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.8.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -832,7 +832,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.7.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.8.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -866,5 +866,11 @@ assert.ok(![html, script, serviceWorker, manifest, repairHtml, readme].some((tex
 ].forEach((id) => {
   assert.ok(ids.includes(id), `${id} DOM ID remains present`);
 });
+
+assert.ok(html.includes('header-month-load-count') && html.includes('header-pay-period-load-count'), 'header shows month and pay-period completed-load totals');
+assert.ok(!html.includes('analysis-pickup-state-filter') && !html.includes('analysis-dropoff-state-filter') && !html.includes('analysis-state-route-filter') && !html.includes('analysis-exact-route-filter'), 'confusing state and route analysis filters are removed');
+assert.ok(html.includes('How to use this analysis'), 'dispatch and earnings analysis includes plain-language instructions');
+assert.ok(script.includes('const payPeriodRange = getCompanyPayPeriodRange(date)') && script.includes('const nextFromCount = periodLoads.length + 1'), 'new load numbering follows pay-period progression');
+assert.ok(script.includes('Started a clean load form for today. The previous-day draft was cleared.'), 'previous-day load drafts do not reopen automatically');
 
 console.log('Personal Load Tracker regression tests passed');

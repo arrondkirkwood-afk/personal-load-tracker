@@ -1474,3 +1474,16 @@ textarea.invalid {
   gap: 0.75rem;
   margin-top: 0.65rem;
 }
+
+
+/* Daily form and analysis simplification v1.8.0 */
+.header-meta { flex-wrap: wrap; justify-content: flex-end; }
+.analysis-guide { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border-color, #cbd5db); border-radius: 12px; background: rgba(255, 255, 255, 0.7); }
+.analysis-guide > strong { display: block; margin-bottom: 0.4rem; }
+.analysis-guide p { margin: 0.45rem 0; }
+.analysis-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; margin: 0.75rem 0; }
+.analysis-guide-grid span { display: block; padding: 0.7rem; border-radius: 10px; background: rgba(18, 52, 59, 0.06); }
+@media (max-width: 720px) {
+  .header-meta { justify-content: flex-start; }
+  .analysis-guide-grid { grid-template-columns: 1fr; }
+}
