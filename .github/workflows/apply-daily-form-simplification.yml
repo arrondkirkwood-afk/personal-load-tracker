@@ -36,3 +36,4 @@ jobs:
             git commit -m "Simplify daily load workflow [applied daily simplification]"
             git push origin HEAD:daily-form-analysis-simplification
           fi
+# Triggered after the workflow file was present on the branch.
