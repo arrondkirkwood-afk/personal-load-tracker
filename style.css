@@ -1474,3 +1474,83 @@ textarea.invalid {
   gap: 0.75rem;
   margin-top: 0.65rem;
 }
+
+
+/* Daily form and analysis simplification v1.9.0 */
+.header-meta { flex-wrap: wrap; justify-content: flex-end; }
+.analysis-guide { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border-color, #cbd5db); border-radius: 12px; background: rgba(255, 255, 255, 0.7); }
+.analysis-guide > strong { display: block; margin-bottom: 0.4rem; }
+.analysis-guide p { margin: 0.45rem 0; }
+.analysis-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; margin: 0.75rem 0; }
+.analysis-guide-grid span { display: block; padding: 0.7rem; border-radius: 10px; background: rgba(18, 52, 59, 0.06); }
+@media (max-width: 720px) {
+  .header-meta { justify-content: flex-start; }
+  .analysis-guide-grid { grid-template-columns: 1fr; }
+}
+
+.analysis-top-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.analysis-top-cards > article,
+.analysis-day-card,
+.analysis-section-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 1rem;
+}
+
+.analysis-top-cards h4 {
+  margin: 0 0 0.8rem;
+  color: var(--brand);
+}
+
+.analysis-day-card {
+  margin: 0.75rem 0;
+}
+
+.analysis-day-card > summary {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(220px, 1.4fr);
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.analysis-day-card summary span,
+.analysis-day-card summary small,
+.analysis-detail-row span {
+  display: block;
+}
+
+.analysis-day-card summary small,
+.analysis-detail-row span {
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.analysis-detail-row {
+  border-top: 1px solid var(--line);
+  padding: 0.65rem 0;
+}
+
+.compact-analysis-grid {
+  margin: 0.75rem 0;
+}
+
+.priority-table th:first-child,
+.priority-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+}
+
+@media (max-width: 820px) {
+  .analysis-top-cards { grid-template-columns: 1fr; }
+  .analysis-day-card > summary { grid-template-columns: 1fr; }
+  .analysis-top-cards > article { padding: 0.85rem; }
+}
