@@ -24,13 +24,12 @@ Oilfield Load Tracker is a separate phone-friendly app for keeping your own crud
 
 1. Pick the selected date in Today's Daily Summary.
 2. Fill out Add / Edit Load Entry in order:
-   - Driver / Equipment
    - Load Details
-   - Time Tracking
-   - Drop Off Meter Readings
-   - Daily Add-Ons
+   - Loading/Unloading Time
+   - Paid Time
+   - Notes
 3. Review the Summary Load Calculation below the form.
-4. Tap Save Load.
+4. Tap Save Load, or Save Load & Start Next Load to clear load-specific fields and automatically prepare the next load number.
 5. Review Saved Loads for Selected Date and Daily Earnings Review.
 6. Use Settings and Backup at the bottom for CSV exports, JSON backup, import, updates, and printable reports.
 
@@ -132,7 +131,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version on the native development branch: `1.6.0`, cache name `personal-oilfield-load-tracker-v1.6.0`.
+Current app version and cache version on the native development branch: `1.6.1`, cache name `personal-oilfield-load-tracker-v1.6.1`.
 
 To update the app:
 
