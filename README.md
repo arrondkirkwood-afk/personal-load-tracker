@@ -93,7 +93,7 @@ Times can cross midnight. For example, an arrival at `23:30` and completed drop 
 
 ## Data Storage
 
-Saved loads, daily add-ons, daily earnings records, the driver/equipment profile, app settings, favorite routes, and app metadata are stored in the browser on the device you use. After signing in and completing the migration, Firestore becomes the synchronized source while local browser storage remains as a safety fallback.
+Saved loads, date-linked paid time, daily add-ons, daily earnings records, the driver/equipment profile, app settings, and app metadata are stored in the browser on the device you use. Records combines these separate data types into one date-based daily earnings view. After signing in and completing the migration, Firestore becomes the synchronized source while local browser storage remains as a safety fallback.
 
 Current localStorage keys:
 
@@ -103,7 +103,8 @@ Current localStorage keys:
 - `personalOilfieldLoadTracker.profile`
 - `personalOilfieldLoadTracker.meta`
 - `personalOilfieldLoadTracker.settings`
-- `personalOilfieldLoadTracker.favoriteRoutes`
+- `personalOilfieldLoadTracker.paidTime`
+- `personalOilfieldLoadTracker.favoriteRoutes`, retained only so older backups and synchronized data remain compatible; Favorite Route controls have been removed
 - `personalOilfieldLoadTracker.currentDraft`, used only for the autosaved unfinished load draft
 - `personalOilfieldLoadTracker.preMigrationBackup.v2`, only when an ID repair migration is needed
 - `personalOilfieldLoadTracker.firebaseMigrationSafetyBackup.v3`, only when the Firebase migration safety backup is created
@@ -131,7 +132,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version on the native development branch: `1.6.1`, cache name `personal-oilfield-load-tracker-v1.6.1`.
+Current app version and cache version on the feature branch: `1.7.0`, cache name `personal-oilfield-load-tracker-v1.7.0`.
 
 To update the app:
 

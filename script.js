@@ -1,4 +1,4 @@
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.7.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -218,9 +218,12 @@ const daily = {
   todayRejects: document.getElementById('today-rejects'),
   todayCompletedPay: document.getElementById('today-completed-pay'),
   todayHourlyPay: document.getElementById('today-hourly-pay'),
+  todayVacationPay: document.getElementById('today-vacation-pay'),
+  todayOtherPaidTime: document.getElementById('today-other-paid-time'),
   todayWaitPay: document.getElementById('today-wait-pay'),
   todayAddOns: document.getElementById('today-add-ons'),
-  todayDutyTime: document.getElementById('today-duty-time')
+  todayDutyTime: document.getElementById('today-duty-time'),
+  todayEffectiveHourly: document.getElementById('today-effective-hourly')
 };
 const dailyGoal = {
   card: document.getElementById('daily-goal-card'),
@@ -426,7 +429,7 @@ const workdayControls = {
 const paidTimeControls = {
   panel: document.getElementById('paid-time-entry-panel'), form: document.getElementById('paid-time-form'),
   date: document.getElementById('paid-time-date'), category: document.getElementById('paid-time-category'),
-  custom: document.getElementById('paid-time-custom-category'), start: document.getElementById('paid-time-start'),
+  custom: document.getElementById('paid-time-custom-category'), quantity: document.getElementById('paid-time-quantity'), start: document.getElementById('paid-time-start'),
   end: document.getElementById('paid-time-end'), rate: document.getElementById('paid-time-rate'),
   dispatcher: document.getElementById('paid-time-dispatcher'), truck: document.getElementById('paid-time-truck'),
   trailer: document.getElementById('paid-time-trailer'), relatedLoad: document.getElementById('paid-time-related-load'),
@@ -454,19 +457,6 @@ const paySettingsControls = {
     trainer: document.getElementById('trainer-rate-label'),
     reject: document.getElementById('reject-rate-label')
   }
-};
-const favoriteRouteControls = {
-  select: document.getElementById('route-preset-select'),
-  name: document.getElementById('favorite-route-name'),
-  pickup: document.getElementById('favorite-pickup-location'),
-  pickupState: document.getElementById('favorite-pickup-state'),
-  dropoff: document.getElementById('favorite-dropoff-location'),
-  dropoffState: document.getElementById('favorite-dropoff-state'),
-  mileage: document.getElementById('favorite-route-mileage'),
-  product: document.getElementById('favorite-product-type'),
-  saveButton: document.getElementById('save-favorite-route-button'),
-  list: document.getElementById('favorite-route-list'),
-  status: document.getElementById('favorite-route-status')
 };
 const manualSyncButton = document.getElementById('manual-sync-button');
 const authControls = {
@@ -498,22 +488,28 @@ const storageAudit = {
 };
 
 function normalizePaidTimeRecord(raw = {}) {
-  const category = ['Deadhead','Truck Wash','Breakdown','Other Hourly Work','Vacation Time'].includes(raw.category) ? raw.category : 'Other Hourly Work';
+  const category = ['Deadhead','Truck Wash','Breakdown','Office Time','Training Time','Other Hourly Work','Vacation Time'].includes(raw.category) ? raw.category : 'Other Hourly Work';
   const isVacation = category === 'Vacation Time';
   const startTime = String(raw.startTime || '');
   const endTime = String(raw.endTime || '');
   const durationMinutes = isVacation ? null : durationBetween(startTime, endTime);
   const hourlyRate = isVacation ? VACATION_DAILY_RATE : normalizePayRate(raw.hourlyRate, 0);
+  const quantity = isVacation ? 1 : (isFiniteNumber(durationMinutes) ? durationMinutes / 60 : normalizePayRate(raw.quantity, 0));
   return {
     ...raw,
     id: String(raw.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
-    workDate: String(raw.workDate || raw.date || ''),
+    workDate: normalizeDateKey(raw.workDate || raw.date),
     category,
+    paidTimeType: category,
     customCategoryName: String(raw.customCategoryName || ''),
     startTime, endTime,
     durationMinutes,
+    quantity,
+    quantityUnit: isVacation ? 'day' : 'hour',
     hourlyRate,
-    estimatedPay: isVacation ? VACATION_DAILY_RATE : (isFiniteNumber(durationMinutes) ? durationMinutes / 60 * hourlyRate : null),
+    rate: hourlyRate,
+    calculatedAmount: quantity * hourlyRate,
+    estimatedPay: quantity * hourlyRate,
     dispatcher: String(raw.dispatcher || '').trim(),
     truckNumber: String(raw.truckNumber || ''),
     trailerNumber: String(raw.trailerNumber || ''),
@@ -1672,7 +1668,6 @@ function applyCloudStateToApp() {
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
   applyDailyAddOnsToControls();
-  renderFavoriteRoutes();
   applyPaySettingsToControls();
   renderSummary();
   updateDailySummary();
@@ -1702,7 +1697,6 @@ function restoreStartupSafetySnapshot() {
   refreshAllDailyEarningsRecords();
   applyProfileToControls();
   applyDailyAddOnsToControls();
-  renderFavoriteRoutes();
   applyPaySettingsToControls();
   renderSummary();
   updateDailySummary();
@@ -3000,7 +2994,8 @@ function normalizeDailyAddOns(rawAddOns) {
     ? rawAddOns.map((item) => [item?.date || item?.loadDate, item])
     : Object.entries(rawAddOns || {});
 
-  entries.forEach(([date, addOn]) => {
+  entries.forEach(([rawDate, addOn]) => {
+    const date = normalizeDateKey(addOn?.workDate || rawDate);
     if (!date || !addOn || typeof addOn !== 'object') {
       return;
     }
@@ -3307,6 +3302,18 @@ function todayLocal() {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function normalizeDateKey(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const local = new Date(year, month - 1, day);
+  if (local.getFullYear() !== year || local.getMonth() !== month - 1 || local.getDate() !== day) return '';
+  return `${match[1]}-${match[2]}-${match[3]}`;
 }
 
 function parseLocalDate(dateValue) {
@@ -3694,130 +3701,8 @@ function savePaySettingsFromControls() {
   setStatusMessage(paySettingsControls.status, 'Pay rates saved.');
 }
 
-function renderFavoriteRoutes() {
-  if (favoriteRouteControls.select) {
-    favoriteRouteControls.select.innerHTML = [
-      '<option value="">Manual entry</option>',
-      ...favoriteRoutes.map((route) => `<option value="${escapeHtml(route.id)}">${escapeHtml(route.name)}</option>`)
-    ].join('');
-  }
-
-  if (!favoriteRouteControls.list) {
-    return;
-  }
-
-  if (favoriteRoutes.length === 0) {
-    favoriteRouteControls.list.innerHTML = '<article class="empty-card">No favorite routes saved yet.</article>';
-    return;
-  }
-
-  favoriteRouteControls.list.innerHTML = favoriteRoutes.map((route) => `
-    <article class="favorite-route-item">
-      <div>
-        <strong>${escapeHtml(route.name)}</strong>
-        <span>${escapeHtml(formatRoute(route))} · ${formatMiles(route.loadedMiles)}${route.productType ? ` · ${escapeHtml(route.productType)}` : ''}</span>
-      </div>
-      <button class="small-button danger" type="button" data-delete-route-id="${escapeHtml(route.id)}">Delete</button>
-    </article>
-  `).join('');
-}
-
-function saveFavoriteRouteFromControls() {
-  const pickupLocation = favoriteRouteControls.pickup?.value.trim() || '';
-  const dropoffLocation = favoriteRouteControls.dropoff?.value.trim() || '';
-
-  if (!pickupLocation || !dropoffLocation) {
-    setStatusMessage(favoriteRouteControls.status, 'Enter pickup and drop-off locations before saving a favorite route.', true);
-    return;
-  }
-
-  const route = {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: favoriteRouteControls.name?.value.trim() || `${pickupLocation} to ${dropoffLocation}`,
-    pickupLocation,
-    pickupState: normalizeState(favoriteRouteControls.pickupState?.value),
-    dropoffLocation,
-    dropoffState: normalizeState(favoriteRouteControls.dropoffState?.value),
-    loadedMiles: numberOrNull(favoriteRouteControls.mileage?.value),
-    productType: favoriteRouteControls.product?.value.trim() || '',
-    updatedAt: new Date().toISOString()
-  };
-  const previousRoutes = favoriteRoutes;
-  cancelPendingDelete('favoriteRoutes', route.id);
-  favoriteRoutes = normalizeFavoriteRoutes([route, ...favoriteRoutes]);
-
-  if (!saveFavoriteRoutesToStorage()) {
-    favoriteRoutes = previousRoutes;
-    setStatusMessage(favoriteRouteControls.status, 'Favorite route could not be saved.', true);
-    return;
-  }
-
-  [favoriteRouteControls.name, favoriteRouteControls.pickup, favoriteRouteControls.pickupState, favoriteRouteControls.dropoff, favoriteRouteControls.dropoffState, favoriteRouteControls.mileage, favoriteRouteControls.product].forEach((field) => {
-    if (field) {
-      field.value = '';
-    }
-  });
-  renderFavoriteRoutes();
-  if (!isCloudSignedIn()) {
-    markLocalChangesPending('Favorite route saved locally. Sign in to sync it to Firebase.');
-  }
-  syncSettingsToCloud();
-  setStatusMessage(favoriteRouteControls.status, 'Favorite route saved.');
-}
-
-function deleteFavoriteRoute(routeId) {
-  const confirmed = typeof globalThis.confirm === 'function'
-    ? globalThis.confirm('Delete this favorite route? Saved load records will not be changed.')
-    : true;
-
-  if (!confirmed) {
-    return;
-  }
-
-  const route = favoriteRoutes.find((item) => item.id === routeId);
-  queuePendingDelete('favoriteRoutes', routeId, {
-    routeName: route?.name || '',
-    pickupLocation: route?.pickupLocation || '',
-    dropoffLocation: route?.dropoffLocation || ''
-  });
-  favoriteRoutes = favoriteRoutes.filter((item) => item.id !== routeId);
-  saveFavoriteRoutesToStorage();
-  renderFavoriteRoutes();
-  if (!isCloudSignedIn()) {
-    markLocalChangesPending('Favorite route deleted locally. Sign in to sync the change to Firebase.');
-  }
-  processPendingDeletes();
-  syncSettingsToCloud();
-  setStatusMessage(favoriteRouteControls.status, 'Favorite route deleted.');
-}
-
-function applyFavoriteRoute(routeId) {
-  const route = favoriteRoutes.find((item) => item.id === routeId);
-
-  if (!route) {
-    return;
-  }
-
-  fields.pickupLocation.value = route.pickupLocation;
-  fields.pickupState.value = route.pickupState || '';
-  fields.dropoffLocation.value = route.dropoffLocation;
-  fields.dropoffState.value = route.dropoffState || '';
-
-  if (isFiniteNumber(route.loadedMiles)) {
-    fields.loadedMiles.value = route.loadedMiles;
-  }
-
-  if (route.productType) {
-    fields.productType.value = route.productType;
-  }
-
-  renderSummary();
-  saveDraftNow('Draft updated from favorite route.');
-}
-
 function renderSettingsUi() {
   applyPaySettingsToControls();
-  renderFavoriteRoutes();
   updateEquipmentSummary();
 }
 
@@ -4318,13 +4203,20 @@ function getCompanyPayPeriodLoads(dateValue) {
 
 function getPayPeriodEarningsSummary(dateValue) {
   const records = getCompanyPayPeriodLoads(dateValue);
+  const range = getCompanyPayPeriodRange(dateValue);
   const dates = new Set(records.map((load) => load.loadDate).filter(Boolean));
+  Object.values(dailyAddOns)
+    .filter((record) => record.workDate >= range.start && record.workDate <= range.end)
+    .forEach((record) => dates.add(record.workDate));
+  paidTimeRecords
+    .filter((record) => record.workDate >= range.start && record.workDate <= range.end)
+    .forEach((record) => dates.add(record.workDate));
   const dailySummaries = [...dates].map((date) => getDailyEarningsSummary(date));
   const completedRecords = records.filter(isCompleted);
   const rejectRecords = records.filter(isReject);
 
   return {
-    ...getCompanyPayPeriodRange(dateValue),
+    ...range,
     loadRecordCount: records.length,
     completedLoadCount: completedRecords.length,
     rejectCount: rejectRecords.length,
@@ -4503,14 +4395,18 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const deadheadPay = paidByCategory('Deadhead');
   const truckWashPay = paidByCategory('Truck Wash');
   const breakdownPay = paidByCategory('Breakdown');
+  const officeTimePay = paidByCategory('Office Time');
+  const trainingTimePay = paidByCategory('Training Time');
   const otherHourlyPay = paidByCategory('Other Hourly Work');
   const vacationPay = paidByCategory('Vacation Time');
   const deadheadMinutes = paidMinutesByCategory('Deadhead');
   const truckWashMinutes = paidMinutesByCategory('Truck Wash');
   const breakdownMinutes = paidMinutesByCategory('Breakdown');
+  const officeTimeMinutes = paidMinutesByCategory('Office Time');
+  const trainingTimeMinutes = paidMinutesByCategory('Training Time');
   const otherHourlyMinutes = paidMinutesByCategory('Other Hourly Work');
-  const totalHourlyAdditionalMinutes = deadheadMinutes + truckWashMinutes + breakdownMinutes + otherHourlyMinutes;
-  const hourlyAdditionalPay = deadheadPay + truckWashPay + breakdownPay + otherHourlyPay;
+  const totalHourlyAdditionalMinutes = deadheadMinutes + truckWashMinutes + breakdownMinutes + officeTimeMinutes + trainingTimeMinutes + otherHourlyMinutes;
+  const hourlyAdditionalPay = deadheadPay + truckWashPay + breakdownPay + officeTimePay + trainingTimePay + otherHourlyPay;
   const paidTimeOverlap = getPaidTimeOverlapReview(records, paidTime);
   const exactDutyMinutes = durationBetween(addOn.shiftStartTime, addOn.shiftEndTime);
   const timeline = normalizeDailyTimeline(records);
@@ -4551,8 +4447,9 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     trainerPayApplied: addOn.trainerPay,
     trainerPay,
     paidTimeCount: paidTime.length,
-    deadheadMinutes, truckWashMinutes, breakdownMinutes, otherHourlyMinutes, totalHourlyAdditionalMinutes,
-    deadheadPay, truckWashPay, breakdownPay, otherHourlyPay, vacationPay, hourlyAdditionalPay,
+    deadheadMinutes, truckWashMinutes, breakdownMinutes, officeTimeMinutes, trainingTimeMinutes, otherHourlyMinutes, totalHourlyAdditionalMinutes,
+    deadheadPay, truckWashPay, breakdownPay, officeTimePay, trainingTimePay, otherHourlyPay, vacationPay, hourlyAdditionalPay,
+    otherPaidTimePay: hourlyAdditionalPay,
     paidTimeOverlapMinutes: paidTimeOverlap.overlapMinutes,
     paidTimeOverlapStatus: paidTimeOverlap.status,
     paidTimeOverlapWarnings: paidTimeOverlap.warnings,
@@ -4570,6 +4467,8 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     unclassifiedNonLoadDutyMinutes: classificationUsable ? exactDutyMinutes - classifiedDutyMinutes : null,
     activeLoadUtilization: utilizationUsable ? activeLoadCycleMinutes / exactDutyMinutes * 100 : null,
     totalEstimatedDailyEarnings: totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + perDiemPay + sleeperBerthPay + trainerPay,
+    effectiveHourlyEarnings: usableDutyMinutes > 0 ? (totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + perDiemPay + sleeperBerthPay + trainerPay) / (usableDutyMinutes / 60) : null,
+    effectiveHourlyBasis: exactDutyMinutes > 0 ? 'exact' : (estimatedTrackedSpanMinutes > 0 ? 'estimated' : 'missing'),
     completedLoadPayPerExactDutyHour: exactDutyMinutes > 0 ? completedLoadPay / (exactDutyMinutes / 60) : null,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
     averageGrossBarrels: completedRecords.length > 0 ? sum(completedRecords, 'grossBarrels') / completedRecords.length : 0,
@@ -4713,7 +4612,14 @@ function updateDashboardStats(summaryRecord) {
   const monthRecords = getLoadsForRange(monthRange.start, monthRange.end);
   const monthCompleted = monthRecords.filter(isCompleted);
   const monthRejects = monthRecords.filter(isReject);
-  const monthDays = [...new Set(monthRecords.map((load) => load.loadDate).filter(Boolean))].map(getDailyEarningsSummary);
+  const monthDates = new Set(monthRecords.map((load) => load.loadDate).filter(Boolean));
+  Object.values(dailyAddOns)
+    .filter((record) => record.workDate >= monthRange.start && record.workDate <= monthRange.end)
+    .forEach((record) => monthDates.add(record.workDate));
+  paidTimeRecords
+    .filter((record) => record.workDate >= monthRange.start && record.workDate <= monthRange.end)
+    .forEach((record) => monthDates.add(record.workDate));
+  const monthDays = [...monthDates].map(getDailyEarningsSummary);
   const monthGoalSummary = summarizeDailyGoalResults(monthDays);
 
   dashboard.totalLoadsHauled.textContent = String(getUniqueSavedLoads().filter(isCompleted).length);
@@ -4721,7 +4627,7 @@ function updateDashboardStats(summaryRecord) {
   dashboard.loadsHauledPayPeriod.textContent = String(payPeriodRecords.filter(isCompleted).length);
   dashboard.loadsHauledMonth.textContent = String(monthCompleted.length);
   dashboard.loadsHauledSelectedDate.textContent = String(selectedDateRecords.filter(isCompleted).length);
-  setElementText(headerRecordCount, `${countUniqueLoads()} ${countUniqueLoads() === 1 ? 'assignment' : 'assignments'}`);
+  setElementText(headerRecordCount, `${countUniqueLoads()} ${countUniqueLoads() === 1 ? 'load' : 'loads'}`);
   setElementText(payPeriodSummary.totalEarnings, formatMoney(payPeriodRecord.totalEstimatedEarnings));
   setElementText(payPeriodSummary.completedCount, String(payPeriodRecord.completedLoadCount));
   setElementText(payPeriodSummary.rejectCount, String(payPeriodRecord.rejectCount));
@@ -4790,9 +4696,14 @@ function updateDailySummary() {
   setElementText(daily.todayRejects, String(summaryRecord.rejectCount));
   setElementText(daily.todayCompletedPay, formatMoney(summaryRecord.completedLoadPay));
   setElementText(daily.todayHourlyPay, formatMoney(summaryRecord.hourlyAdditionalPay));
+  setElementText(daily.todayVacationPay, formatMoney(summaryRecord.vacationPay));
+  setElementText(daily.todayOtherPaidTime, formatMoney(summaryRecord.otherPaidTimePay));
   setElementText(daily.todayWaitPay, formatMoney(summaryRecord.totalWaitPay));
   setElementText(daily.todayAddOns, formatMoney(summaryRecord.perDiemPay + summaryRecord.sleeperBerthPay + summaryRecord.trainerPay));
   setElementText(daily.todayDutyTime, formatMaybeDuration(summaryRecord.exactDutyMinutes));
+  setElementText(daily.todayEffectiveHourly, isFiniteNumber(summaryRecord.effectiveHourlyEarnings)
+    ? `${formatMoney(summaryRecord.effectiveHourlyEarnings)}/hr${summaryRecord.effectiveHourlyBasis === 'estimated' ? ' (estimated)' : ''}`
+    : 'Not available');
   updateDashboardStats(summaryRecord);
 
   review.dateLabel.textContent = selectedDate || '-';
@@ -4835,6 +4746,68 @@ function updateDailySummary() {
 
 function renderDailyPanels() {
   updateDailySummary();
+}
+
+function getRecordsSelectedDate() {
+  return normalizeDateKey(savedFilters.scope?.value === 'date' ? savedFilters.date?.value : daily.date?.value) || todayLocal();
+}
+
+function getUnifiedDailyRecord(dateValue) {
+  const date = normalizeDateKey(dateValue);
+  const loads = date ? getLoadsForDate(date) : [];
+  return {
+    date,
+    loads,
+    paidTime: date ? paidTimeRecords.filter((item) => item.workDate === date) : [],
+    addOn: getDailyAddOn(date),
+    summary: getDailyEarningsSummary(date, loads)
+  };
+}
+
+function renderUnifiedDailyRecord() {
+  const container = document.getElementById('daily-record-content');
+  const total = document.getElementById('daily-record-total');
+  if (!container) return;
+  const record = getUnifiedDailyRecord(getRecordsSelectedDate());
+  const day = record.summary;
+  setElementText(total, formatMoney(day.totalEstimatedDailyEarnings));
+  const loadRows = record.loads.map((load) => `
+    <article class="daily-record-item">
+      <div><strong>Load ${escapeHtml(load.loadNumber || '-')}</strong><span>${escapeHtml(load.ticketNumber || 'No ticket')} · ${escapeHtml(formatRoute(load))}</span></div>
+      <div><span>${escapeHtml(load.dispatcher || 'No dispatcher')}</span><strong>${escapeHtml(formatMoney(load.estimatedEntryPay))}</strong></div>
+      <button class="small-button" type="button" data-daily-edit-load="${escapeHtml(load.id)}">Edit load</button>
+    </article>`).join('');
+  const paidRows = record.paidTime.map((item) => `
+    <article class="daily-record-item">
+      <div><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(formatCsvNumber(item.quantity))} ${escapeHtml(item.quantityUnit)} at ${escapeHtml(formatMoney(item.hourlyRate))}</span></div>
+      <strong>${escapeHtml(formatMoney(item.estimatedPay))}</strong>
+      <button class="small-button" type="button" data-daily-edit-paid="${escapeHtml(item.id)}">Edit paid time</button>
+    </article>`).join('');
+  container.innerHTML = `
+    <div class="daily-record-overview">
+      ${loadChip('Work date', record.date)}
+      ${loadChip('Start Workday', record.addOn.shiftStartTime || '-')}
+      ${loadChip('End Workday', record.addOn.shiftEndTime || '-')}
+      ${loadChip('Workday duration', formatMaybeDuration(day.exactDutyMinutes))}
+      ${loadChip('Completed loads', String(day.completedLoadCount))}
+      ${loadChip('Rejected loads', String(day.rejectCount))}
+      ${loadChip('Completed-load pay', formatMoney(day.completedLoadPay))}
+      ${loadChip('Loading wait pay', formatMoney(day.totalPaidPickupWaitMinutes / 60 * getPayRate('waitPayRate')))}
+      ${loadChip('Unloading wait pay', formatMoney(day.totalPaidDropoffWaitMinutes / 60 * getPayRate('waitPayRate')))}
+      ${loadChip('Total wait pay', formatMoney(day.totalWaitPay))}
+      ${loadChip('Vacation pay', formatMoney(day.vacationPay))}
+      ${loadChip('Other paid time', formatMoney(day.otherPaidTimePay))}
+      ${loadChip('Per diem', formatMoney(day.perDiemPay))}
+      ${loadChip('Sleeper pay', formatMoney(day.sleeperBerthPay))}
+      ${loadChip('Trainer pay', formatMoney(day.trainerPay))}
+      ${loadChip('Reject pay', formatMoney(day.rejectPay))}
+      ${loadChip(day.effectiveHourlyBasis === 'exact' ? 'Effective hourly earnings' : 'Effective hourly earnings (estimated)', formatMaybeMoney(day.effectiveHourlyEarnings))}
+      ${loadChip('Total Daily Earnings', formatMoney(day.totalEstimatedDailyEarnings))}
+    </div>
+    <div class="button-row compact"><button class="button secondary" type="button" data-daily-edit-workday>Edit Start/End Workday and add-ons</button></div>
+    <h4>Load activity</h4>${loadRows || `<article class="empty-card">No loads for ${escapeHtml(record.date)}.</article>`}
+    <h4>Paid time</h4>${paidRows || `<article class="empty-card">No paid time for ${escapeHtml(record.date)}.</article>`}
+  `;
 }
 
 function getSavedFilterRecords() {
@@ -4943,6 +4916,8 @@ function getSavedFilterRecords() {
 }
 
 function renderSavedLoads(records = getSavedFilterRecords()) {
+  renderUnifiedDailyRecord();
+  renderPaidTimeRecords();
   renderSavedLoadCards(records);
 }
 
@@ -6009,6 +5984,7 @@ function getDailyEarningsDates() {
     ...Object.keys(dailyEarningsRecords),
     ...Object.keys(dailyAddOns),
     ...savedLoads.map((load) => load.loadDate).filter(Boolean),
+    ...paidTimeRecords.map((record) => record.workDate).filter(Boolean),
     daily.date.value
   ]);
 
@@ -6019,7 +5995,7 @@ function downloadDailyEarningsSummary() {
   refreshAllDailyEarningsRecords();
   const headers = [
     'Date',
-    'Total assignments',
+    'Total loads',
     'Completed load count',
     'Reject count',
     'Regular miles',
@@ -6057,6 +6033,8 @@ function downloadDailyEarningsSummary() {
     'Deadhead pay',
     'Truck wash pay',
     'Breakdown pay',
+    'Office time pay',
+    'Training time pay',
     'Other hourly work pay',
     'Vacation pay',
     'Total hourly additional pay',
@@ -6109,6 +6087,8 @@ function downloadDailyEarningsSummary() {
       formatCsvNumber(record.deadheadPay),
       formatCsvNumber(record.truckWashPay),
       formatCsvNumber(record.breakdownPay),
+      formatCsvNumber(record.officeTimePay),
+      formatCsvNumber(record.trainingTimePay),
       formatCsvNumber(record.otherHourlyPay),
       formatCsvNumber(record.vacationPay),
       formatCsvNumber(record.hourlyAdditionalPay),
@@ -6409,7 +6389,6 @@ function commitImportedState(nextState) {
   applyProfileToControls();
   applyDailyAddOnsToControls();
   applyPaySettingsToControls();
-  renderFavoriteRoutes();
   renderPaidTimeRecords();
   renderSummary();
   updateDailySummary();
@@ -6482,12 +6461,15 @@ function printDailyReport() {
     ['Work date', date],
     ['Completed loads', record.completedLoadCount],
     ['Rejects', record.rejectCount],
-    ['Total assignments', record.completedLoadCount + record.rejectCount],
+    ['Total loads', record.completedLoadCount + record.rejectCount],
     ['Completed-load pay', formatMoney(record.completedLoadPay)],
     ['Daily completed-load-pay goal', formatMoney(record.dailyGoal)],
     ['Goal status', record.goalStatus],
     ['Goal difference', formatGoalDifference(record)],
     ['Default dispatcher', record.defaultDispatcher || 'Unknown'],
+    ['Start Workday', record.shiftStartTime || '-'],
+    ['End Workday', record.shiftEndTime || '-'],
+    ['Workday duration', formatMaybeDuration(record.exactDutyMinutes)],
     ['Duty-time status', getDutyTimeStatus(record)],
     ['Active load-cycle time', formatMaybeDuration(record.activeLoadCycleMinutes)],
     ['Non-load duty time', formatMaybeDuration(record.nonLoadDutyMinutes)],
@@ -6498,14 +6480,19 @@ function printDailyReport() {
     ['Reject pay', formatMoney(record.rejectPay)],
     ['Wait-time earnings', formatMoney(record.totalWaitPay)],
     ['Trainer pay', formatMoney(record.trainerPay)],
+    ['Per diem', formatMoney(record.perDiemPay)],
+    ['Sleeper pay', formatMoney(record.sleeperBerthPay)],
     ['Deadhead pay', formatMoney(record.deadheadPay)],
     ['Truck wash pay', formatMoney(record.truckWashPay)],
     ['Breakdown pay', formatMoney(record.breakdownPay)],
+    ['Office time pay', formatMoney(record.officeTimePay)],
+    ['Training time pay', formatMoney(record.trainingTimePay)],
     ['Other hourly work pay', formatMoney(record.otherHourlyPay)],
     ['Vacation pay', formatMoney(record.vacationPay)],
     ['Total hourly additional pay', formatMoney(record.hourlyAdditionalPay)],
     ['Paid-time overlap review', record.paidTimeOverlapStatus === 'review' ? `Needs review (${formatDuration(record.paidTimeOverlapMinutes)})` : 'No overlap found'],
-    ['Total earnings', formatMoney(record.totalEstimatedDailyEarnings)],
+    [record.effectiveHourlyBasis === 'exact' ? 'Effective hourly earnings' : 'Effective hourly earnings (estimated)', formatMaybeMoney(record.effectiveHourlyEarnings)],
+    ['Total Daily Earnings', formatMoney(record.totalEstimatedDailyEarnings)],
     ['Total gross barrels', formatBarrels(record.totalGrossBarrels)],
     ['Total mileage', formatMiles(record.totalMilesIncludingReRoute)],
     ['Total wait time', formatDuration(record.totalPaidWaitMinutes)],
@@ -6576,6 +6563,12 @@ function getReportRange() {
 function summarizeReportRange(startDate, endDate) {
   const records = startDate === endDate ? getLoadsForDate(startDate) : getLoadsForRange(startDate, endDate);
   const dates = new Set(records.map((load) => load.loadDate).filter(Boolean));
+  Object.values(dailyAddOns)
+    .filter((record) => record.workDate >= startDate && record.workDate <= endDate)
+    .forEach((record) => dates.add(record.workDate));
+  paidTimeRecords
+    .filter((record) => record.workDate >= startDate && record.workDate <= endDate)
+    .forEach((record) => dates.add(record.workDate));
   const summaries = [...dates].map((date) => getDailyEarningsSummary(date));
   const completedRecords = records.filter(isCompleted);
   const rejectRecords = records.filter(isReject);
@@ -6622,7 +6615,7 @@ function summarizeLoadLevelRecords(records) {
   const loadEntryEarnings = sum(all, 'estimatedEntryPay');
   const validCycleEarnings = sum(validCycles, 'estimatedEntryPay');
   return {
-    records: all, completedLoads: completed.length, rejects: rejects.length, totalAssignments: completed.length + rejects.length,
+    records: all, completedLoads: completed.length, rejects: rejects.length, totalLoads: completed.length + rejects.length,
     completionRate: all.length ? completed.length / all.length * 100 : null,
     loadedMiles: sum(all, 'loadedMiles'), reroutedMiles: sum(all, 'reRoutedMiles'), grossBarrels: sum(completed, 'grossBarrels'),
     completedBasePay, rejectPay, waitPay, loadEntryEarnings,
@@ -6651,11 +6644,26 @@ function groupAnalysis(records, keySelector) {
   return groupLoadAnalysis(records, keySelector);
 }
 
-function buildAnalysisDays(records) {
+function buildAnalysisDays(records, startDate = '', endDate = '') {
   const byDate = new Map();
   getUniqueSavedLoads(records).forEach((load) => {
     if (load.loadDate) byDate.set(load.loadDate, [...(byDate.get(load.loadDate) || []), load]);
   });
+  const inferredDates = [...byDate.keys()].sort();
+  const rangeStart = startDate || inferredDates[0] || '';
+  const rangeEnd = endDate || inferredDates.at(-1) || rangeStart;
+  if (rangeStart && rangeEnd) {
+    Object.values(dailyAddOns)
+      .filter((record) => record.workDate >= rangeStart && record.workDate <= rangeEnd)
+      .forEach((record) => {
+        if (!byDate.has(record.workDate)) byDate.set(record.workDate, []);
+      });
+    paidTimeRecords
+      .filter((record) => record.workDate >= rangeStart && record.workDate <= rangeEnd)
+      .forEach((record) => {
+        if (!byDate.has(record.workDate)) byDate.set(record.workDate, []);
+      });
+  }
   return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, loads]) => {
     const summary = getDailyEarningsSummary(date, loads);
     const names = new Map();
@@ -6679,14 +6687,15 @@ function summarizeDayRows(days, name = '') {
   const usableDutyMinutes = exactDutyMinutes + estimatedSpanMinutes;
   const totalEarnings = sum(days, 'totalEstimatedDailyEarnings');
   return {
-    name, days, workdays: days.length, completedLoads, rejects, totalAssignments: assignments,
+    name, days, workdays: days.length, completedLoads, rejects, totalLoads: assignments,
     completionRate: assignments ? completedLoads / assignments * 100 : null,
     exactDays: exactDays.length, estimatedDays: estimatedDays.length, missingTimeDays: missingDays.length,
     exactDutyMinutes, estimatedSpanMinutes, usableDutyMinutes,
     completedBasePay: sum(days, 'completedLoadPay'), rejectPay: sum(days, 'rejectPay'), waitPay: sum(days, 'totalWaitPay'),
     perDiemPay: sum(days, 'perDiemPay'), sleeperPay: sum(days, 'sleeperBerthPay'), trainerPay: sum(days, 'trainerPay'),
     deadheadPay: sum(days, 'deadheadPay'), truckWashPay: sum(days, 'truckWashPay'), breakdownPay: sum(days, 'breakdownPay'),
-    otherHourlyPay: sum(days, 'otherHourlyPay'), hourlyAdditionalPay: sum(days, 'hourlyAdditionalPay'), totalEarnings,
+    officeTimePay: sum(days, 'officeTimePay'), trainingTimePay: sum(days, 'trainingTimePay'),
+    otherHourlyPay: sum(days, 'otherHourlyPay'), vacationPay: sum(days, 'vacationPay'), hourlyAdditionalPay: sum(days, 'hourlyAdditionalPay'), totalEarnings,
     averageEarningsPerWorkday: days.length ? totalEarnings / days.length : null,
     effectiveHourlyEarnings: usableDutyMinutes > 0 ? totalEarnings / (usableDutyMinutes / 60) : null,
     completedLoadsPerDutyHour: usableDutyMinutes > 0 ? completedLoads / (usableDutyMinutes / 60) : null,
@@ -6704,16 +6713,16 @@ function summarizeDayRows(days, name = '') {
   };
 }
 
-function buildDispatcherDayComparison(records) {
+function buildDispatcherDayComparison(records, startDate = '', endDate = '') {
   const groups = new Map();
-  buildAnalysisDays(records).forEach((day) => groups.set(day.dispatcher, [...(groups.get(day.dispatcher) || []), day]));
+  buildAnalysisDays(records, startDate, endDate).forEach((day) => groups.set(day.dispatcher, [...(groups.get(day.dispatcher) || []), day]));
   return [...groups.entries()].map(([name, days]) => summarizeDayRows(days, name)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function summarizeAnalysisRecords(records, startDate = '', endDate = '') {
   const all = getUniqueSavedLoads(records);
   const loadLevel = summarizeLoadLevelRecords(all);
-  const days = buildAnalysisDays(all);
+  const days = buildAnalysisDays(all, startDate, endDate);
   const dayTotals = summarizeDayRows(days, 'All days');
   const exactDays = days.filter((day) => day.dutyTimeSource === 'exact');
   const estimatedDays = days.filter((day) => day.dutyTimeSource === 'estimated');
@@ -6786,11 +6795,11 @@ function filterDispatcherDays(records, dispatcher = '') {
 
 function loadAnalysisTable(title, rows) {
   if (!rows.length) return `<h4>${escapeHtml(title)}</h4><p class="helper-text">No matching records.</p>`;
-  return `<h4>${escapeHtml(title)}</h4><div class="table-scroll"><table><thead><tr><th>Group</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Completion</th><th>Loaded miles</th><th>Rerouted</th><th>Base pay</th><th>Reject pay</th><th>Wait pay</th><th>Load-entry earnings</th><th>Avg cycle</th><th>Median cycle</th><th>Avg base/completed</th><th>Avg all-in/completed</th><th>Avg/assignment</th><th>Cycle-hour earnings</th><th>Missing time</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMiles(row.loadedMiles)}</td><td>${formatMiles(row.reroutedMiles)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.rejectPay)}</td><td>${formatMoney(row.waitPay)}</td><td>${formatMoney(row.loadEntryEarnings)}</td><td>${formatMaybeDuration(row.averageCycleMinutes)}</td><td>${formatMaybeDuration(row.medianCycleMinutes)}</td><td>${formatMaybeMoney(row.averageBasePayPerCompletedLoad)}</td><td>${formatMaybeMoney(row.averageAllInCompletedEarnings)}</td><td>${formatMaybeMoney(row.averageEarningsPerAssignment)}</td><td>${formatMaybeMoney(row.cycleHourEarnings)}</td><td>${row.loadsMissingTime}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<h4>${escapeHtml(title)}</h4><div class="table-scroll"><table><thead><tr><th>Group</th><th>Completed</th><th>Rejects</th><th>Loads</th><th>Completion</th><th>Loaded miles</th><th>Rerouted</th><th>Base pay</th><th>Reject pay</th><th>Wait pay</th><th>Load-entry earnings</th><th>Avg cycle</th><th>Median cycle</th><th>Avg base/completed</th><th>Avg all-in/completed</th><th>Avg/load</th><th>Cycle-hour earnings</th><th>Missing time</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalLoads}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMiles(row.loadedMiles)}</td><td>${formatMiles(row.reroutedMiles)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.rejectPay)}</td><td>${formatMoney(row.waitPay)}</td><td>${formatMoney(row.loadEntryEarnings)}</td><td>${formatMaybeDuration(row.averageCycleMinutes)}</td><td>${formatMaybeDuration(row.medianCycleMinutes)}</td><td>${formatMaybeMoney(row.averageBasePayPerCompletedLoad)}</td><td>${formatMaybeMoney(row.averageAllInCompletedEarnings)}</td><td>${formatMaybeMoney(row.averageEarningsPerAssignment)}</td><td>${formatMaybeMoney(row.cycleHourEarnings)}</td><td>${row.loadsMissingTime}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function dispatcherDayTable(rows) {
-  return `<h4>Dispatcher Day Comparison</h4><p class="report-disclosure">The goal uses completed-load base pay only. Daily add-ons remain separate. State and route filters apply to load-level analysis only.</p><div class="table-scroll"><table><thead><tr><th>Dispatcher</th><th>Workdays</th><th>Goal met</th><th>Below goal</th><th>Usable days meeting goal</th><th>Avg completed pay/workday</th><th>Avg goal difference</th><th>Completed</th><th>Rejects</th><th>Assignments</th><th>Completion</th><th>Base pay</th><th>Per diem</th><th>Total earnings</th><th>Exact days</th><th>Estimated days</th><th>Missing days</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.workdays}</td><td>${row.daysGoalMet}</td><td>${row.daysBelowGoal}</td><td>${formatPercentValue(row.percentUsableDaysMeetingGoal)}</td><td>${formatMaybeMoney(row.averageCompletedLoadPayPerWorkday)}</td><td>${formatMaybeMoney(row.averageGoalDifference)}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalAssignments}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.perDiemPay)}</td><td>${formatMoney(row.totalEarnings)}</td><td>${row.exactDays}</td><td>${row.estimatedDays}</td><td>${row.missingTimeDays}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<h4>Dispatcher Day Comparison</h4><p class="report-disclosure">The goal uses completed-load base pay only. Daily add-ons remain separate. State and route filters apply to load-level analysis only.</p><div class="table-scroll"><table><thead><tr><th>Dispatcher</th><th>Workdays</th><th>Goal met</th><th>Below goal</th><th>Usable days meeting goal</th><th>Avg completed pay/workday</th><th>Avg goal difference</th><th>Completed</th><th>Rejects</th><th>Loads</th><th>Completion</th><th>Base pay</th><th>Per diem</th><th>Total earnings</th><th>Exact days</th><th>Estimated days</th><th>Missing days</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.workdays}</td><td>${row.daysGoalMet}</td><td>${row.daysBelowGoal}</td><td>${formatPercentValue(row.percentUsableDaysMeetingGoal)}</td><td>${formatMaybeMoney(row.averageCompletedLoadPayPerWorkday)}</td><td>${formatMaybeMoney(row.averageGoalDifference)}</td><td>${row.completedLoads}</td><td>${row.rejects}</td><td>${row.totalLoads}</td><td>${formatPercentValue(row.completionRate)}</td><td>${formatMoney(row.completedBasePay)}</td><td>${formatMoney(row.perDiemPay)}</td><td>${formatMoney(row.totalEarnings)}</td><td>${row.exactDays}</td><td>${row.estimatedDays}</td><td>${row.missingTimeDays}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function formatPercentValue(value) { return isFiniteNumber(value) ? `${value.toFixed(1)}%` : 'Not available'; }
@@ -6823,7 +6832,7 @@ function renderReportSummary() {
   reportControls.summaryGrid.innerHTML = [
     reportMetric('Report start', report.start || '-'),
     reportMetric('Report end', report.end || '-'),
-    reportMetric('Total assignments', String(report.totalAssignmentCount)),
+    reportMetric('Total loads', String(report.totalAssignmentCount)),
     reportMetric('Completed loads', String(report.completedLoadCount)),
     reportMetric('Rejects', String(report.rejectCount)),
     reportMetric('Gross barrels', formatBarrels(report.totalGrossBarrels)),
@@ -6856,7 +6865,7 @@ function renderDispatchAnalysis(startDate, endDate) {
   const rangeRecords = getLoadsForRange(startDate, endDate);
   setFilterOptions(reportControls.dispatcher, [
     ...rangeRecords.map((load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown'),
-    ...buildAnalysisDays(rangeRecords).map((day) => day.dispatcher)
+    ...buildAnalysisDays(rangeRecords, startDate, endDate).map((day) => day.dispatcher)
   ]);
   setFilterOptions(reportControls.pickupState, rangeRecords.map((load) => displayState(load.pickupState)));
   setFilterOptions(reportControls.dropoffState, rangeRecords.map((load) => displayState(load.dropoffState)));
@@ -6867,7 +6876,7 @@ function renderDispatchAnalysis(startDate, endDate) {
   const records = filterAnalysisRecords(rangeRecords, filters);
   const result = summarizeAnalysisRecords(rangeRecords, startDate, endDate);
   const loadResult = summarizeLoadLevelRecords(records);
-  const allDayRows = buildDispatcherDayComparison(rangeRecords);
+  const allDayRows = buildDispatcherDayComparison(rangeRecords, startDate, endDate);
   const dayRows = filters.dispatcher ? allDayRows.filter((row) => row.name === filters.dispatcher) : allDayRows;
   const dispatcherLoadRows = groupLoadAnalysis(records, (load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown');
   const pickupRows = groupLoadAnalysis(records, (load) => displayState(load.pickupState));
@@ -6881,7 +6890,7 @@ function renderDispatchAnalysis(startDate, endDate) {
   const indicators = getWorkdayIndicators(result.days);
   const overallMetrics = [
     ['Report start', startDate], ['Report end', endDate],
-    ['Completed loads', result.completedLoads], ['Rejects', result.rejects], ['Total assignments', result.totalAssignments],
+    ['Completed loads', result.completedLoads], ['Rejects', result.rejects], ['Total loads', result.totalLoads],
     ['Completion rate', formatPercentValue(result.completionRate)], ['Completed-load base pay', formatMoney(result.completedBasePay)],
     ['Reject pay', formatMoney(result.rejectPay)], ['Wait pay', formatMoney(result.waitPay)], ['Per diem', formatMoney(result.perDiemPay)],
     ['Sleeper pay', formatMoney(result.sleeperPay)], ['Trainer pay', formatMoney(result.trainerPay)],
@@ -6916,13 +6925,13 @@ function renderDispatchAnalysis(startDate, endDate) {
     <h4>Overall Date-Range Baseline</h4><div class="review-grid analysis-summary">${overallMetrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
     <h4>Historical Daily Goal Results</h4><div class="table-scroll"><table><thead><tr><th>Date</th><th>Completed loads</th><th>Completed-load pay</th><th>Daily goal</th><th>Goal status</th><th>Goal difference</th><th>Total estimated earnings</th><th>Exact duty time</th><th>Completed pay/duty hour</th></tr></thead><tbody>${result.days.map((day) => `<tr><td>${escapeHtml(day.date)}</td><td>${day.completedLoadCount}</td><td>${escapeHtml(formatMoney(day.completedLoadPay))}</td><td>${escapeHtml(formatMoney(day.dailyGoal))}</td><td>${escapeHtml(day.goalStatus)}</td><td>${escapeHtml(formatGoalDifference(day))}</td><td>${escapeHtml(formatMoney(day.totalEstimatedDailyEarnings))}</td><td>${escapeHtml(formatMaybeDuration(day.exactDutyMinutes))}</td><td>${escapeHtml(formatMaybeMoney(day.completedLoadPayPerExactDutyHour))}</td></tr>`).join('')}</tbody></table></div>
     ${filtersActive ? `<h4>Filtered Load Summary</h4><div class="review-grid"><div class="result-row"><span>Active filters</span><strong>${escapeHtml(describeAnalysisFilters(filters))}</strong></div>${[
-      ['Completed loads', loadResult.completedLoads], ['Rejects', loadResult.rejects], ['Total assignments', loadResult.totalAssignments],
+      ['Completed loads', loadResult.completedLoads], ['Rejects', loadResult.rejects], ['Total loads', loadResult.totalLoads],
       ['Completion rate', formatPercentValue(loadResult.completionRate)], ['Loaded miles', formatMiles(loadResult.loadedMiles)], ['Rerouted miles', formatMiles(loadResult.reroutedMiles)],
       ['Gross barrels from completed loads', formatBarrels(loadResult.grossBarrels)], ['Completed-load base pay', formatMoney(loadResult.completedBasePay)],
       ['Reject pay', formatMoney(loadResult.rejectPay)], ['Load-specific wait pay', formatMoney(loadResult.waitPay)], ['Load-entry earnings', formatMoney(loadResult.loadEntryEarnings)],
       ['Average cycle time', formatMaybeDuration(loadResult.averageCycleMinutes)], ['Median cycle time', formatMaybeDuration(loadResult.medianCycleMinutes)],
       ['Average base pay per completed load', formatMaybeMoney(loadResult.averageBasePayPerCompletedLoad)], ['Average all-in completed-load earnings', formatMaybeMoney(loadResult.averageAllInCompletedEarnings)],
-      ['Average earnings per assignment', formatMaybeMoney(loadResult.averageEarningsPerAssignment)], ['Cycle-hour earnings', formatMaybeMoney(loadResult.cycleHourEarnings)],
+      ['Average earnings per load', formatMaybeMoney(loadResult.averageEarningsPerAssignment)], ['Cycle-hour earnings', formatMaybeMoney(loadResult.cycleHourEarnings)],
       ['Loads missing cycle time', loadResult.loadsMissingTime]
     ].map(([label, value]) => reportMetric(label, String(value))).join('')}</div>` : ''}
     <h4>Time Basis Summary</h4><div class="review-grid">${timeMetrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
@@ -6935,9 +6944,9 @@ function renderDispatchAnalysis(startDate, endDate) {
     ${loadAnalysisTable('Exact Route Comparison', exactRouteRows)}
     <details class="workday-indicators"><summary><strong>Workday Indicators</strong></summary><div class="review-grid">${Object.entries(indicators).map(([label, value]) => reportMetric(label, String(value))).join('')}</div></details>
     <details><summary><strong>View Detailed Completeness</strong></summary><div class="review-grid">${[
-      ['Total assignments in range', result.totalAssignments], ['Completed loads', result.completedLoads], ['Rejects', result.rejects],
+      ['Total loads in range', result.totalLoads], ['Completed loads', result.completedLoads], ['Rejects', result.rejects],
       ['Loads with dispatcher', result.dispatcherCount], ['Loads with pickup state', result.pickupStateCount], ['Loads with drop-off state', result.dropoffStateCount],
-      ['Loads with both states', result.completeStateCount], ['Loads with complete cycle times', result.completeCycleCount], ['Loads missing cycle times', result.totalAssignments - result.completeCycleCount],
+      ['Loads with both states', result.completeStateCount], ['Loads with complete cycle times', result.completeCycleCount], ['Loads missing cycle times', result.totalLoads - result.completeCycleCount],
       ['Days with exact shift times', result.exactDays], ['Days with estimated tracked spans', result.estimatedDays], ['Days with no usable time', result.noUsableTimeDays],
       ['Days with mixed dispatchers', result.mixedDispatcherDays], ['Days with timeline errors', result.timelineErrorDays],
       ['Report reliability', `${reliability.label} — dispatcher ${reliability.dispatcherPercent.toFixed(1)}%, states ${reliability.statePercent.toFixed(1)}%, cycle time ${reliability.cyclePercent.toFixed(1)}%, exact shifts ${reliability.exactPercent.toFixed(1)}%`]
@@ -6955,7 +6964,7 @@ function renderDispatchAnalysis(startDate, endDate) {
 }
 
 function getAnalysisReliability(result) {
-  const assignmentBase = result.totalAssignments || 1;
+  const assignmentBase = result.totalLoads || 1;
   const dayBase = result.days.length || 1;
   const dispatcherPercent = result.dispatcherCount / assignmentBase * 100;
   const statePercent = result.completeStateCount / assignmentBase * 100;
@@ -6971,7 +6980,7 @@ function getAnalysisReadiness(result) {
   const exactDays = result.days.filter((day) => day.dutyTimeSource === 'exact').length;
   const completeLoads = result.days.flatMap((day) => day.loads).filter((load) =>
     String(load.dispatcher || '').trim() && load.pickupLocation && load.dropoffLocation && isFiniteNumber(load.cycleTimeMinutes)).length;
-  if (exactDays === result.days.length && completeLoads === result.totalAssignments) {
+  if (exactDays === result.days.length && completeLoads === result.totalLoads) {
     return { label: 'Analysis Ready', detail: 'All included workdays have exact shift times and all included loads have dispatcher, locations, and complete cycle times.' };
   }
   if (exactDays > 0 || completeLoads > 0) {
@@ -6988,7 +6997,7 @@ function dutyTimeReviewTable(days) {
 function completenessMetrics(records) {
   const all = getUniqueSavedLoads(records);
   return [
-    ['Total assignments', all.length],
+    ['Total loads', all.length],
     ['Loads with dispatcher', all.filter((load) => String(load.dispatcher || '').trim()).length],
     ['Loads with pickup state', all.filter((load) => load.pickupState).length],
     ['Loads with drop-off state', all.filter((load) => load.dropoffState).length],
@@ -7036,8 +7045,8 @@ function reconcileBaselineAnalysis(result, dayRows) {
   const close = (left, right) => Math.abs(left - right) < 0.01;
   const groupedDays = dayRows.flatMap((row) => row.days);
   const checks = {
-    assignments: result.completedLoads + result.rejects === result.totalAssignments,
-    earnings: close(result.completedBasePay + result.rejectPay + result.waitPay + result.perDiemPay + result.sleeperPay + result.trainerPay, result.totalEarnings),
+    assignments: result.completedLoads + result.rejects === result.totalLoads,
+    earnings: close(result.completedBasePay + result.rejectPay + result.waitPay + result.perDiemPay + result.sleeperPay + result.trainerPay + result.hourlyAdditionalPay + result.vacationPay, result.totalEarnings),
     dispatcherDayEarnings: close(sum(dayRows, 'totalEarnings'), result.totalEarnings),
     dispatcherDayDuty: close(sum(dayRows, 'usableDutyMinutes'), result.usableDutyMinutes),
     uniqueWorkDates: groupedDays.length === result.days.length && new Set(groupedDays.map((day) => day.date)).size === result.days.length,
@@ -7051,12 +7060,12 @@ function reconcileBaselineAnalysis(result, dayRows) {
 
 function reconcileFilteredLoadAnalysis(result, ...loadGroups) {
   const checks = {
-    assignments: result.completedLoads + result.rejects === result.totalAssignments,
-    dispatcherLoads: loadGroups[0]?.reduce((total, group) => total + group.totalAssignments, 0) === result.totalAssignments,
-    pickupStateLoads: loadGroups[1]?.reduce((total, group) => total + group.totalAssignments, 0) === result.totalAssignments,
-    dropoffStateLoads: loadGroups[2]?.reduce((total, group) => total + group.totalAssignments, 0) === result.totalAssignments,
-    stateRouteLoads: loadGroups[3]?.reduce((total, group) => total + group.totalAssignments, 0) === result.totalAssignments,
-    exactRouteLoads: loadGroups[4]?.reduce((total, group) => total + group.totalAssignments, 0) === result.totalAssignments,
+    assignments: result.completedLoads + result.rejects === result.totalLoads,
+    dispatcherLoads: loadGroups[0]?.reduce((total, group) => total + group.totalLoads, 0) === result.totalLoads,
+    pickupStateLoads: loadGroups[1]?.reduce((total, group) => total + group.totalLoads, 0) === result.totalLoads,
+    dropoffStateLoads: loadGroups[2]?.reduce((total, group) => total + group.totalLoads, 0) === result.totalLoads,
+    stateRouteLoads: loadGroups[3]?.reduce((total, group) => total + group.totalLoads, 0) === result.totalLoads,
+    exactRouteLoads: loadGroups[4]?.reduce((total, group) => total + group.totalLoads, 0) === result.totalLoads,
     noDailyAddOns: loadGroups.every((groups) => groups.every((group) => !Object.hasOwn(group, 'perDiemPay') && !Object.hasOwn(group, 'sleeperPay') && !Object.hasOwn(group, 'trainerPay'))),
     noFullDayDuty: loadGroups.every((groups) => groups.every((group) => !Object.hasOwn(group, 'usableDutyMinutes') && !Object.hasOwn(group, 'exactDutyMinutes')))
   };
@@ -7074,7 +7083,7 @@ function downloadDispatchAnalysis() {
   const records = filterAnalysisRecords(rangeRecords, filters);
   const result = summarizeAnalysisRecords(rangeRecords, range.start, range.end);
   const loadResult = summarizeLoadLevelRecords(records);
-  const allDayRows = buildDispatcherDayComparison(rangeRecords);
+  const allDayRows = buildDispatcherDayComparison(rangeRecords, range.start, range.end);
   const dayRows = filters.dispatcher ? allDayRows.filter((row) => row.name === filters.dispatcher) : allDayRows;
   const dispatcherRows = groupLoadAnalysis(records, (load) => normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown');
   const pickupRows = groupLoadAnalysis(records, (load) => displayState(load.pickupState));
@@ -7088,21 +7097,21 @@ function downloadDispatchAnalysis() {
   const metricRow = (section, group, metric, value, unit = '') => [section,group,metric,value,unit,generated,range.start,range.end,filterDescription];
   const metricRows = (section, values, group = '') => values.map(([metric, value, unit]) => metricRow(section, group, metric, value, unit));
   const loadSummaryMetrics = (row) => [
-    ['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total assignments',row.totalAssignments,'assignments'],['Completion rate',formatCsvNumber(row.completionRate),'percent'],
+    ['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total loads',row.totalLoads,'loads'],['Completion rate',formatCsvNumber(row.completionRate),'percent'],
     ['Loaded miles',formatCsvNumber(row.loadedMiles),'miles'],['Rerouted miles',formatCsvNumber(row.reroutedMiles),'miles'],['Gross barrels from completed loads',formatCsvNumber(row.grossBarrels),'barrels'],
     ['Completed-load base pay',formatCsvNumber(row.completedBasePay),'USD'],['Reject pay',formatCsvNumber(row.rejectPay),'USD'],['Load-specific wait pay',formatCsvNumber(row.waitPay),'USD'],
     ['Load-entry earnings',formatCsvNumber(row.loadEntryEarnings),'USD'],['Average cycle time',formatCsvNumber(row.averageCycleMinutes),'minutes'],['Median cycle time',formatCsvNumber(row.medianCycleMinutes),'minutes'],
     ['Average base pay per completed load',formatCsvNumber(row.averageBasePayPerCompletedLoad),'USD'],['Average all-in completed-load earnings',formatCsvNumber(row.averageAllInCompletedEarnings),'USD'],
-    ['Average earnings per assignment',formatCsvNumber(row.averageEarningsPerAssignment),'USD'],['Cycle-hour earnings',formatCsvNumber(row.cycleHourEarnings),'USD/hour'],['Loads missing cycle time',row.loadsMissingTime,'loads']
+    ['Average earnings per load',formatCsvNumber(row.averageEarningsPerAssignment),'USD'],['Cycle-hour earnings',formatCsvNumber(row.cycleHourEarnings),'USD/hour'],['Loads missing cycle time',row.loadsMissingTime,'loads']
   ];
   const loadMetricRows = (section, groups) => groups.flatMap((row) => metricRows(section, [
-    ['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total assignments',row.totalAssignments,'assignments'],['Completion rate',formatCsvNumber(row.completionRate),'percent'],
+    ['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total loads',row.totalLoads,'loads'],['Completion rate',formatCsvNumber(row.completionRate),'percent'],
     ['Loaded miles',formatCsvNumber(row.loadedMiles),'miles'],['Rerouted miles',formatCsvNumber(row.reroutedMiles),'miles'],['Completed-load base pay',formatCsvNumber(row.completedBasePay),'USD'],
     ['Reject pay',formatCsvNumber(row.rejectPay),'USD'],['Wait pay',formatCsvNumber(row.waitPay),'USD'],['Load-entry earnings',formatCsvNumber(row.loadEntryEarnings),'USD'],
     ['Average cycle time',formatCsvNumber(row.averageCycleMinutes),'minutes'],['Median cycle time',formatCsvNumber(row.medianCycleMinutes),'minutes'],['Cycle-hour earnings',formatCsvNumber(row.cycleHourEarnings),'USD/hour'],['Loads missing cycle time',row.loadsMissingTime,'loads']
   ], row.name));
   const baselineMetrics = [
-    ['Completed loads',result.completedLoads,'loads'],['Rejects',result.rejects,'loads'],['Total assignments',result.totalAssignments,'assignments'],['Completion rate',formatCsvNumber(result.completionRate),'percent'],
+    ['Completed loads',result.completedLoads,'loads'],['Rejects',result.rejects,'loads'],['Total loads',result.totalLoads,'loads'],['Completion rate',formatCsvNumber(result.completionRate),'percent'],
     ['Completed-load base pay',formatCsvNumber(result.completedBasePay),'USD'],['Reject pay',formatCsvNumber(result.rejectPay),'USD'],['Wait pay',formatCsvNumber(result.waitPay),'USD'],
     ['Per diem',formatCsvNumber(result.perDiemPay),'USD'],['Sleeper pay',formatCsvNumber(result.sleeperPay),'USD'],['Trainer pay',formatCsvNumber(result.trainerPay),'USD'],
     ['Deadhead pay',formatCsvNumber(result.deadheadPay),'USD'],['Truck wash pay',formatCsvNumber(result.truckWashPay),'USD'],
@@ -7121,7 +7130,7 @@ function downloadDispatchAnalysis() {
     ...(filtersActive ? metricRows('Filtered Load Summary', [['Active filters',filterDescription,''],...loadSummaryMetrics(loadResult)]) : []),
     ...metricRows('Time Basis Summary', [['Days with valid utilization',result.exactUtilizationDays,'days'],['Exact-duty days excluded from utilization',result.excludedExactUtilizationDays,'days'],['Exact duty time represented in utilization',result.utilizationExactDutyMinutes,'minutes'],['Active load-cycle time',result.activeLoadCycleMinutes,'minutes'],['Non-load duty time',result.nonLoadDutyMinutes,'minutes'],['Active-load utilization',formatCsvNumber(result.activeLoadUtilization),'percent']]),
     ...dayRows.flatMap((row) => metricRows('Dispatcher Day Comparison', [
-      ['Workdays',row.workdays,'days'],['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total assignments',row.totalAssignments,'assignments'],
+      ['Workdays',row.workdays,'days'],['Completed loads',row.completedLoads,'loads'],['Rejects',row.rejects,'loads'],['Total loads',row.totalLoads,'loads'],
       ['Days goal met',row.daysGoalMet,'days'],['Days below goal',row.daysBelowGoal,'days'],['Usable days meeting goal',formatCsvNumber(row.percentUsableDaysMeetingGoal),'percent'],
       ['Average completed-load pay per workday',formatCsvNumber(row.averageCompletedLoadPayPerWorkday),'USD'],['Average goal difference',formatCsvNumber(row.averageGoalDifference),'USD'],
       ['Completion rate',formatCsvNumber(row.completionRate),'percent'],['Average completed loads per workday',formatCsvNumber(row.averageCompletedLoadsPerWorkday),'loads/day'],
@@ -7182,13 +7191,18 @@ function updatePaidTimeCategoryControls() {
     paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value));
     paidTimeControls.rate.readOnly = isVacation;
   }
+  if (paidTimeControls.quantity) {
+    const duration = durationBetween(paidTimeControls.start?.value, paidTimeControls.end?.value);
+    paidTimeControls.quantity.value = isVacation ? '1' : (isFiniteNumber(duration) ? String(duration / 60) : '');
+  }
   setElementText(document.getElementById('paid-time-rate-label'), isVacation ? 'Daily rate' : 'Hourly rate');
+  setElementText(document.getElementById('paid-time-quantity-label'), isVacation ? 'Days' : 'Hours');
 }
 
 function readPaidTimeForm() {
   return normalizePaidTimeRecord({
     workDate: paidTimeControls.date?.value, category: paidTimeControls.category?.value,
-    customCategoryName: paidTimeControls.custom?.value, startTime: paidTimeControls.start?.value,
+    customCategoryName: paidTimeControls.custom?.value, quantity: paidTimeControls.quantity?.value, startTime: paidTimeControls.start?.value,
     endTime: paidTimeControls.end?.value, hourlyRate: paidTimeControls.rate?.value,
     dispatcher: paidTimeControls.dispatcher?.value, truckNumber: paidTimeControls.truck?.value,
     trailerNumber: paidTimeControls.trailer?.value, relatedLoadId: paidTimeControls.relatedLoad?.value,
@@ -7198,6 +7212,7 @@ function readPaidTimeForm() {
 
 function renderPaidTimeCalculation() {
   const record = readPaidTimeForm();
+  if (paidTimeControls.quantity) paidTimeControls.quantity.value = String(record.quantity || '');
   setElementText(paidTimeControls.duration, formatMaybeDuration(record.durationMinutes));
   setElementText(paidTimeControls.pay, formatMaybeMoney(record.estimatedPay));
 }
@@ -7205,16 +7220,18 @@ function renderPaidTimeCalculation() {
 function renderPaidTimeRecords() {
   const container = document.getElementById('paid-time-records');
   if (!container) return;
-  container.innerHTML = paidTimeRecords.length ? paidTimeRecords.map((item) => {
+  const selectedDate = getRecordsSelectedDate();
+  const selectedRecords = paidTimeRecords.filter((item) => item.workDate === selectedDate);
+  container.innerHTML = selectedRecords.length ? selectedRecords.map((item) => {
     const isVacation = item.category === 'Vacation Time';
     const timing = isVacation ? 'Full paid day' : `${item.startTime}–${item.endTime}`;
     const payBasis = isVacation ? `${formatMoney(item.estimatedPay)} per day` : `${formatDuration(item.durationMinutes)} at ${formatMoney(item.hourlyRate)}/hr · ${formatMoney(item.estimatedPay)}`;
     return `<article class="saved-load-card"><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.workDate)} · ${escapeHtml(timing)}</span><span>${escapeHtml(payBasis)}</span><span>${escapeHtml(item.dispatcher || 'No dispatcher')} · Truck ${escapeHtml(item.truckNumber || '-')}</span><div class="button-row compact"><button type="button" class="button secondary" data-edit-paid-time="${escapeHtml(item.id)}">Edit</button><button type="button" class="button ghost" data-duplicate-paid-time="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="button ghost" data-print-paid-time="${escapeHtml(item.id)}">Print</button><button type="button" class="button danger" data-delete-paid-time="${escapeHtml(item.id)}">Delete</button></div></article>`;
-  }).join('') : '<article class="empty-card">No paid-time records yet.</article>';
+  }).join('') : `<article class="empty-card">No paid-time records for ${escapeHtml(selectedDate)}.</article>`;
 }
 
 function fillPaidTimeForm(record, duplicate = false) {
-  const mapping = { date:'workDate', category:'category', custom:'customCategoryName', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
+  const mapping = { date:'workDate', category:'category', custom:'customCategoryName', quantity:'quantity', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
   Object.entries(mapping).forEach(([control, key]) => {
     if (paidTimeControls[control]) paidTimeControls[control].value = record[key] ?? '';
   });
@@ -7237,8 +7254,8 @@ function printPaidTimeRecord(record) {
 }
 
 function downloadPaidTimeCsv() {
-  const headers = ['ID','Date','Category','Custom category','Start','End','Duration minutes','Duration formatted','Hourly rate','Estimated pay','Dispatcher','Truck','Trailer','Related load ID','Deadhead miles','Location','Notes','Created','Updated'];
-  const rows = paidTimeRecords.map((item) => [item.id,item.workDate,item.category,item.customCategoryName,item.startTime,item.endTime,item.durationMinutes,formatDuration(item.durationMinutes),formatCsvNumber(item.hourlyRate),formatCsvNumber(item.estimatedPay),item.dispatcher,item.truckNumber,item.trailerNumber,item.relatedLoadId,formatCsvNumber(item.deadheadMiles),item.location,item.notes,item.createdAt,item.updatedAt]);
+  const headers = ['ID','Work date','Paid-time type','Quantity','Quantity unit','Rate','Amount','Start','End','Duration minutes','Dispatcher','Truck','Trailer','Related load ID','Deadhead miles','Location','Notes','Created','Updated','Daily total'];
+  const rows = paidTimeRecords.map((item) => [item.id,item.workDate,item.category,formatCsvNumber(item.quantity),item.quantityUnit,formatCsvNumber(item.hourlyRate),formatCsvNumber(item.estimatedPay),item.startTime,item.endTime,item.durationMinutes,item.dispatcher,item.truckNumber,item.trailerNumber,item.relatedLoadId,formatCsvNumber(item.deadheadMiles),item.location,item.notes,item.createdAt,item.updatedAt,formatCsvNumber(getDailyEarningsSummary(item.workDate).totalEstimatedDailyEarnings)]);
   downloadCsv(`paid-time-${todayLocal()}.csv`, headers, rows);
 }
 
@@ -7266,7 +7283,13 @@ function savePaidTime(event) {
     && item.workDate === record.workDate && item.category === record.category
     && item.startTime === record.startTime && item.endTime === record.endTime
     && item.truckNumber === record.truckNumber);
-  if (duplicate && globalThis.confirm && !globalThis.confirm('A similar paid-time record already exists. Save anyway?')) return;
+  if (duplicate && isVacation) {
+    const updateExisting = !globalThis.confirm || globalThis.confirm('Vacation Time already exists for this date. Update the existing daily record?');
+    if (!updateExisting) return;
+    record.id = duplicate.id;
+    record.createdAt = duplicate.createdAt;
+    editingPaidTimeId = duplicate.id;
+  } else if (duplicate && globalThis.confirm && !globalThis.confirm('A similar paid-time record already exists. Save another entry anyway?')) return;
   paidTimeRecords = editingPaidTimeId
     ? [record, ...paidTimeRecords.filter((item) => item.id !== editingPaidTimeId)]
     : [record, ...paidTimeRecords];
@@ -7318,7 +7341,6 @@ function initialize() {
   applyProfileToControls();
   applyProfileToNewLoad();
   applyPaySettingsToControls();
-  renderFavoriteRoutes();
   applyDailyAddOnsToControls();
   refreshAllDailyEarningsRecords();
   saveAppMeta();
@@ -7333,7 +7355,7 @@ function initialize() {
 
 function initializeAnalysisInputs() {
   const stateOptions = ['<option value="">Unknown</option>', ...US_STATE_ABBREVIATIONS.map((state) => `<option value="${state}">${state}</option>`)].join('');
-  [fields.pickupState, fields.dropoffState, favoriteRouteControls.pickupState, favoriteRouteControls.dropoffState].forEach((select) => {
+  [fields.pickupState, fields.dropoffState].forEach((select) => {
     if (select) select.innerHTML = stateOptions;
   });
   const dispatcherList = document.getElementById('dispatcher-options');
@@ -7375,6 +7397,26 @@ document.getElementById('paid-time-records')?.addEventListener('click', (event) 
   queuePendingDelete('paidTime', id);
   if (isCloudSignedIn()) queueCloudWrite(() => cloudSync.sdk.deleteDoc(cloudDocument('paidTime', toCloudDocumentId(id))).then(() => clearPendingDelete('paidTime', id)));
   refreshAllDailyEarningsRecords(); updateDailySummary(); renderPaidTimeRecords();
+});
+document.getElementById('daily-record-content')?.addEventListener('click', (event) => {
+  const loadId = event.target.closest?.('[data-daily-edit-load]')?.dataset.dailyEditLoad;
+  const paidId = event.target.closest?.('[data-daily-edit-paid]')?.dataset.dailyEditPaid;
+  if (loadId) {
+    loadEntryForEdit(loadId);
+    return;
+  }
+  if (paidId) {
+    const record = paidTimeRecords.find((item) => item.id === paidId);
+    if (record) {
+      activateView('dashboard');
+      fillPaidTimeForm(record);
+    }
+    return;
+  }
+  if (event.target.closest?.('[data-daily-edit-workday]')) {
+    activateView('dashboard');
+    applyDailyAddOnsToControls();
+  }
 });
 form?.addEventListener('input', handleFormInput);
 form?.addEventListener('change', handleFormInput);
@@ -7424,15 +7466,6 @@ continueDraftButton?.addEventListener('click', () => {
 savedLoadCards?.addEventListener('click', handleSavedCardAction);
 profileControls.saveButton?.addEventListener('click', saveDriverProfile);
 paySettingsControls.saveButton?.addEventListener('click', savePaySettingsFromControls);
-favoriteRouteControls.saveButton?.addEventListener('click', saveFavoriteRouteFromControls);
-favoriteRouteControls.select?.addEventListener('change', () => applyFavoriteRoute(favoriteRouteControls.select.value));
-favoriteRouteControls.list?.addEventListener('click', (event) => {
-  const button = event.target.closest ? event.target.closest('[data-delete-route-id]') : null;
-
-  if (button) {
-    deleteFavoriteRoute(button.dataset.deleteRouteId);
-  }
-});
 manualSyncButton?.addEventListener('click', syncAllCurrentDataToCloud);
 downloadLogButton?.addEventListener('click', downloadLoadLog);
 downloadEarningsButton?.addEventListener('click', downloadDailyEarningsSummary);

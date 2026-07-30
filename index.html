@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Load &amp; Workday">
-  <link rel="manifest" href="manifest.json?v=1.6.1">
+  <link rel="manifest" href="manifest.json?v=1.7.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.6.1">
+  <link rel="stylesheet" href="style.css?v=1.7.0">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.6.1</strong></span>
+          <span>Version <strong id="app-version">1.7.0</strong></span>
           <span id="header-record-count">0 loads</span>
         </div>
       </header>
@@ -112,13 +112,16 @@
               <article><span>Rejects</span><strong id="today-rejects">0</strong></article>
               <article><span>Completed-load pay</span><strong id="today-completed-pay">$0.00</strong></article>
               <article><span>Hourly additional pay</span><strong id="today-hourly-pay">$0.00</strong></article>
+              <article><span>Vacation pay</span><strong id="today-vacation-pay">$0.00</strong></article>
+              <article><span>Other paid time</span><strong id="today-other-paid-time">$0.00</strong></article>
               <article><span>Wait pay</span><strong id="today-wait-pay">$0.00</strong></article>
               <article><span>Daily add-ons</span><strong id="today-add-ons">$0.00</strong></article>
               <article><span>Gross barrels</span><strong id="daily-gross-barrels">0.00 bbl</strong></article>
               <article><span>Offloaded</span><strong id="daily-barrels-offloaded">0.00 bbl</strong></article>
-              <article><span>Total estimated earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
+              <article><span>Total Daily Earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
               <article><span>Paid wait</span><strong id="daily-paid-wait">0 hr 0 min</strong></article>
               <article><span>Duty time</span><strong id="today-duty-time">Not enough time data</strong></article>
+              <article><span>Effective hourly earnings</span><strong id="today-effective-hourly">Not available</strong></article>
             </div>
             <article class="daily-goal-card goal-insufficient" id="daily-goal-card" aria-live="polite">
               <h3>Completed-Load Pay Goal</h3>
@@ -150,7 +153,7 @@
             <div class="metric-strip tight">
               <article><span>Completed loads</span><strong id="pay-period-completed-count">0</strong></article>
               <article><span>Rejects</span><strong id="pay-period-reject-count">0</strong></article>
-              <article><span>Total assignments</span><strong id="pay-period-assignment-count">0</strong></article>
+              <article><span>Total loads</span><strong id="pay-period-assignment-count">0</strong></article>
               <article><span>Total earnings</span><strong id="pay-period-total-earnings">$0.00</strong></article>
               <article><span>Trainer</span><strong id="pay-period-trainer-pay">$0.00</strong></article>
               <article><span>Per diem</span><strong id="pay-period-per-diem-pay">$0.00</strong></article>
@@ -169,7 +172,7 @@
             <div class="metric-strip tight">
               <article><span>Completed loads</span><strong id="month-completed-count">0</strong></article>
               <article><span>Rejects</span><strong id="month-reject-count">0</strong></article>
-              <article><span>Total assignments</span><strong id="month-assignment-count">0</strong></article>
+              <article><span>Total loads</span><strong id="month-assignment-count">0</strong></article>
               <article><span>Total estimated earnings</span><strong id="month-total-earnings">$0.00</strong></article>
               <article><span>Days goal met</span><strong id="month-goal-met">0</strong></article>
               <article><span>Days below goal</span><strong id="month-goal-below">0</strong></article>
@@ -195,8 +198,9 @@
           <form id="paid-time-form">
             <div class="field-grid">
               <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
-              <label for="paid-time-category"><span>Category</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
+              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Office Time</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
               <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
+              <label for="paid-time-quantity"><span id="paid-time-quantity-label">Hours</span><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly></label>
               <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
               <label for="paid-time-end"><span>End time</span><input id="paid-time-end" type="time" required></label>
               <label for="paid-time-rate"><span id="paid-time-rate-label">Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
@@ -270,12 +274,6 @@
                   <span>Dispatcher</span>
                   <input id="dispatcher" type="text" list="dispatcher-options" autocomplete="off" placeholder="Optional">
                   <datalist id="dispatcher-options"></datalist>
-                </label>
-                <label for="route-preset-select">
-                  <span>Favorite route</span>
-                  <select id="route-preset-select">
-                    <option value="">Manual entry</option>
-                  </select>
                 </label>
                 <label for="load-status">
                   <span>Load status <em>required</em></span>
@@ -584,6 +582,13 @@
               </select>
             </label>
           </div>
+          <section class="daily-record-panel" aria-labelledby="daily-record-title">
+            <div class="section-heading compact">
+              <div><p class="section-kicker">Selected Date</p><h3 id="daily-record-title">Complete daily record</h3></div>
+              <strong id="daily-record-total">$0.00</strong>
+            </div>
+            <div id="daily-record-content"></div>
+          </section>
           <div id="saved-load-cards" class="saved-card-list">
             <article class="empty-card">No saved loads match the current filter.</article>
           </div>
@@ -726,7 +731,7 @@
           <div class="section-heading">
             <div>
               <p class="section-kicker">Settings</p>
-              <h2 id="settings-title">Rates, routes, sync, and backups</h2>
+              <h2 id="settings-title">Rates, sync, and backups</h2>
             </div>
           </div>
           <div class="settings-grid">
@@ -751,22 +756,6 @@
               </details>
               <button class="button primary" id="save-pay-settings-button" type="button">Save Pay Rates</button>
               <p class="save-status" id="pay-settings-status" aria-live="polite"></p>
-            </div>
-
-            <div class="settings-card">
-              <h3>Favorite Routes</h3>
-              <div class="field-grid favorite-route-grid">
-                <label for="favorite-route-name"><span>Route name</span><input id="favorite-route-name" type="text" autocomplete="off"></label>
-                <label for="favorite-pickup-location"><span>Pickup location</span><input id="favorite-pickup-location" type="text" autocomplete="off"></label>
-                <label for="favorite-pickup-state"><span>Pickup state</span><select id="favorite-pickup-state"><option value="">Unknown</option></select></label>
-                <label for="favorite-dropoff-location"><span>Drop-off location</span><input id="favorite-dropoff-location" type="text" autocomplete="off"></label>
-                <label for="favorite-dropoff-state"><span>Drop-off state</span><select id="favorite-dropoff-state"><option value="">Unknown</option></select></label>
-                <label for="favorite-route-mileage"><span>Normal mileage</span><input id="favorite-route-mileage" type="number" inputmode="decimal" min="0" step="0.1"></label>
-                <label class="full-width" for="favorite-product-type"><span>Optional lease or product</span><input id="favorite-product-type" type="text" autocomplete="off"></label>
-              </div>
-              <button class="button secondary" id="save-favorite-route-button" type="button">Save Favorite Route</button>
-              <div id="favorite-route-list" class="favorite-route-list"></div>
-              <p class="save-status" id="favorite-route-status" aria-live="polite"></p>
             </div>
 
             <div class="settings-card cloud-card">
@@ -814,7 +803,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.6.1</strong>
+                <span>Application version</span><strong id="settings-app-version">1.7.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -939,10 +928,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.6.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.7.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.6.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.7.0&updated=' + Date.now());
           });
       }
 
@@ -978,6 +967,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.6.1"></script>
+  <script src="script.js?v=1.7.0"></script>
 </body>
 </html>
