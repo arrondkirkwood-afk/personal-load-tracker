@@ -1,4 +1,4 @@
-const APP_VERSION = "1.11.3";
+const APP_VERSION = "1.12.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -18,6 +18,8 @@ const PAID_TIME_DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.paidTimeDraft';
 const MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.preMigrationBackup.v2';
 const FIREBASE_MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.firebaseMigrationSafetyBackup.v3';
 const CLOUD_MERGE_RECOVERY_STORAGE_KEY = 'personalOilfieldLoadTracker.preCloudMergeRecovery.v1';
+const FIRESTORE_CACHE_RECOVERY_STORAGE_KEY = 'personalOilfieldLoadTracker.preFirestoreCacheReset.v1';
+const FIRESTORE_CACHE_GENERATION = 2;
 const LEGACY_STORAGE_KEY = 'personalOilfieldLoadTrackerLog';
 const LEGACY_ADD_ON_STORAGE_KEY = 'personalOilfieldDailyEarningsAddOns';
 const LEGACY_EARNINGS_STORAGE_KEY = 'personalOilfieldDailyEarningsRecords';
@@ -1288,6 +1290,7 @@ async function loadFirebaseModules() {
     indexedDBLocalPersistence: authModule.indexedDBLocalPersistence,
     getFirestore: firestoreModule.getFirestore,
     initializeFirestore: firestoreModule.initializeFirestore,
+    clearIndexedDbPersistence: firestoreModule.clearIndexedDbPersistence,
     persistentLocalCache: firestoreModule.persistentLocalCache,
     persistentMultipleTabManager: firestoreModule.persistentMultipleTabManager,
     enableIndexedDbPersistence: firestoreModule.enableIndexedDbPersistence,
@@ -1344,6 +1347,40 @@ function getAuthPersistenceCandidates() {
     cloudSync.sdk.indexedDBLocalPersistence,
     cloudSync.sdk.browserLocalPersistence
   ].filter(Boolean);
+}
+
+async function prepareFirestoreCacheGeneration() {
+  const currentGeneration = Number(appMeta.cloudSync?.firestoreCacheGeneration || 0);
+  if (currentGeneration >= FIRESTORE_CACHE_GENERATION || !cloudSync.sdk.clearIndexedDbPersistence) return;
+
+  const recoveryState = cloneTrackerState(startupSafetySnapshot);
+  const backupSaved = storeJson(FIRESTORE_CACHE_RECOVERY_STORAGE_KEY, {
+    format: BACKUP_FORMAT,
+    backupType: 'pre-firestore-cache-reset',
+    appVersion: APP_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    createdAt: new Date().toISOString(),
+    recordCount: countUniqueLoads(recoveryState.loads),
+    data: recoveryState
+  }, 'pre-Firestore-cache-reset backup');
+
+  if (!backupSaved) throw new Error('Could not create the local recovery copy.');
+  const verifiedBackup = loadJson(FIRESTORE_CACHE_RECOVERY_STORAGE_KEY, null, 'pre-Firestore-cache-reset backup');
+  if (!verifiedBackup || countUniqueLoads(verifiedBackup.data?.loads || []) !== countUniqueLoads(recoveryState.loads)) {
+    throw new Error('The local recovery copy could not be verified.');
+  }
+
+  await cloudSync.sdk.clearIndexedDbPersistence(cloudSync.db);
+  appMeta = normalizeAppMeta({
+    ...appMeta,
+    cloudSync: {
+      ...(appMeta.cloudSync || {}),
+      firestoreCacheGeneration: FIRESTORE_CACHE_GENERATION,
+      localChangesPending: true,
+      pendingSince: appMeta.cloudSync?.pendingSince || new Date().toISOString()
+    }
+  });
+  saveAppMeta();
 }
 
 function initializeFirebaseAuthInstance() {
@@ -1417,6 +1454,7 @@ async function startFirebaseSync() {
       : cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
     cloudSync.auth = initializeFirebaseAuthInstance();
     cloudSync.db = initializeFirestoreInstance();
+    await prepareFirestoreCacheGeneration();
     cloudSync.enabled = true;
     cloudSync.lastError = '';
 
@@ -1473,7 +1511,6 @@ async function resumeCloudSync() {
   }
 
   processPendingDeletes();
-  scheduleCloudBackfill();
 }
 
 async function restartFirestoreNetwork() {
@@ -1816,9 +1853,8 @@ function applyCloudStateToApp() {
   cloudSync.source = 'cloud';
   cloudSync.applyingCloudState = false;
 
-  if ((localOnlyLoads.length > 0 || hasLocalChangesPending())
-    && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
-    scheduleCloudBackfill();
+  if (localOnlyLoads.length > 0 && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
+    scheduleCloudBackfill(localOnlyLoads);
   }
 
   if (countPendingDeletes(pendingDeletes) > 0) {
@@ -1988,8 +2024,9 @@ function clearLocalChangesPending() {
   saveAppMeta();
 }
 
-function scheduleCloudBackfill() {
-  if (!isCloudSignedIn() || cloudSync.backfillQueued) {
+function scheduleCloudBackfill(loadsToSync = []) {
+  const missingLoads = filterTombstonedLoads(getUniqueSavedLoads(loadsToSync));
+  if (!isCloudSignedIn() || cloudSync.backfillQueued || missingLoads.length === 0) {
     return;
   }
 
@@ -1998,7 +2035,7 @@ function scheduleCloudBackfill() {
 
   globalThis.setTimeout?.(() => {
     cloudSync.backfillQueued = false;
-    syncAllCurrentDataToCloud();
+    missingLoads.forEach((load) => syncLoadToCloud(load));
   }, 0);
 }
 
