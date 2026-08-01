@@ -1,4 +1,4 @@
-const APP_VERSION = "1.9.1";
+const APP_VERSION = "1.9.2";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -24,6 +24,7 @@ const BACKUP_FORMAT = 'personal-oilfield-load-tracker-backup';
 const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
+const CLOUD_RESUME_STALE_MS = 10000;
 const FIRESTORE_BATCH_WRITE_LIMIT = 450;
 const PENDING_DELETE_GROUPS = ['loads', 'dailyAddOns', 'favoriteRoutes', 'paidTime'];
 const FIREBASE_CONFIG = {
@@ -378,6 +379,10 @@ const settingsMigrationState = document.getElementById('settings-migration-state
 const settingsServiceWorkerState = document.getElementById('settings-service-worker-state');
 const settingsLastSync = document.getElementById('settings-last-sync');
 const settingsPendingWrites = document.getElementById('settings-pending-writes');
+const settingsFirebaseUid = document.getElementById('settings-firebase-uid');
+const settingsListenerState = document.getElementById('settings-listener-state');
+const settingsFirebaseUpdate = document.getElementById('settings-firebase-update');
+const settingsCacheVersion = document.getElementById('settings-cache-version');
 const storageWarning = document.getElementById('storage-warning');
 const saveStatus = document.getElementById('save-status');
 const draftStatus = document.getElementById('draft-status');
@@ -571,6 +576,7 @@ const cloudSync = {
   lastError: '',
   applyingCloudState: false,
   backfillQueued: false,
+  runtimeListenersInstalled: false,
   source: 'local',
   state: createEmptyCloudState()
 };
@@ -939,7 +945,7 @@ function isCloudReady() {
     return false;
   }
 
-  return Object.values(cloudSync.state.loaded).every(Boolean);
+  return Boolean(cloudSync.state.loaded.loads);
 }
 
 function hasLocalChangesPending() {
@@ -1030,6 +1036,12 @@ function updateAuthUi() {
   setElementText(authControls.localLoadCount, String(getLocalSafetyLoadCount()));
   setElementText(settingsPendingWrites, String(getPendingSyncCount()));
   setElementText(settingsLastSync, appMeta.cloudSync?.lastSyncedAt || cloudSync.state.lastSnapshotAt || 'Not yet synced');
+  setElementText(settingsFirebaseUid, cloudSync.user?.uid || 'Not authenticated');
+  setElementText(settingsListenerState, Object.entries(cloudSync.state.loaded)
+    .map(([name, loaded]) => `${name}: ${loaded ? 'ready' : 'waiting'}`)
+    .join(' · '));
+  setElementText(settingsFirebaseUpdate, cloudSync.state.lastSnapshotAt || 'No Firebase update received');
+  setElementText(settingsCacheVersion, APP_CACHE_NAME);
   setElementText(settingsMigrationState, isCloudMigrationComplete() ? 'Complete' : 'Ready');
 
   if (authControls.email) {
@@ -1263,6 +1275,7 @@ async function loadFirebaseModules() {
     getDocs: firestoreModule.getDocs,
     writeBatch: firestoreModule.writeBatch,
     onSnapshot: firestoreModule.onSnapshot,
+    enableNetwork: firestoreModule.enableNetwork,
     serverTimestamp: firestoreModule.serverTimestamp
   };
 }
@@ -1348,8 +1361,6 @@ async function startFirebaseSync() {
     cloudSync.enabled = true;
     cloudSync.lastError = '';
 
-    await applyBestAuthPersistence();
-
     const authReadyFallbackTimer = startAuthReadyFallbackTimer();
 
     cloudSync.sdk.onAuthStateChanged(
@@ -1366,20 +1377,11 @@ async function startFirebaseSync() {
 
     updateAuthUi();
 
-    withTimeout(
-      cloudSync.sdk.enableIndexedDbPersistence(cloudSync.db),
-      6000,
-      'Firebase offline cache setup timed out.'
-    ).catch(() => {
-      setAuthError('Offline cloud caching is limited in this browser. Local records are still protected.');
+    withTimeout(applyBestAuthPersistence(), 1500, 'Auth persistence setup timed out.').catch(() => {
+      // Authentication must not wait on iOS storage. The existing local safety copy remains authoritative offline.
     });
 
-    globalThis.addEventListener?.('online', () => {
-      updateSyncStatusFromState();
-      processPendingDeletes();
-      scheduleCloudBackfill();
-    });
-    globalThis.addEventListener?.('offline', updateSyncStatusFromState);
+    installCloudRuntimeListeners();
   } catch (error) {
     cloudSync.enabled = false;
     cloudSync.authReady = true;
@@ -1390,6 +1392,40 @@ async function startFirebaseSync() {
     setAuthError(startupMessage, true);
     updateAuthUi();
   }
+}
+
+function getLastCloudSnapshotAge() {
+  const timestamp = Date.parse(cloudSync.state.lastSnapshotAt || '');
+  return Number.isFinite(timestamp) ? Date.now() - timestamp : Number.POSITIVE_INFINITY;
+}
+
+async function resumeCloudSync() {
+  updateSyncStatusFromState();
+  if (!isCloudSignedIn() || !isBrowserOnline()) return;
+
+  try {
+    await cloudSync.sdk.enableNetwork?.(cloudSync.db);
+  } catch {
+    // Restarting listeners below is the fallback for iOS WebKit network suspension.
+  }
+
+  if (getLastCloudSnapshotAge() > CLOUD_RESUME_STALE_MS) {
+    startCloudListeners();
+  }
+
+  processPendingDeletes();
+  scheduleCloudBackfill();
+}
+
+function installCloudRuntimeListeners() {
+  if (cloudSync.runtimeListenersInstalled) return;
+  cloudSync.runtimeListenersInstalled = true;
+  globalThis.addEventListener?.('online', resumeCloudSync);
+  globalThis.addEventListener?.('offline', updateSyncStatusFromState);
+  globalThis.addEventListener?.('pageshow', resumeCloudSync);
+  globalThis.document?.addEventListener?.('visibilitychange', () => {
+    if (globalThis.document.visibilityState === 'visible') resumeCloudSync();
+  });
 }
 
 function stopCloudListeners() {
@@ -1676,7 +1712,8 @@ function applyCloudStateToApp() {
   cloudSync.source = 'cloud';
   cloudSync.applyingCloudState = false;
 
-  if (localOnlyLoads.length > 0 || hasLocalChangesPending()) {
+  if ((localOnlyLoads.length > 0 || hasLocalChangesPending())
+    && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
     scheduleCloudBackfill();
   }
 
@@ -2054,6 +2091,7 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
   }
 
   cloudSync.pendingWrites += 1;
+  markLocalChangesPending('Saving to Firebase...');
   updateSyncStatusFromState();
 
   Promise.resolve()
@@ -2069,6 +2107,9 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
     })
     .finally(() => {
       cloudSync.pendingWrites = Math.max(0, cloudSync.pendingWrites - 1);
+      if (cloudSync.pendingWrites === 0 && !cloudSync.lastError && !cloudSync.state.hasPendingWrites) {
+        clearLocalChangesPending();
+      }
       updateAuthUi();
     });
 }
@@ -2656,6 +2697,7 @@ async function registerServiceWorker() {
   }
 
   try {
+    const hadController = Boolean(navigator.serviceWorker.controller);
     const registration = await navigator.serviceWorker.register('./service-worker.js');
     setElementText(settingsServiceWorkerState, 'Registered');
 
@@ -2680,6 +2722,24 @@ async function registerServiceWorker() {
         }
       });
     });
+
+    let controllerReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || controllerReloaded) return;
+      controllerReloaded = true;
+      setUpdateStatus('Update activated. Reloading the current app safely...');
+      globalThis.setTimeout?.(() => globalThis.location.reload(), 150);
+    });
+
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type !== 'APP_VERSION') return;
+      setElementText(settingsCacheVersion, event.data.cacheName || event.data.version || 'Unknown');
+      if (event.data.version && event.data.version !== APP_VERSION && !controllerReloaded) {
+        controllerReloaded = true;
+        globalThis.location.reload();
+      }
+    });
+    registration.active?.postMessage({ type: 'GET_VERSION' });
 
     return registration;
   } catch {
