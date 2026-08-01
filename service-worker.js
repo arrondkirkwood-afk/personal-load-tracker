@@ -1,4 +1,4 @@
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.9.2';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const APP_FILES = [
@@ -6,11 +6,11 @@ const APP_FILES = [
   './index.html',
   './repair.html',
   './manifest.json',
-  './manifest.json?v=1.9.1',
+  './manifest.json?v=1.9.2',
   './style.css',
-  './style.css?v=1.9.1',
+  './style.css?v=1.9.2',
   './script.js',
-  './script.js?v=1.9.1',
+  './script.js?v=1.9.2',
   './service-worker.js',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -39,7 +39,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       deleteOldAppCaches(),
-      self.clients.claim()
+      self.clients.claim(),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        clients.forEach((client) => client.postMessage({ type: 'APP_VERSION', version: APP_VERSION, cacheName: CACHE_NAME }));
+      })
     ])
   );
 });
@@ -51,6 +54,10 @@ self.addEventListener('message', (event) => {
 
   if (event.data?.type === 'CLEAR_OLD_CACHES') {
     event.waitUntil(deleteOldAppCaches());
+  }
+
+  if (event.data?.type === 'GET_VERSION') {
+    event.source?.postMessage({ type: 'APP_VERSION', version: APP_VERSION, cacheName: CACHE_NAME });
   }
 });
 
