@@ -1,4 +1,4 @@
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.10.1";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -580,6 +580,7 @@ const cloudSync = {
   runtimeListenersInstalled: false,
   writeAcknowledgedSincePending: false,
   stalledWrites: 0,
+  networkRestartPromise: null,
   source: 'local',
   state: createEmptyCloudState()
 };
@@ -1285,6 +1286,7 @@ async function loadFirebaseModules() {
     writeBatch: firestoreModule.writeBatch,
     onSnapshot: firestoreModule.onSnapshot,
     enableNetwork: firestoreModule.enableNetwork,
+    disableNetwork: firestoreModule.disableNetwork,
     serverTimestamp: firestoreModule.serverTimestamp
   };
 }
@@ -1444,6 +1446,31 @@ async function resumeCloudSync() {
 
   processPendingDeletes();
   scheduleCloudBackfill();
+}
+
+async function restartFirestoreNetwork() {
+  if (!isCloudSignedIn() || !isBrowserOnline()) return;
+  if (cloudSync.networkRestartPromise) return cloudSync.networkRestartPromise;
+
+  cloudSync.networkRestartPromise = (async () => {
+    try {
+      await cloudSync.sdk.disableNetwork?.(cloudSync.db);
+    } catch {
+      // Enabling the network can still recover a half-open iOS connection.
+    }
+
+    try {
+      await cloudSync.sdk.enableNetwork?.(cloudSync.db);
+    } finally {
+      startCloudListeners();
+    }
+  })();
+
+  try {
+    await cloudSync.networkRestartPromise;
+  } finally {
+    cloudSync.networkRestartPromise = null;
+  }
 }
 
 function installCloudRuntimeListeners() {
@@ -2133,7 +2160,7 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
     writeStalled = true;
     cloudSync.stalledWrites += 1;
     updateAuthUi();
-    resumeCloudSync();
+    restartFirestoreNetwork().catch(() => resumeCloudSync());
   }, CLOUD_WRITE_STALL_MS);
 
   Promise.resolve().then(writeOperation)

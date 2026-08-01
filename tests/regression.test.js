@@ -841,7 +841,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.10.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.10.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -850,7 +850,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.10.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.10.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -865,6 +865,8 @@ assert.ok(script.includes('return Boolean(cloudSync.state.loaded.loads)'), 'load
 assert.ok(script.includes("markLocalChangesPending('', false)"), 'writes retain a silent durable local pending marker until Firebase acknowledges them');
 assert.ok(script.includes('CLOUD_WRITE_STALL_MS'), 'stalled Firebase writes trigger reconnect without cancelling the write');
 assert.ok(script.includes('experimentalForceLongPolling: true'), 'iOS Firestore uses long polling instead of a stalled streaming transport');
+assert.ok(script.includes('cloudSync.sdk.disableNetwork?.(cloudSync.db)'), 'a stalled iOS write resets the half-open Firestore transport');
+assert.ok(script.includes('networkRestartPromise'), 'simultaneous stalled writes share one network recovery operation');
 context.navigator.userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15';
 assert.strictEqual(context.isIOSWebKit(), true, 'iPhone Home Screen web runtime selects the iOS transport');
 context.navigator.userAgent = '';
