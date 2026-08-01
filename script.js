@@ -1,4 +1,4 @@
-const APP_VERSION = "1.9.2";
+const APP_VERSION = "1.9.3";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -25,6 +25,7 @@ const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
 const CLOUD_RESUME_STALE_MS = 10000;
+const CLOUD_WRITE_ACK_TIMEOUT_MS = 12000;
 const FIRESTORE_BATCH_WRITE_LIMIT = 450;
 const PENDING_DELETE_GROUPS = ['loads', 'dailyAddOns', 'favoriteRoutes', 'paidTime'];
 const FIREBASE_CONFIG = {
@@ -577,6 +578,7 @@ const cloudSync = {
   applyingCloudState: false,
   backfillQueued: false,
   runtimeListenersInstalled: false,
+  writeAcknowledgedSincePending: false,
   source: 'local',
   state: createEmptyCloudState()
 };
@@ -1490,6 +1492,11 @@ function updateCloudSnapshotMetadata(snapshot) {
 function handleCloudSnapshotChange(snapshot) {
   updateCloudSnapshotMetadata(snapshot);
   cloudSync.lastError = '';
+  if (cloudSync.writeAcknowledgedSincePending && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
+    cloudSync.writeAcknowledgedSincePending = false;
+    clearLocalChangesPending();
+    setAuthError('');
+  }
   handleCloudStateChanged();
 }
 
@@ -1850,7 +1857,7 @@ function getLoadsMissingFromCloud(localLoads, cloudLoads) {
     .filter((load) => !cloudIdentities.has(`id:${load.id}`) && !cloudIdentities.has(`fingerprint:${load.migrationFingerprint || buildLoadFingerprint(load)}`));
 }
 
-function markLocalChangesPending(message = 'Local changes are saved on this device and will sync after sign-in.') {
+function markLocalChangesPending(message = 'Local changes are saved on this device and will sync after sign-in.', showMessage = true) {
   appMeta = {
     ...appMeta,
     cloudSync: {
@@ -1860,7 +1867,7 @@ function markLocalChangesPending(message = 'Local changes are saved on this devi
     }
   };
   saveAppMeta();
-  setAuthError(message);
+  if (showMessage) setAuthError(message);
   updateAuthUi();
 }
 
@@ -2091,13 +2098,17 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
   }
 
   cloudSync.pendingWrites += 1;
-  markLocalChangesPending('Saving to Firebase...');
+  markLocalChangesPending('', false);
   updateSyncStatusFromState();
 
-  Promise.resolve()
-    .then(writeOperation)
+  withTimeout(
+    Promise.resolve().then(writeOperation),
+    CLOUD_WRITE_ACK_TIMEOUT_MS,
+    'Firebase acknowledgement timed out.'
+  )
     .then(() => {
       cloudSync.lastError = '';
+      cloudSync.writeAcknowledgedSincePending = true;
     })
     .catch((error) => {
       const detail = getFriendlyErrorDetail(error, failureMessage);
@@ -2108,7 +2119,9 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
     .finally(() => {
       cloudSync.pendingWrites = Math.max(0, cloudSync.pendingWrites - 1);
       if (cloudSync.pendingWrites === 0 && !cloudSync.lastError && !cloudSync.state.hasPendingWrites) {
+        cloudSync.writeAcknowledgedSincePending = false;
         clearLocalChangesPending();
+        setAuthError('');
       }
       updateAuthUi();
     });
