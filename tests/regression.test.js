@@ -841,7 +841,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.9.2'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.9.3'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -850,7 +850,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.9.2', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.9.3', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -862,7 +862,9 @@ assert.ok(script.includes("globalThis.document?.addEventListener?.('visibilitych
 assert.ok(script.includes('cloudSync.sdk.enableNetwork?.(cloudSync.db)'), 'foreground recovery re-enables the Firestore network');
 assert.ok(script.indexOf('cloudSync.sdk.onAuthStateChanged(') < script.indexOf('withTimeout(applyBestAuthPersistence()'), 'Firebase auth observer starts before optional iOS persistence work');
 assert.ok(script.includes('return Boolean(cloudSync.state.loaded.loads)'), 'load synchronization does not wait for every secondary listener');
-assert.ok(script.includes("markLocalChangesPending('Saving to Firebase...')"), 'writes retain a durable local pending marker until Firebase acknowledges them');
+assert.ok(script.includes("markLocalChangesPending('', false)"), 'writes retain a silent durable local pending marker until Firebase acknowledges them');
+assert.ok(script.includes('CLOUD_WRITE_ACK_TIMEOUT_MS'), 'stalled Firebase acknowledgements cannot leave the app saving forever');
+assert.ok(script.includes("setAuthError('')"), 'successful Firebase acknowledgement clears the stale saving message');
 assert.ok(script.includes("navigator.serviceWorker.addEventListener('controllerchange'"), 'service-worker activation reloads an already controlled app shell');
 assert.ok(serviceWorker.includes("type: 'APP_VERSION'"), 'service worker reports its live cache version to the app');
 ['settings-firebase-uid', 'settings-listener-state', 'settings-firebase-update', 'settings-cache-version'].forEach((id) => {
