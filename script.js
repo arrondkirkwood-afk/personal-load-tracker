@@ -1,4 +1,4 @@
-const APP_VERSION = "1.10.1";
+const APP_VERSION = "1.11.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -17,12 +17,13 @@ const PAID_TIME_STORAGE_KEY = 'personalOilfieldLoadTracker.paidTime';
 const PAID_TIME_DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.paidTimeDraft';
 const MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.preMigrationBackup.v2';
 const FIREBASE_MIGRATION_BACKUP_STORAGE_KEY = 'personalOilfieldLoadTracker.firebaseMigrationSafetyBackup.v3';
+const CLOUD_MERGE_RECOVERY_STORAGE_KEY = 'personalOilfieldLoadTracker.preCloudMergeRecovery.v1';
 const LEGACY_STORAGE_KEY = 'personalOilfieldLoadTrackerLog';
 const LEGACY_ADD_ON_STORAGE_KEY = 'personalOilfieldDailyEarningsAddOns';
 const LEGACY_EARNINGS_STORAGE_KEY = 'personalOilfieldDailyEarningsRecords';
 const BACKUP_FORMAT = 'personal-oilfield-load-tracker-backup';
 const CLOUD_MIGRATION_VERSION = 1;
-const FIREBASE_SDK_VERSION = '10.12.5';
+const FIREBASE_SDK_VERSION = '12.16.0';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
 const CLOUD_RESUME_STALE_MS = 10000;
 const CLOUD_WRITE_STALL_MS = 10000;
@@ -1277,6 +1278,8 @@ async function loadFirebaseModules() {
     indexedDBLocalPersistence: authModule.indexedDBLocalPersistence,
     getFirestore: firestoreModule.getFirestore,
     initializeFirestore: firestoreModule.initializeFirestore,
+    persistentLocalCache: firestoreModule.persistentLocalCache,
+    persistentMultipleTabManager: firestoreModule.persistentMultipleTabManager,
     enableIndexedDbPersistence: firestoreModule.enableIndexedDbPersistence,
     collection: firestoreModule.collection,
     doc: firestoreModule.doc,
@@ -1301,9 +1304,12 @@ function isIOSWebKit() {
 function initializeFirestoreInstance() {
   if (cloudSync.sdk.initializeFirestore) {
     try {
-      return cloudSync.sdk.initializeFirestore(cloudSync.app, isIOSWebKit()
-        ? { experimentalForceLongPolling: true }
-        : { experimentalAutoDetectLongPolling: true });
+      return cloudSync.sdk.initializeFirestore(cloudSync.app, {
+        experimentalAutoDetectLongPolling: true,
+        localCache: cloudSync.sdk.persistentLocalCache({
+          tabManager: cloudSync.sdk.persistentMultipleTabManager()
+        })
+      });
     } catch {
       // An older cached page may already have created the default instance.
     }
@@ -1713,42 +1719,44 @@ function applyCloudStateToApp() {
   const cloudPaidTime = normalizePaidTimeRecords(cloudSync.state.paidTime || []);
   const pendingDeletes = getPendingDeletes();
   const cloudLoads = filterTombstonedLoads(cloudSync.state.loads.map(normalizeSavedLoad));
-  const shouldMergeLocalState = hasLocalChangesPending()
-    || appMeta.cloudSync?.authoritative !== true
-    || appMeta.cloudSync?.uid !== cloudSync.user.uid;
   const localLoads = filterTombstonedLoads(localBeforeApply.loads);
-  const localOnlyLoads = shouldMergeLocalState ? getLoadsMissingFromCloud(localLoads, cloudLoads) : [];
+  const localOnlyLoads = getLoadsMissingFromCloud(localLoads, cloudLoads);
 
-  savedLoads = filterTombstonedLoads(shouldMergeLocalState ? mergeLoadRecords(cloudLoads, localLoads) : cloudLoads);
+  if (localOnlyLoads.length > 0) {
+    storeJson(CLOUD_MERGE_RECOVERY_STORAGE_KEY, {
+      format: BACKUP_FORMAT,
+      backupType: 'pre-cloud-merge-recovery',
+      appVersion: APP_VERSION,
+      dataSchemaVersion: DATA_SCHEMA_VERSION,
+      createdAt: new Date().toISOString(),
+      recordCount: countUniqueLoads(localBeforeApply.loads),
+      data: localBeforeApply
+    }, 'pre-cloud-merge recovery');
+  }
+
+  savedLoads = filterTombstonedLoads(mergeLoadRecords(cloudLoads, localLoads));
   paidTimeRecords = mergeRecordsByUpdatedAt(
     cloudPaidTime,
-    shouldMergeLocalState ? normalizePaidTimeRecords(localBeforeApply.paidTime || []) : []
+    normalizePaidTimeRecords(localBeforeApply.paidTime || [])
   ).filter((item) => !pendingDeletes.paidTime[item.id]);
   const cloudDailyAddOns = filterTombstonedDailyAddOns(cloudSync.state.dailyAddOns || {});
   const localDailyAddOns = filterTombstonedDailyAddOns(localBeforeApply.dailyAddOns || {});
-  dailyAddOns = normalizeDailyAddOns(shouldMergeLocalState
-    ? mergeDateRecordsByUpdatedAt(cloudDailyAddOns, localDailyAddOns)
-    : cloudDailyAddOns);
+  dailyAddOns = normalizeDailyAddOns(mergeDateRecordsByUpdatedAt(cloudDailyAddOns, localDailyAddOns));
   const cloudDailySummaries = isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {};
-  dailyEarningsRecords = shouldMergeLocalState
-    ? mergeDateRecordsByUpdatedAt(cloudDailySummaries, localBeforeApply.dailySummaries)
-    : cloudDailySummaries;
-  driverProfile = normalizeDriverProfile(shouldMergeLocalState
-    ? {
-      ...(cloudSync.state.profile || {}),
-      ...(localBeforeApply.profile || {})
-    }
-    : (cloudSync.state.profile || {}));
+  dailyEarningsRecords = mergeDateRecordsByUpdatedAt(cloudDailySummaries, localBeforeApply.dailySummaries);
+  driverProfile = normalizeDriverProfile({
+    ...(cloudSync.state.profile || {}),
+    ...(localBeforeApply.profile || {})
+  });
   const cloudSettings = isPlainObject(cloudSync.state.settings) ? cloudSync.state.settings : {};
-  appSettings = normalizeAppSettings(shouldMergeLocalState
-    ? {
-      ...(cloudSettings.appSettings || cloudSettings),
-      ...(localBeforeApply.settings || {})
-    }
-    : (cloudSettings.appSettings || cloudSettings));
-  favoriteRoutes = shouldMergeLocalState
-    ? filterTombstonedFavoriteRoutes(mergeFavoriteRoutes(cloudSettings.favoriteRoutes || [], localBeforeApply.favoriteRoutes || []))
-    : filterTombstonedFavoriteRoutes(normalizeFavoriteRoutes(cloudSettings.favoriteRoutes || []));
+  appSettings = normalizeAppSettings({
+    ...(cloudSettings.appSettings || cloudSettings),
+    ...(localBeforeApply.settings || {})
+  });
+  favoriteRoutes = filterTombstonedFavoriteRoutes(mergeFavoriteRoutes(
+    cloudSettings.favoriteRoutes || [],
+    localBeforeApply.favoriteRoutes || []
+  ));
   appMeta = {
     ...appMeta,
     ...cloudSettings,
