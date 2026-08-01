@@ -1,4 +1,4 @@
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.9.1";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -993,12 +993,14 @@ function updateSyncStatusFromState() {
   }
 
   if (!isBrowserOnline()) {
-    setSyncStatus('Offline', 'offline');
+    setSyncStatus(hasLocalChangesPending() || cloudSync.pendingWrites > 0 || cloudSync.state.hasPendingWrites
+      ? 'Offline—changes pending'
+      : 'Offline', 'offline');
     return;
   }
 
   if (cloudSync.pendingWrites > 0 || cloudSync.state.hasPendingWrites) {
-    setSyncStatus('Syncing', 'pending');
+    setSyncStatus('Saving', 'pending');
     return;
   }
 
@@ -1608,11 +1610,10 @@ function applyCloudStateToApp() {
     profile: driverProfile,
     metadata: appMeta,
     settings: appSettings,
-    favoriteRoutes
+    favoriteRoutes,
+    paidTime: paidTimeRecords
   });
   const cloudPaidTime = normalizePaidTimeRecords(cloudSync.state.paidTime || []);
-  const paidById = new Map([...cloudPaidTime, ...paidTimeRecords].map((item) => [item.id, item]));
-  paidTimeRecords = [...paidById.values()].filter((item) => !getPendingDeletes().paidTime[item.id]);
   const pendingDeletes = getPendingDeletes();
   const cloudLoads = filterTombstonedLoads(cloudSync.state.loads.map(normalizeSavedLoad));
   const shouldMergeLocalState = hasLocalChangesPending()
@@ -1622,20 +1623,19 @@ function applyCloudStateToApp() {
   const localOnlyLoads = shouldMergeLocalState ? getLoadsMissingFromCloud(localLoads, cloudLoads) : [];
 
   savedLoads = filterTombstonedLoads(shouldMergeLocalState ? mergeLoadRecords(cloudLoads, localLoads) : cloudLoads);
+  paidTimeRecords = mergeRecordsByUpdatedAt(
+    cloudPaidTime,
+    shouldMergeLocalState ? normalizePaidTimeRecords(localBeforeApply.paidTime || []) : []
+  ).filter((item) => !pendingDeletes.paidTime[item.id]);
   const cloudDailyAddOns = filterTombstonedDailyAddOns(cloudSync.state.dailyAddOns || {});
   const localDailyAddOns = filterTombstonedDailyAddOns(localBeforeApply.dailyAddOns || {});
   dailyAddOns = normalizeDailyAddOns(shouldMergeLocalState
-    ? {
-      ...cloudDailyAddOns,
-      ...localDailyAddOns
-    }
+    ? mergeDateRecordsByUpdatedAt(cloudDailyAddOns, localDailyAddOns)
     : cloudDailyAddOns);
+  const cloudDailySummaries = isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {};
   dailyEarningsRecords = shouldMergeLocalState
-    ? {
-      ...(isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {}),
-      ...(isPlainObject(localBeforeApply.dailySummaries) ? localBeforeApply.dailySummaries : {})
-    }
-    : (isPlainObject(cloudSync.state.dailySummaries) ? cloudSync.state.dailySummaries : {});
+    ? mergeDateRecordsByUpdatedAt(cloudDailySummaries, localBeforeApply.dailySummaries)
+    : cloudDailySummaries;
   driverProfile = normalizeDriverProfile(shouldMergeLocalState
     ? {
       ...(cloudSync.state.profile || {}),
@@ -1767,6 +1767,34 @@ function mergeLoadRecords(primaryLoads, secondaryLoads) {
     String(right.loadDate || '').localeCompare(String(left.loadDate || ''))
     || String(right.savedAt || '').localeCompare(String(left.savedAt || ''))
   ));
+}
+
+function mergeRecordsByUpdatedAt(primaryRecords, secondaryRecords) {
+  const byId = new Map();
+
+  [...primaryRecords, ...secondaryRecords].forEach((record) => {
+    const id = String(record?.id || '');
+    if (!id) return;
+    const existing = byId.get(id);
+    if (!existing || getLoadComparableTime(record) >= getLoadComparableTime(existing)) {
+      byId.set(id, record);
+    }
+  });
+
+  return [...byId.values()];
+}
+
+function mergeDateRecordsByUpdatedAt(primaryRecords, secondaryRecords) {
+  const merged = { ...(primaryRecords || {}) };
+
+  Object.entries(secondaryRecords || {}).forEach(([date, record]) => {
+    const existing = merged[date];
+    if (!existing || getLoadComparableTime(record) >= getLoadComparableTime(existing)) {
+      merged[date] = record;
+    }
+  });
+
+  return merged;
 }
 
 function getLoadsMissingFromCloud(localLoads, cloudLoads) {
@@ -1962,23 +1990,25 @@ function buildSynchronizedLoadPayload(record) {
 }
 
 function buildCloudAddOnPayload(date) {
+  const addOn = getDailyAddOn(date);
   return sanitizeForFirestore({
-    ...getDailyAddOn(date),
+    ...addOn,
     date,
     appVersion: APP_VERSION,
     dataSchemaVersion: DATA_SCHEMA_VERSION,
-    updatedAt: new Date().toISOString(),
+    updatedAt: addOn.updatedAt || new Date().toISOString(),
     cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
   });
 }
 
 function buildCloudSummaryPayload(date) {
+  const summary = getDailyEarningsSummary(date);
   return sanitizeForFirestore({
-    ...getDailyEarningsSummary(date),
+    ...summary,
     date,
     appVersion: APP_VERSION,
     dataSchemaVersion: DATA_SCHEMA_VERSION,
-    updatedAt: new Date().toISOString(),
+    updatedAt: summary.updatedAt || new Date().toISOString(),
     cloudUpdatedAt: cloudSync.sdk.serverTimestamp()
   });
 }
@@ -4107,7 +4137,8 @@ function saveDailyAddOnFromControls() {
     shiftStartTime: addOns.shiftStartTime?.value || '',
     shiftEndTime: addOns.shiftEndTime?.value || '',
     notes: addOns.notes.value.trim(),
-    dailyNotes: addOns.notes.value.trim()
+    dailyNotes: addOns.notes.value.trim(),
+    updatedAt: new Date().toISOString()
   };
 
   if (!addOn.defaultDispatcher && !addOn.perDiem && !addOn.sleeperBerth && !addOn.trainerPay && !addOn.shiftStartTime && !addOn.shiftEndTime && !addOn.notes) {
@@ -4155,7 +4186,8 @@ function saveWorkdayControls(mode) {
     notes: mode === 'end' ? String(workdayControls.notes?.value || '').trim() : current.notes,
     perDiem: Boolean(workdayControls.perDiem?.checked),
     sleeperBerth: Boolean(workdayControls.sleeper?.checked),
-    trainerPay: Boolean(workdayControls.trainer?.checked)
+    trainerPay: Boolean(workdayControls.trainer?.checked),
+    updatedAt: new Date().toISOString()
   };
   cancelPendingDelete('dailyAddOns', date);
   dailyAddOns[date] = next;
@@ -7434,7 +7466,9 @@ function savePaidTime(event) {
   editingPaidTimeId = null;
   storeJson(PAID_TIME_STORAGE_KEY, paidTimeRecords, 'paid-time records');
   localStorage.removeItem(PAID_TIME_DRAFT_STORAGE_KEY);
-  markLocalChangesPending('Paid time saved locally and is pending sync.');
+  if (!isCloudSignedIn()) {
+    markLocalChangesPending('Paid time saved locally. Sign in to sync it to Firebase.');
+  }
   syncPaidTimeToCloud(record);
   refreshAllDailyEarningsRecords();
   updateDailySummary();
