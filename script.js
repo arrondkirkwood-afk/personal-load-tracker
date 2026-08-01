@@ -1,4 +1,4 @@
-const APP_VERSION = "1.11.1";
+const APP_VERSION = "1.11.2";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -895,6 +895,8 @@ function createEmptyCloudState() {
       settings: false,
       migration: false
     },
+    pendingWritesByListener: {},
+    fromCacheByListener: {},
     hasPendingWrites: false,
     fromCache: false,
     lastSnapshotAt: null
@@ -958,8 +960,7 @@ function hasLocalChangesPending() {
 }
 
 function getPendingSyncCount() {
-  return cloudSync.pendingWrites
-    + (appMeta.cloudSync?.localChangesPending ? 1 : 0)
+  return Math.max(cloudSync.pendingWrites, appMeta.cloudSync?.localChangesPending ? 1 : 0)
     + countPendingDeletes();
 }
 
@@ -1070,6 +1071,10 @@ function updateAuthUi() {
 
   if (authControls.signOutButton) {
     authControls.signOutButton.hidden = !signedIn;
+  }
+
+  if (manualSyncButton) {
+    manualSyncButton.disabled = !signedIn || cloudSync.pendingWrites > 0 || cloudSync.stalledWrites > 0;
   }
 
   updateMigrationPanel();
@@ -1543,20 +1548,33 @@ function normalizeCloudDateMap(snapshot, normalizer) {
   return records;
 }
 
-function updateCloudSnapshotMetadata(snapshot) {
-  cloudSync.state.hasPendingWrites = Boolean(snapshot.metadata?.hasPendingWrites);
-  cloudSync.state.fromCache = Boolean(snapshot.metadata?.fromCache);
+function updateCloudSnapshotMetadata(name, snapshot) {
+  cloudSync.state.pendingWritesByListener[name] = Boolean(snapshot.metadata?.hasPendingWrites);
+  cloudSync.state.fromCacheByListener[name] = Boolean(snapshot.metadata?.fromCache);
+  cloudSync.state.hasPendingWrites = Object.values(cloudSync.state.pendingWritesByListener).some(Boolean);
+  cloudSync.state.fromCache = Object.values(cloudSync.state.fromCacheByListener).some(Boolean);
   cloudSync.state.lastSnapshotAt = new Date().toISOString();
 }
 
-function handleCloudSnapshotChange(snapshot) {
-  updateCloudSnapshotMetadata(snapshot);
+function reconcileServerAcknowledgement() {
+  const listenerNames = Object.keys(cloudSync.state.loaded);
+  const allListenersReady = listenerNames.every((name) => cloudSync.state.loaded[name]);
+  const allListenersOnServer = allListenersReady
+    && listenerNames.every((name) => cloudSync.state.fromCacheByListener[name] === false);
+
+  if (!allListenersOnServer || cloudSync.state.hasPendingWrites) return;
+
+  cloudSync.pendingWrites = 0;
+  cloudSync.stalledWrites = 0;
+  cloudSync.writeAcknowledgedSincePending = false;
+  clearLocalChangesPending();
+  setAuthError('');
+}
+
+function handleCloudSnapshotChange(name, snapshot) {
+  updateCloudSnapshotMetadata(name, snapshot);
   cloudSync.lastError = '';
-  if (cloudSync.writeAcknowledgedSincePending && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
-    cloudSync.writeAcknowledgedSincePending = false;
-    clearLocalChangesPending();
-    setAuthError('');
-  }
+  reconcileServerAcknowledgement();
   handleCloudStateChanged();
 }
 
@@ -1608,7 +1626,7 @@ function listenToCloudCollection(name, collectionName, mapper) {
       clearCloudListenerTimeout(timeoutId);
       cloudSync.state[name] = mapper(snapshot);
       cloudSync.state.loaded[name] = true;
-      handleCloudSnapshotChange(snapshot);
+      handleCloudSnapshotChange(name, snapshot);
     },
     (error) => handleCloudListenerError(name, error)
   );
@@ -1625,7 +1643,7 @@ function listenToCloudDocument(name, collectionName, documentName) {
       clearCloudListenerTimeout(timeoutId);
       cloudSync.state[name] = snapshot.exists() ? normalizeCloudData(snapshot.data()) : null;
       cloudSync.state.loaded[name] = true;
-      handleCloudSnapshotChange(snapshot);
+      handleCloudSnapshotChange(name, snapshot);
     },
     (error) => handleCloudListenerError(name, error)
   );
