@@ -1,4 +1,4 @@
-const APP_VERSION = "1.9.3";
+const APP_VERSION = "1.10.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -25,7 +25,7 @@ const CLOUD_MIGRATION_VERSION = 1;
 const FIREBASE_SDK_VERSION = '10.12.5';
 const CLOUD_LISTENER_TIMEOUT_MS = 18000;
 const CLOUD_RESUME_STALE_MS = 10000;
-const CLOUD_WRITE_ACK_TIMEOUT_MS = 12000;
+const CLOUD_WRITE_STALL_MS = 10000;
 const FIRESTORE_BATCH_WRITE_LIMIT = 450;
 const PENDING_DELETE_GROUPS = ['loads', 'dailyAddOns', 'favoriteRoutes', 'paidTime'];
 const FIREBASE_CONFIG = {
@@ -579,6 +579,7 @@ const cloudSync = {
   backfillQueued: false,
   runtimeListenersInstalled: false,
   writeAcknowledgedSincePending: false,
+  stalledWrites: 0,
   source: 'local',
   state: createEmptyCloudState()
 };
@@ -1007,6 +1008,11 @@ function updateSyncStatusFromState() {
     return;
   }
 
+  if (cloudSync.stalledWrites > 0) {
+    setSyncStatus('Offline—changes pending', 'offline');
+    return;
+  }
+
   if (cloudSync.pendingWrites > 0 || cloudSync.state.hasPendingWrites) {
     setSyncStatus('Saving', 'pending');
     return;
@@ -1269,6 +1275,7 @@ async function loadFirebaseModules() {
     browserLocalPersistence: authModule.browserLocalPersistence,
     indexedDBLocalPersistence: authModule.indexedDBLocalPersistence,
     getFirestore: firestoreModule.getFirestore,
+    initializeFirestore: firestoreModule.initializeFirestore,
     enableIndexedDbPersistence: firestoreModule.enableIndexedDbPersistence,
     collection: firestoreModule.collection,
     doc: firestoreModule.doc,
@@ -1280,6 +1287,26 @@ async function loadFirebaseModules() {
     enableNetwork: firestoreModule.enableNetwork,
     serverTimestamp: firestoreModule.serverTimestamp
   };
+}
+
+function isIOSWebKit() {
+  const navigatorObject = globalThis.navigator || {};
+  const userAgent = String(navigatorObject.userAgent || '');
+  return /iPad|iPhone|iPod/i.test(userAgent)
+    || (/Macintosh/i.test(userAgent) && Number(navigatorObject.maxTouchPoints || 0) > 1);
+}
+
+function initializeFirestoreInstance() {
+  if (cloudSync.sdk.initializeFirestore) {
+    try {
+      return cloudSync.sdk.initializeFirestore(cloudSync.app, isIOSWebKit()
+        ? { experimentalForceLongPolling: true }
+        : { experimentalAutoDetectLongPolling: true });
+    } catch {
+      // An older cached page may already have created the default instance.
+    }
+  }
+  return cloudSync.sdk.getFirestore(cloudSync.app);
 }
 
 function getAuthPersistenceCandidates() {
@@ -1359,7 +1386,7 @@ async function startFirebaseSync() {
       ? cloudSync.sdk.getApp()
       : cloudSync.sdk.initializeApp(FIREBASE_CONFIG);
     cloudSync.auth = initializeFirebaseAuthInstance();
-    cloudSync.db = cloudSync.sdk.getFirestore(cloudSync.app);
+    cloudSync.db = initializeFirestoreInstance();
     cloudSync.enabled = true;
     cloudSync.lastError = '';
 
@@ -2101,11 +2128,15 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
   markLocalChangesPending('', false);
   updateSyncStatusFromState();
 
-  withTimeout(
-    Promise.resolve().then(writeOperation),
-    CLOUD_WRITE_ACK_TIMEOUT_MS,
-    'Firebase acknowledgement timed out.'
-  )
+  let writeStalled = false;
+  const stallTimer = globalThis.setTimeout?.(() => {
+    writeStalled = true;
+    cloudSync.stalledWrites += 1;
+    updateAuthUi();
+    resumeCloudSync();
+  }, CLOUD_WRITE_STALL_MS);
+
+  Promise.resolve().then(writeOperation)
     .then(() => {
       cloudSync.lastError = '';
       cloudSync.writeAcknowledgedSincePending = true;
@@ -2117,6 +2148,8 @@ function queueCloudWrite(writeOperation, failureMessage = 'Cloud sync is pending
       setAuthError(`${failureMessage} ${detail}. Local records were still saved on this device.`, true);
     })
     .finally(() => {
+      if (stallTimer && typeof globalThis.clearTimeout === 'function') globalThis.clearTimeout(stallTimer);
+      if (writeStalled) cloudSync.stalledWrites = Math.max(0, cloudSync.stalledWrites - 1);
       cloudSync.pendingWrites = Math.max(0, cloudSync.pendingWrites - 1);
       if (cloudSync.pendingWrites === 0 && !cloudSync.lastError && !cloudSync.state.hasPendingWrites) {
         cloudSync.writeAcknowledgedSincePending = false;
@@ -2747,9 +2780,12 @@ async function registerServiceWorker() {
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data?.type !== 'APP_VERSION') return;
       setElementText(settingsCacheVersion, event.data.cacheName || event.data.version || 'Unknown');
-      if (event.data.version && event.data.version !== APP_VERSION && !controllerReloaded) {
-        controllerReloaded = true;
-        globalThis.location.reload();
+      // An older active worker can answer while its replacement is installing.
+      // Reloading at that point traps iOS on the old shell; controllerchange
+      // performs the one safe reload after the new worker actually takes over.
+      if (event.data.version && event.data.version !== APP_VERSION) {
+        setUpdateStatus('Installing the latest app update...');
+        registration.update().catch(() => {});
       }
     });
     registration.active?.postMessage({ type: 'GET_VERSION' });
