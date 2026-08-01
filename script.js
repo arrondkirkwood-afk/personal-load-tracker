@@ -1,4 +1,4 @@
-const APP_VERSION = "1.11.0";
+const APP_VERSION = "1.11.1";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -2804,12 +2804,10 @@ async function registerServiceWorker() {
       });
     });
 
-    let controllerReloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController || controllerReloaded) return;
-      controllerReloaded = true;
-      setUpdateStatus('Update activated. Reloading the current app safely...');
-      globalThis.setTimeout?.(() => globalThis.location.reload(), 150);
+      if (!hadController) return;
+      setUpdateStatus('Update installed. It will be used the next time the app opens.');
+      registration.active?.postMessage({ type: 'GET_VERSION' });
     });
 
     navigator.serviceWorker.addEventListener('message', (event) => {

@@ -841,7 +841,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.11.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.11.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -850,7 +850,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.11.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.11.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -876,7 +876,8 @@ context.navigator.userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac 
 assert.strictEqual(context.isIOSWebKit(), true, 'iPhone Home Screen web runtime selects the iOS transport');
 context.navigator.userAgent = '';
 assert.ok(script.includes("setAuthError('')"), 'successful Firebase acknowledgement clears the stale saving message');
-assert.ok(script.includes("navigator.serviceWorker.addEventListener('controllerchange'"), 'service-worker activation reloads an already controlled app shell');
+assert.ok(script.includes("navigator.serviceWorker.addEventListener('controllerchange'"), 'service-worker activation is observed');
+assert.ok(script.includes('Update installed. It will be used the next time the app opens.'), 'automatic service-worker activation does not blank the iPhone app during sign-in');
 assert.ok(serviceWorker.includes("type: 'APP_VERSION'"), 'service worker reports its live cache version to the app');
 ['settings-firebase-uid', 'settings-listener-state', 'settings-firebase-update', 'settings-cache-version'].forEach((id) => {
   assert.ok(ids.includes(id), `${id} diagnostic remains visible`);
