@@ -1,4 +1,4 @@
-const APP_VERSION = "1.11.2";
+const APP_VERSION = "1.11.3";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -1049,7 +1049,12 @@ function updateAuthUi() {
   setElementText(settingsLastSync, appMeta.cloudSync?.lastSyncedAt || cloudSync.state.lastSnapshotAt || 'Not yet synced');
   setElementText(settingsFirebaseUid, cloudSync.user?.uid || 'Not authenticated');
   setElementText(settingsListenerState, Object.entries(cloudSync.state.loaded)
-    .map(([name, loaded]) => `${name}: ${loaded ? 'ready' : 'waiting'}`)
+    .map(([name, loaded]) => {
+      if (!loaded) return `${name}: waiting`;
+      if (cloudSync.state.pendingWritesByListener[name]) return `${name}: pending`;
+      if (cloudSync.state.fromCacheByListener[name]) return `${name}: cached`;
+      return `${name}: ready`;
+    })
     .join(' · '));
   setElementText(settingsFirebaseUpdate, cloudSync.state.lastSnapshotAt || 'No Firebase update received');
   setElementText(settingsCacheVersion, APP_CACHE_NAME);
@@ -1306,11 +1311,23 @@ function isIOSWebKit() {
     || (/Macintosh/i.test(userAgent) && Number(navigatorObject.maxTouchPoints || 0) > 1);
 }
 
+function isSafariWebKit() {
+  const userAgent = String(globalThis.navigator?.userAgent || '');
+  return isIOSWebKit() || (/AppleWebKit/i.test(userAgent)
+    && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/i.test(userAgent));
+}
+
 function initializeFirestoreInstance() {
   if (cloudSync.sdk.initializeFirestore) {
     try {
+      const transportSettings = isSafariWebKit()
+        ? {
+          experimentalForceLongPolling: true,
+          experimentalLongPollingOptions: { timeoutSeconds: 30 }
+        }
+        : { experimentalAutoDetectLongPolling: true };
       return cloudSync.sdk.initializeFirestore(cloudSync.app, {
-        experimentalAutoDetectLongPolling: true,
+        ...transportSettings,
         localCache: cloudSync.sdk.persistentLocalCache({
           tabManager: cloudSync.sdk.persistentMultipleTabManager()
         })
