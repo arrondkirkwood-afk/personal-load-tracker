@@ -2,7 +2,7 @@
   "name": "Oilfield Load & Workday Tracker",
   "short_name": "Load & Workday",
   "description": "Personal loads, time, pay and dispatch analysis.",
-  "start_url": "./index.html?v=1.9.0",
+  "start_url": "./index.html?v=1.9.1",
   "scope": "./",
   "display": "standalone",
   "background_color": "#eef2f4",

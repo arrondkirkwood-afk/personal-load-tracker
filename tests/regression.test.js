@@ -487,6 +487,24 @@ assert.strictEqual(deviceAAfterEdit.context.getTrackerSnapshot().data.loads[0].d
 deviceB.context.queuePendingDelete('loads', 'cross-device-load', {});
 assert.strictEqual(deviceB.context.filterTombstonedLoads([editedCloudLoad]).length, 0, 'durable tombstone prevents a deleted cloud load from returning');
 
+const paidTimeConflict = context.mergeRecordsByUpdatedAt(
+  [{ id: 'paid-conflict', notes: 'new cloud edit', updatedAt: '2026-07-21T12:00:00.000Z' }],
+  [{ id: 'paid-conflict', notes: 'old local copy', updatedAt: '2026-07-20T12:00:00.000Z' }]
+);
+assert.strictEqual(paidTimeConflict.length, 1, 'paid-time merge does not create duplicate records');
+assert.strictEqual(paidTimeConflict[0].notes, 'new cloud edit', 'newer cloud paid-time edit wins over older local data');
+const addOnConflict = context.mergeDateRecordsByUpdatedAt(
+  { '2026-07-21': { notes: 'new cloud add-on', updatedAt: '2026-07-21T12:00:00.000Z' } },
+  { '2026-07-21': { notes: 'old local add-on', updatedAt: '2026-07-20T12:00:00.000Z' } }
+);
+assert.strictEqual(addOnConflict['2026-07-21'].notes, 'new cloud add-on', 'newer cloud daily add-on wins over older local data');
+
+deviceAAfterEdit.context.navigator.onLine = false;
+deviceAAfterEdit.context.markLocalChangesPending('offline test');
+vm.runInContext("cloudSync.enabled = true; cloudSync.authReady = true; cloudSync.user = { uid: 'offline-user' }; cloudSync.db = {}; cloudSync.sdk = {};", deviceAAfterEdit.context);
+deviceAAfterEdit.context.updateSyncStatusFromState();
+assert.strictEqual(deviceAAfterEdit.context.document.getElementById('sync-status').textContent, 'Offline—changes pending', 'offline changes use the accurate pending status');
+
 const completedAndReject = [
   context.normalizeSavedLoad({ id: 'completed-analysis', loadDate: '2026-07-12', loadStatus: 'Completed Load', estimatedPay: 100 }),
   context.normalizeSavedLoad({ id: 'reject-analysis', loadDate: '2026-07-12', loadStatus: 'Reject', loadedMiles: 10 })
@@ -823,7 +841,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.9.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.9.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -832,7 +850,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.9.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.9.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
