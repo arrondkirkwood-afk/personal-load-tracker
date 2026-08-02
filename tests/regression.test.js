@@ -668,6 +668,30 @@ const counts = context.summarizeLoadLevelRecords([
 ]);
 assert.deepStrictEqual([counts.completedLoads, counts.rejects, counts.totalLoads], [2, 1, 3], 'completed, reject, and assignment counts reconcile');
 
+const operationalLoad = context.normalizeSavedLoad({
+  id: 'operational-load',
+  loadDate: '2026-08-12',
+  loadStatus: 'Completed Load',
+  grossBarrels: 180,
+  startMeterReading: 1000,
+  endMeterReading: 1178.5,
+  emptyTruckWeight: 31000,
+  loadWeight: 72000,
+  deadheadStartTime: '23:40',
+  deadheadEndTime: '00:25',
+  deadheadMiles: 31.5
+});
+assert.strictEqual(operationalLoad.barrelsOffloaded, 178.5, 'total barrels offloaded equals end meter minus start meter');
+assert.strictEqual(operationalLoad.differenceVsGrossBarrels, 1.5, 'metered difference equals gross barrels minus offloaded barrels');
+assert.strictEqual(operationalLoad.offloadStatus, 'Short by 1.50 barrels', 'positive metered difference is labeled as shortage');
+assert.strictEqual(operationalLoad.estimatedGrossTruckWeight, 103000, 'gross truck weight uses empty weight plus corrected load weight');
+assert.strictEqual(operationalLoad.deadheadTravelMinutes, 45, 'deadhead duration handles crossing midnight');
+assert.strictEqual(operationalLoad.deadheadMiles, 31.5, 'load-specific deadhead miles persist');
+const syncedOperationalLoad = context.buildSynchronizedLoadPayload(operationalLoad);
+assert.strictEqual(syncedOperationalLoad.deadheadTravelMinutes, 45, 'deadhead duration is included in synchronized load payload');
+assert.strictEqual(syncedOperationalLoad.deadheadMiles, 31.5, 'deadhead miles are included in synchronized load payload');
+assert.strictEqual(syncedOperationalLoad.loadWeight, 72000, 'manual load weight is included in synchronized load payload');
+
 const goalLoad = (id, pay, status = 'Completed Load') => ({ id, loadDate: '2026-09-01', loadStatus: status, estimatedPay: pay });
 const belowGoal = context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-249', 249)], 300);
 assert.strictEqual(belowGoal.goalStatus, 'Below goal', '$249 completed-load pay against $300 is below goal');
@@ -676,17 +700,20 @@ assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-30
 const aboveGoal = context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-325', 325)], 300);
 assert.strictEqual(aboveGoal.goalStatus, 'Goal met', '$325 meets goal');
 assert.strictEqual(aboveGoal.amountAboveGoal, 25, 'above-goal difference is $25');
-assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-reject', 500, 'Reject')], 300).goalStatus, 'Insufficient data', 'reject pay cannot meet completed-load goal');
-assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([], 300).goalStatus, 'Insufficient data', 'day without usable completed-load pay has insufficient data');
+assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([goalLoad('goal-reject', 500, 'Reject')], 300).goalStatus, 'Below goal', 'reject-only dispatched day remains eligible but has zero completed-load pay');
+assert.strictEqual(context.calculateDailyCompletedLoadPayGoal([], 300).goalStatus, 'Not eligible', 'day without dispatched load records is not a failed goal day');
 assert.strictEqual(context.normalizeAppSettings({}).dailyCompletedLoadPayGoal, 300, 'daily completed-load-pay goal defaults to $300');
+assert.strictEqual(context.normalizeAppSettings({}).fairDayGoal, 280, 'Fair Day Goal defaults to $280');
+assert.strictEqual(context.normalizeAppSettings({}).excellentDayGoal, 300, 'Excellent Day Goal defaults to $300');
 assert.strictEqual(context.normalizeAppSettings({ dailyCompletedLoadPayGoal: 312.75 }).dailyCompletedLoadPayGoal, 312.75, 'goal supports dollars and cents in existing settings object');
+assert.strictEqual(context.normalizeAppSettings({ dailyCompletedLoadPayGoal: 312.75 }).excellentDayGoal, 312.75, 'legacy single goal maps to Excellent Day Goal');
 
 const historicalRecords = [goalLoad('historical-a', 249)];
 const historicalBefore = JSON.stringify(historicalRecords);
 assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', historicalRecords).goalStatus, 'Below goal', 'historical records receive goal status without editing');
 historicalRecords[0] = goalLoad('historical-a', 325);
 assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', historicalRecords).goalStatus, 'Goal met', 'editing historical pay recalculates the date');
-assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', []).goalStatus, 'Insufficient data', 'deleting historical load recalculates the date');
+assert.strictEqual(context.getDailyEarningsSummary('2026-09-01', []).goalStatus, 'Not eligible', 'deleting historical load makes the date not eligible instead of failed');
 assert.notStrictEqual(JSON.stringify(historicalRecords), historicalBefore, 'test fixture edit is explicit');
 const immutableRecords = [goalLoad('immutable-report', 249)];
 const immutableSnapshot = JSON.stringify(immutableRecords);
@@ -701,15 +728,15 @@ const unchangedEarningsFormula = context.getDailyEarningsSummary('2026-09-01', [
 assert.strictEqual(unchangedEarningsFormula.totalEstimatedDailyEarnings, unchangedEarningsFormula.totalEstimatedEntryPay + unchangedEarningsFormula.perDiemPay + unchangedEarningsFormula.sleeperBerthPay + unchangedEarningsFormula.trainerPay, 'total estimated daily earnings formula remains unchanged');
 
 const goalRange = context.summarizeDailyGoalResults([
-  { goalStatus: 'Goal met', completedLoadPay: 300, amountAboveGoal: 0, amountBelowGoal: 0, goalDifference: 0 },
-  { goalStatus: 'Goal met', completedLoadPay: 325, amountAboveGoal: 25, amountBelowGoal: 0, goalDifference: 25 },
-  { goalStatus: 'Below goal', completedLoadPay: 249, amountAboveGoal: 0, amountBelowGoal: 51, goalDifference: -51 },
-  { goalStatus: 'Insufficient data', completedLoadPay: 0, amountAboveGoal: null, amountBelowGoal: null, goalDifference: null }
+  { eligibleDispatchedDay: true, goalStatus: 'Goal met', fairGoalStatus: 'Goal met', excellentGoalStatus: 'Goal met', completedLoadPay: 300, amountAboveGoal: 0, amountBelowGoal: 0, goalDifference: 0 },
+  { eligibleDispatchedDay: true, goalStatus: 'Goal met', fairGoalStatus: 'Goal met', excellentGoalStatus: 'Goal met', completedLoadPay: 325, amountAboveGoal: 25, amountBelowGoal: 0, goalDifference: 25 },
+  { eligibleDispatchedDay: true, goalStatus: 'Below goal', fairGoalStatus: 'Below goal', excellentGoalStatus: 'Below goal', completedLoadPay: 249, amountAboveGoal: 0, amountBelowGoal: 51, goalDifference: -51 },
+  { eligibleDispatchedDay: false, goalStatus: 'Not eligible', fairGoalStatus: 'Not eligible', excellentGoalStatus: 'Not eligible', completedLoadPay: 0, amountAboveGoal: null, amountBelowGoal: null, goalDifference: null }
 ]);
 assert.deepStrictEqual([goalRange.daysGoalMet, goalRange.daysBelowGoal, goalRange.daysInsufficientData], [2, 1, 1], 'pay-period and monthly goal counts aggregate correctly');
-assert.ok(html.includes('Daily completed-load-pay goal'), 'editable goal setting is displayed');
-assert.ok(script.includes("'Daily completed-load-pay goal'") && script.includes("'Goal status'") && script.includes("'Goal difference'"), 'daily and analysis CSV output contains goal information');
-assert.ok(script.includes("['Goal status', record.goalStatus]"), 'printed daily report contains goal information');
+assert.deepStrictEqual([goalRange.fairGoalDays, goalRange.excellentGoalDays, goalRange.belowFairGoalDays], [2, 2, 1], 'Fair and Excellent goal counts aggregate independently');
+assert.ok(html.includes('Fair Day Goal') && html.includes('Excellent Day Goal'), 'editable Fair and Excellent goal settings are displayed');
+assert.ok(script.includes("'Fair Day Goal'") && script.includes("'Excellent Goal status'") && script.includes("'Excellent Goal difference'"), 'daily and analysis CSV output contains goal information');
 
 assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 719 }), 'Normal Range', 'shift shorter than 12 hours is normal range');
 assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 720 }), 'Extended Duty Day', 'exactly 12 hours is extended duty');
@@ -802,23 +829,24 @@ assert.ok(script.includes("getPendingDeletes().paidTime") && script.includes("cl
 assert.ok(script.includes("'Deadhead pay'") && script.includes("'Total hourly additional pay'"), 'daily and analysis exports include paid-time earnings');
 assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Add Paid Time'), 'new app identity and paid-time workflow are visible');
 assert.ok(html.includes('<option>Vacation Time</option>'), 'Paid Time includes Vacation Time');
-assert.ok(html.includes('<option>Deadhead</option>') && html.includes('<option>Truck Wash</option>') && html.includes('<option>Breakdown</option>'), 'existing hourly paid-time categories remain available');
+assert.ok(!html.includes('<option>Deadhead</option>') && html.includes('<option>Truck Wash</option>') && html.includes('<option>Breakdown</option>'), 'Deadhead is no longer offered as a new general paid-time category');
+assert.ok(script.includes("category === 'Deadhead'"), 'legacy Deadhead paid-time records remain readable');
 assert.ok(html.includes('Total Daily Earnings') && html.includes('Effective hourly earnings'), 'dashboard exposes unified daily earnings and hourly results');
 assert.ok(!html.match(/Favorite Route/i), 'Favorite Route controls are removed from the interface');
 assert.ok(!html.match(/>[^<]*Assignments?[^<]*</i), 'user-facing interface uses Loads instead of Assignments');
-['Load Details', 'Loading/Unloading Time', 'Paid Time', 'Notes'].forEach((section) => {
+['Load and pickup details', 'Delivery and Offloading Details', 'Weight Details', 'Paid Time', 'Review and Save'].forEach((section) => {
   assert.ok(html.includes(section), `${section} section is visible in the load-entry workflow`);
 });
 assert.ok(html.includes('Start and End Workday'), 'daily workday controls use the requested name');
 assert.ok(html.includes('saved once for the selected work date—not once per load'), 'workday timing explains its once-per-date behavior');
 assert.ok(html.includes('Save Load &amp; Start Next Load'), 'next-load action uses the requested wording');
 assert.ok(!html.includes('Daily Shift Times'), 'old Daily Shift Times wording is removed');
-assert.ok(!html.includes('<h3>Load Basics</h3>') && !html.includes('<h3>Load Measurements</h3>'), 'load basics and measurements are consolidated under Load Details');
+assert.ok(!html.includes('<h3>Load Basics</h3>') && !html.includes('<h3>Load Measurements</h3>'), 'old load basics and measurements headings are removed');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
 assert.ok(html.includes('Month containing selected date'), 'month label is based on selected date');
 assert.ok(script.includes("'Dispatcher Day Comparison'"), 'analysis CSV includes dispatcher-day rows');
 assert.ok(script.includes("'Dispatcher Load Comparison'"), 'analysis CSV includes dispatcher-load rows');
-assert.ok(!script.includes("'Pickup State Comparison'") && script.includes("'Route Performance'"), 'analysis CSV replaces state comparison rows with normalized route performance');
+assert.ok(!script.includes("'Pickup State Comparison'") && !script.includes("'Route Performance'"), 'analysis CSV omits state and route ranking sections');
 assert.ok(script.includes("'Underlying Loads'"), 'analysis CSV includes underlying load rows');
 assert.ok(script.includes('Overall Date-Range Baseline') && script.includes('Filtered Load Summary') && script.includes('Time Basis Summary'), 'printed analysis contains baseline, filtered, and time summary sections');
 assert.ok(script.includes('Baseline calculations reconciled.') && script.includes('Filtered load calculations reconciled.'), 'separate reconciliation statuses are displayed');
@@ -841,7 +869,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.12.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.12.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -850,7 +878,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.12.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.12.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -966,14 +994,21 @@ assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLo
 assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, exactDutyMinutes: 840 }).dispatchOutcome, 'Poor Dispatch Outcome — Review', 'below goal at exactly 14 hours is a poor dispatch outcome review');
 assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: null }).dispatchOutcome, 'Insufficient Time Data', 'missing exact workday times are not estimated for the dispatch outcome');
 
-const routeRows = context.buildRoutePerformance([
-  analysisLoad({ id: 'route-normal-a', pickupLocation: ' Burns Point ', dropoffLocation: 'Station One', loadDate: '2026-07-01', estimatedPay: 60 }),
-  analysisLoad({ id: 'route-normal-b', pickupLocation: 'burns   point', dropoffLocation: ' station one ', loadDate: '2026-07-01', estimatedPay: 60 })
-], [{ date: '2026-07-01', goalStatus: 'Goal met', exactDutyMinutes: 600 }]);
-assert.strictEqual(routeRows.length, 1, 'route grouping normalizes capitalization and repeated spacing');
-assert.strictEqual(routeRows[0].completedLoads, 2, 'normalized route group includes both matching completed loads');
+const dispatcherRows = context.buildDispatcherPerformanceRows([
+  analysisLoad({ id: 'dispatcher-row-a', dispatcher: 'Morgan', loadDate: '2026-07-01', estimatedPay: 180, deadheadMiles: 12, deadheadStartTime: '07:00', deadheadEndTime: '07:30' }),
+  analysisLoad({ id: 'dispatcher-row-b', dispatcher: 'Lee', loadDate: '2026-07-01', estimatedPay: 120, deadheadMiles: 0 }),
+  analysisLoad({ id: 'dispatcher-row-c', dispatcher: 'Morgan', loadDate: '2026-07-02', estimatedPay: 310, deadheadMiles: 8, deadheadStartTime: '06:50', deadheadEndTime: '07:10' })
+], context.buildAnalysisDays([
+  analysisLoad({ id: 'dispatcher-row-a', dispatcher: 'Morgan', loadDate: '2026-07-01', estimatedPay: 180, deadheadMiles: 12, deadheadStartTime: '07:00', deadheadEndTime: '07:30' }),
+  analysisLoad({ id: 'dispatcher-row-b', dispatcher: 'Lee', loadDate: '2026-07-01', estimatedPay: 120, deadheadMiles: 0 }),
+  analysisLoad({ id: 'dispatcher-row-c', dispatcher: 'Morgan', loadDate: '2026-07-02', estimatedPay: 310, deadheadMiles: 8, deadheadStartTime: '06:50', deadheadEndTime: '07:10' })
+]));
+const morganRow = dispatcherRows.find((row) => row.name === 'Morgan');
+assert.strictEqual(morganRow.completedLoads, 2, 'dispatcher performance uses the dispatcher attached to each load');
+assert.strictEqual(morganRow.workdays, 2, 'dispatcher workdays are distinct eligible load dates');
+assert.strictEqual(morganRow.totalDeadheadMiles, 20, 'dispatcher deadhead miles are totaled from load-specific deadhead');
 assert.ok(html.includes('How to Read This Analysis'), 'analysis guidance uses the requested plain-language title');
-assert.ok(script.includes('Daily dispatch outcome') && script.includes('Route Performance') && script.includes('Data completeness status'), 'analysis CSV and print paths include the new outcome, route, and readiness metrics');
+assert.ok(script.includes('Daily Dispatch Results') && script.includes('Dispatcher Analysis') && script.includes('Data completeness status'), 'analysis CSV and print paths include outcome, dispatcher, and readiness metrics');
 assert.ok(script.includes('pickupState:') && script.includes('dropoffState:'), 'legacy pickup and drop-off state fields remain normalized for compatibility');
 assert.ok(!context.getAnalysisReadiness({
   days: [{ dutyTimeSource: 'exact', loads: [analysisLoad({ id: 'state-free-ready', pickupState: '', dropoffState: '' })] }],

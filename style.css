@@ -353,6 +353,10 @@ h4 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.field-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .basics-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -535,6 +539,46 @@ textarea.invalid {
 
 .form-actions {
   scroll-margin-bottom: calc(112px + var(--safe-bottom));
+}
+
+.calculated-field {
+  display: grid;
+  gap: 6px;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.calculated-field span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 820;
+  line-height: 1.25;
+}
+
+.calculated-field strong {
+  color: var(--heading);
+  font-size: 0.95rem;
+  font-weight: 870;
+}
+
+.compact-review-summary {
+  margin-bottom: 10px;
+}
+
+.review-warning-list,
+.insight-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.review-warning-list[hidden] {
+  display: none;
 }
 
 .backup-actions {
@@ -905,7 +949,7 @@ textarea.invalid {
 .load-row,
 .recent-row {
   display: grid;
-  grid-template-columns: minmax(80px, 0.45fr) minmax(120px, 0.55fr) minmax(220px, 1.5fr) repeat(3, minmax(100px, 0.6fr)) auto;
+  grid-template-columns: minmax(80px, 0.45fr) minmax(120px, 0.55fr) minmax(220px, 1.5fr) repeat(5, minmax(96px, 0.58fr)) auto;
   gap: 10px;
   align-items: center;
   padding: 11px 12px;
@@ -1321,6 +1365,7 @@ textarea.invalid {
   .period-range,
   .field-grid,
   .field-grid.two,
+  .field-grid.three,
   .basics-grid,
   .measurement-grid,
   .optional-grid,

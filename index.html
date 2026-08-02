@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Load &amp; Workday">
-  <link rel="manifest" href="manifest.json?v=1.12.0">
+  <link rel="manifest" href="manifest.json?v=1.12.1">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.12.0">
+  <link rel="stylesheet" href="style.css?v=1.12.1">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.12.0</strong></span>
+          <span>Version <strong id="app-version">1.12.1</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -75,7 +75,7 @@
               <article><span>Completed-load pay</span><strong id="workday-completed-pay">$0.00</strong></article>
               <article><span>Total estimated earnings</span><strong id="workday-total-earnings">$0.00</strong></article>
               <article><span>Exact duty time</span><strong id="workday-duty-time">Not available</strong></article>
-              <article><span>$300 goal</span><strong id="workday-goal-status">Insufficient data</strong></article>
+              <article><span>Excellent Goal</span><strong id="workday-goal-status">Not eligible</strong></article>
             </div>
             <details id="start-workday-details" class="workday-action">
               <summary class="button primary">Start Workday</summary>
@@ -125,11 +125,13 @@
               <article><span>Effective hourly earnings</span><strong id="today-effective-hourly">Not available</strong></article>
             </div>
             <article class="daily-goal-card goal-insufficient" id="daily-goal-card" aria-live="polite">
-              <h3>Completed-Load Pay Goal</h3>
+              <h3>Completed-Load Pay Goals</h3>
               <div><span>Completed-load pay</span><strong id="daily-goal-completed-pay">$0.00</strong></div>
-              <div><span>Daily goal</span><strong id="daily-goal-amount">$300.00</strong></div>
-              <div><span>Goal status</span><strong id="daily-goal-status">Insufficient data</strong></div>
-              <div><span>Dollar difference</span><strong id="daily-goal-difference">Not available</strong></div>
+              <div><span>Fair Goal</span><strong id="daily-fair-goal-status">Not eligible</strong></div>
+              <div><span>Fair difference</span><strong id="daily-fair-goal-difference">Not available</strong></div>
+              <div><span>Excellent Goal</span><strong id="daily-goal-amount">$300.00</strong></div>
+              <div><span>Excellent status</span><strong id="daily-goal-status">Not eligible</strong></div>
+              <div><span>Excellent difference</span><strong id="daily-goal-difference">Not available</strong></div>
             </article>
           </section>
 
@@ -161,8 +163,9 @@
               <article><span>Sleeper</span><strong id="pay-period-sleeper-pay">$0.00</strong></article>
               <article><span>Reject</span><strong id="pay-period-reject-pay">$0.00</strong></article>
               <article><span>Wait pay</span><strong id="pay-period-wait-pay">$0.00</strong></article>
-              <article><span>Days goal met</span><strong id="pay-period-goal-met">0</strong></article>
-              <article><span>Days below goal</span><strong id="pay-period-goal-below">0</strong></article>
+              <article><span>Fair Goal days</span><strong id="pay-period-fair-goal-met">0</strong></article>
+              <article><span>Excellent Goal days</span><strong id="pay-period-goal-met">0</strong></article>
+              <article><span>Below Fair Goal</span><strong id="pay-period-goal-below">0</strong></article>
               <article><span>Avg completed-load pay/workday</span><strong id="pay-period-goal-average">$0.00</strong></article>
               <article><span>Extended duty days</span><strong id="pay-period-extended-days">0</strong></article>
               <article><span>Days at/above 14-hour review</span><strong id="pay-period-fourteen-days">0</strong></article>
@@ -175,8 +178,9 @@
               <article><span>Rejects</span><strong id="month-reject-count">0</strong></article>
               <article><span>Total loads</span><strong id="month-assignment-count">0</strong></article>
               <article><span>Total estimated earnings</span><strong id="month-total-earnings">$0.00</strong></article>
-              <article><span>Days goal met</span><strong id="month-goal-met">0</strong></article>
-              <article><span>Days below goal</span><strong id="month-goal-below">0</strong></article>
+              <article><span>Fair Goal days</span><strong id="month-fair-goal-met">0</strong></article>
+              <article><span>Excellent Goal days</span><strong id="month-goal-met">0</strong></article>
+              <article><span>Below Fair Goal</span><strong id="month-goal-below">0</strong></article>
               <article><span>Avg completed-load pay/workday</span><strong id="month-goal-average">$0.00</strong></article>
             </div>
           </section>
@@ -199,7 +203,7 @@
           <form id="paid-time-form">
             <div class="field-grid">
               <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
-              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Office Time</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
+              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Truck Wash</option><option>Breakdown</option><option>Office Time</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
               <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
               <label for="paid-time-quantity"><span id="paid-time-quantity-label">Hours</span><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly></label>
               <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
@@ -209,7 +213,7 @@
               <label for="paid-time-truck"><span>Truck</span><input id="paid-time-truck" type="text"></label>
               <label for="paid-time-trailer"><span>Trailer</span><input id="paid-time-trailer" type="text"></label>
               <label for="paid-time-related-load"><span>Related load ID</span><input id="paid-time-related-load" type="text"></label>
-              <label for="paid-time-miles"><span>Deadhead miles</span><input id="paid-time-miles" type="number" min="0" step="0.1"></label>
+              <label for="paid-time-miles"><span>Related miles</span><input id="paid-time-miles" type="number" min="0" step="0.1"></label>
               <label for="paid-time-location"><span>Location</span><input id="paid-time-location" type="text"></label>
               <label class="full-width" for="paid-time-notes"><span>Notes</span><textarea id="paid-time-notes"></textarea></label>
             </div>
@@ -260,7 +264,7 @@
                 <span>A</span>
                 <h3>Load Details</h3>
               </div>
-              <h4 class="form-subsection-title">Load basics</h4>
+              <h4 class="form-subsection-title">Load and pickup details</h4>
               <div class="field-grid basics-grid">
                 <label for="load-date">
                   <span>Work date <em>required</em></span>
@@ -271,18 +275,17 @@
                   <span>Load number</span>
                   <input id="load-number" type="text" autocomplete="off">
                 </label>
-                <label for="dispatcher">
-                  <span>Dispatcher</span>
-                  <input id="dispatcher" type="text" list="dispatcher-options" autocomplete="off" placeholder="Optional">
-                  <datalist id="dispatcher-options"></datalist>
+                <label for="product-type">
+                  <span>Product</span>
+                  <input id="product-type" type="text" autocomplete="off" value="Crude Oil">
                 </label>
-                <label for="load-status">
-                  <span>Load status <em>required</em></span>
-                  <select id="load-status" aria-describedby="load-status-error">
-                    <option value="Completed Load">Completed Load</option>
-                    <option value="Reject">Reject</option>
-                  </select>
-                  <small id="load-status-error" class="field-error"></small>
+                <label for="ticket-number">
+                  <span>Ticket number</span>
+                  <input id="ticket-number" type="text" autocomplete="off">
+                </label>
+                <label for="lease-number">
+                  <span>Lease number</span>
+                  <input id="lease-number" type="text" autocomplete="off">
                 </label>
                 <label for="pickup-location">
                   <span>Pickup location</span>
@@ -292,6 +295,73 @@
                   <span>Pickup state</span>
                   <select id="pickup-state"><option value="">Unknown</option></select>
                 </label>
+                <label for="gross-barrels">
+                  <span>Gross barrels <em>required</em></span>
+                  <input id="gross-barrels" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="gross-barrels-error">
+                  <small id="gross-barrels-error" class="field-error"></small>
+                </label>
+                <label for="api-gravity">
+                  <span>API gravity</span>
+                  <input id="api-gravity" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="api-gravity-error">
+                  <small id="api-gravity-error" class="field-error"></small>
+                </label>
+                <label for="load-temperature">
+                  <span>Temperature</span>
+                  <input id="load-temperature" type="number" inputmode="decimal" step="0.1">
+                </label>
+                <label for="bsw-percentage">
+                  <span>BS&amp;W percentage</span>
+                  <input id="bsw-percentage" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-describedby="bsw-percentage-error">
+                  <small id="bsw-percentage-error" class="field-error"></small>
+                </label>
+                <label for="arrived-pickup-time">
+                  <span>Loading start time</span>
+                  <input id="arrived-pickup-time" type="time">
+                </label>
+                <label for="loaded-time">
+                  <span>Loading end time</span>
+                  <input id="loaded-time" type="time">
+                </label>
+                <label for="deadhead-start-time">
+                  <span>Deadhead start time</span>
+                  <input id="deadhead-start-time" type="time">
+                </label>
+                <label for="deadhead-end-time">
+                  <span>Deadhead end time</span>
+                  <input id="deadhead-end-time" type="time">
+                </label>
+                <div class="calculated-field">
+                  <span>Total deadhead travel time</span>
+                  <strong id="summary-deadhead-time">-</strong>
+                </div>
+                <label for="deadhead-miles">
+                  <span>Deadhead miles</span>
+                  <input id="deadhead-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="deadhead-miles-error">
+                  <small id="deadhead-miles-error" class="field-error"></small>
+                </label>
+                <label for="loaded-miles">
+                  <span>Loaded miles</span>
+                  <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
+                  <small id="loaded-miles-error" class="field-error"></small>
+                </label>
+                <label for="dispatcher">
+                  <span>Dispatcher</span>
+                  <input id="dispatcher" type="text" list="dispatcher-options" autocomplete="off" placeholder="Optional">
+                  <datalist id="dispatcher-options"></datalist>
+                </label>
+                <label for="jotform-confirmation-number">
+                  <span>Jotform number</span>
+                  <input id="jotform-confirmation-number" type="text" autocomplete="off">
+                </label>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">
+                <span>B</span>
+                <h3>Delivery and Offloading Details</h3>
+              </div>
+              <div class="field-grid measurement-grid">
                 <label for="dropoff-location">
                   <span>Drop-off location</span>
                   <input id="dropoff-location" type="text" autocomplete="off">
@@ -300,60 +370,42 @@
                   <span>Drop-off state</span>
                   <select id="dropoff-state"><option value="">Unknown</option></select>
                 </label>
-                <label for="product-type">
-                  <span>Lease, product, or load</span>
-                  <input id="product-type" type="text" autocomplete="off" placeholder="Crude oil">
-                </label>
-                <label for="ticket-number">
-                  <span>Ticket number</span>
-                  <input id="ticket-number" type="text" autocomplete="off">
-                </label>
-                <label for="jotform-confirmation-number">
-                  <span>Jotform number</span>
-                  <input id="jotform-confirmation-number" type="text" autocomplete="off">
-                </label>
-              </div>
-              <h4 class="form-subsection-title">Load measurements</h4>
-              <div class="field-grid measurement-grid">
-                <label for="gross-barrels">
-                  <span>Gross barrels <em>required</em></span>
-                  <input id="gross-barrels" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="gross-barrels-error">
-                  <small id="gross-barrels-error" class="field-error"></small>
-                </label>
                 <label for="start-meter-reading">
-                  <span>Start meter reading</span>
+                  <span>Start meter</span>
                   <input id="start-meter-reading" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="start-meter-reading-error">
                   <small id="start-meter-reading-error" class="field-error"></small>
                 </label>
                 <label for="end-meter-reading">
-                  <span>End meter reading</span>
+                  <span>End meter</span>
                   <input id="end-meter-reading" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="end-meter-reading-error">
                   <small id="end-meter-reading-error" class="field-error"></small>
                 </label>
-                <label for="loaded-miles">
-                  <span>Loaded miles</span>
-                  <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
-                  <small id="loaded-miles-error" class="field-error"></small>
+                <div class="calculated-field">
+                  <span>Total barrels offloaded</span>
+                  <strong id="meter-barrels-offloaded">-</strong>
+                </div>
+                <div class="calculated-field">
+                  <span>Metered difference</span>
+                  <strong id="meter-difference-gross">-</strong>
+                </div>
+                <label for="arrived-dropoff-time">
+                  <span>Unload start time</span>
+                  <input id="arrived-dropoff-time" type="time">
                 </label>
-                <label for="empty-truck-weight">
-                  <span>Empty truck/trailer weight</span>
-                  <input id="empty-truck-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="empty-truck-weight-error">
-                  <small id="empty-truck-weight-error" class="field-error"></small>
+                <label for="completed-time">
+                  <span>Unload end time</span>
+                  <input id="completed-time" type="time">
                 </label>
-                <label for="api-gravity">
-                  <span>API gravity</span>
-                  <input id="api-gravity" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="api-gravity-error">
-                  <small id="api-gravity-error" class="field-error"></small>
-                </label>
-                <label for="bsw-percentage">
-                  <span>BS&amp;W / water percentage</span>
-                  <input id="bsw-percentage" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-describedby="bsw-percentage-error">
-                  <small id="bsw-percentage-error" class="field-error"></small>
+                <label for="load-status">
+                  <span>Load status <em>required</em></span>
+                  <select id="load-status" aria-describedby="load-status-error">
+                    <option value="Completed Load">Completed Load</option>
+                    <option value="Reject">Reject</option>
+                  </select>
+                  <small id="load-status-error" class="field-error"></small>
                 </label>
               </div>
               <div class="calculated-strip measurement-primary-strip">
-                <article><span>Offloaded barrels</span><strong id="meter-barrels-offloaded">-</strong></article>
-                <article><span>Difference vs gross</span><strong id="meter-difference-gross">-</strong></article>
                 <article><span>Total miles</span><strong id="summary-total-miles-including-re-route">0.0 mi</strong></article>
                 <article><span>Estimated load weight</span><strong id="summary-total-weight">-</strong></article>
                 <article><span>Estimated gross truck weight</span><strong id="summary-gross-truck-weight">-</strong></article>
@@ -380,8 +432,24 @@
 
             <div class="form-section">
               <div class="form-section-title">
-                <span>B</span>
-                <h3>Loading/Unloading Time</h3>
+                <span>C</span>
+                <h3>Weight Details</h3>
+              </div>
+              <div class="field-grid three">
+                <label for="empty-truck-weight">
+                  <span>Truck and trailer empty weight</span>
+                  <input id="empty-truck-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="empty-truck-weight-error">
+                  <small id="empty-truck-weight-error" class="field-error"></small>
+                </label>
+                <label for="load-weight">
+                  <span>Load weight</span>
+                  <input id="load-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="load-weight-error">
+                  <small id="load-weight-error" class="field-error"></small>
+                </label>
+                <div class="calculated-field">
+                  <span>Gross truck weight</span>
+                  <strong id="review-gross-truck-weight">-</strong>
+                </div>
               </div>
               <details class="optional-section daily-shift-details">
                 <summary><strong>Start and End Workday</strong></summary>
@@ -395,16 +463,6 @@
               <div class="stop-grid">
                 <article class="stop-card">
                   <h4>Loading</h4>
-                  <div class="field-grid two">
-                    <label for="arrived-pickup-time">
-                      <span>Arrival time</span>
-                      <input id="arrived-pickup-time" type="time">
-                    </label>
-                    <label for="loaded-time">
-                      <span>Completion time</span>
-                      <input id="loaded-time" type="time">
-                    </label>
-                  </div>
                   <div class="stop-results">
                     <span>Time on location: <strong id="summary-pickup-time">-</strong></span>
                     <span>Paid wait time: <strong id="summary-paid-pickup-wait">0 hr 0 min</strong></span>
@@ -412,16 +470,6 @@
                 </article>
                 <article class="stop-card">
                   <h4>Offloading</h4>
-                  <div class="field-grid two">
-                    <label for="arrived-dropoff-time">
-                      <span>Arrival time</span>
-                      <input id="arrived-dropoff-time" type="time">
-                    </label>
-                    <label for="completed-time">
-                      <span>Completion time</span>
-                      <input id="completed-time" type="time">
-                    </label>
-                  </div>
                   <div class="stop-results">
                     <span>Time on location: <strong id="summary-dropoff-time">-</strong></span>
                     <span>Paid wait time: <strong id="summary-paid-dropoff-wait">0 hr 0 min</strong></span>
@@ -437,7 +485,7 @@
 
             <div class="form-section">
               <div class="form-section-title">
-                <span>C</span>
+                <span>D</span>
                 <h3>Paid Time</h3>
               </div>
               <p class="helper-text">These paid-time add-ons are saved once for the selected work date. Hourly work and Vacation Time are available from Today.</p>
@@ -466,7 +514,7 @@
 
             <details class="form-section optional-section">
               <summary>
-                <span>D</span>
+                <span>Optional</span>
                 <strong>Notes</strong>
               </summary>
               <div class="field-grid optional-grid">
@@ -492,16 +540,17 @@
 
             <div class="calculation-panel" aria-labelledby="calculation-title">
               <div class="form-section-title review-title">
-                <span>✓</span>
+                <span>E</span>
                 <h3 id="calculation-title">Review and Save</h3>
               </div>
+              <div id="load-review-summary" class="review-grid compact-review-summary"></div>
+              <ul id="load-review-warnings" class="review-warning-list"></ul>
               <div class="review-summary-grid">
                 <article><span>Route</span><strong id="review-route-preview">Pickup -> Drop-off</strong></article>
                 <article><span>Pay range</span><strong id="pay-range">0 miles</strong></article>
                 <article><span>Base or reject pay</span><strong id="pay-estimated">$0.00</strong></article>
                 <article><span>Total estimated load pay</span><strong id="pay-entry-total">$0.00</strong></article>
                 <article><span>Load weight</span><strong id="review-total-weight">-</strong></article>
-                <article><span>Gross truck weight</span><strong id="review-gross-truck-weight">-</strong></article>
               </div>
               <p class="pay-disclaimer">Wait pay and estimated earnings are for personal verification only and may not match official payroll.</p>
             </div>
@@ -518,7 +567,7 @@
               </div>
             </div>
 
-            <div class="button-row form-actions four">
+            <div class="button-row form-actions four sticky-save-actions">
               <button class="button primary" id="save-load-button" type="submit">Save Load</button>
               <button class="button secondary" id="save-next-button" type="button">Save Load &amp; Start Next Load</button>
               <button class="button ghost" id="save-draft-button" type="button">Save Draft</button>
@@ -624,6 +673,7 @@
                 <option value="current-month">Month containing selected date</option>
                 <option value="previous-month">Previous month</option>
                 <option value="custom">Custom range</option>
+                <option value="overall">All-time analysis</option>
               </select>
             </label>
             <label for="report-start-date">
@@ -640,11 +690,11 @@
             <summary><strong>Dispatch and Earnings Analysis</strong></summary>
             <details class="analysis-guide">
               <summary><strong>How to Read This Analysis</strong></summary>
-              <p>Select the date range, review whether completed-load pay met the goal, review exact workday length, compare dispatchers, then expand daily or route details.</p>
+              <p>Select the date range, review completed-load earnings, work time, goal achievement, dispatcher workload, then expand daily details.</p>
               <div class="analysis-guide-grid">
                 <span><b>Completed-load pay</b> measures the productivity of the loads assigned.</span>
                 <span><b>Total estimated earnings</b> includes every entered pay category.</span>
-                <span><b>Goal-met percentage</b> shows how often completed-load pay reached the configured goal.</span>
+                <span><b>Goal percentages</b> use eligible dispatched workdays as the denominator.</span>
                 <span><b>Exact duty time</b> comes only from Start Workday and End Workday.</span>
                 <span><b>Completed-load pay per duty hour</b> shows dispatched load pay produced per exact work hour.</span>
                 <span><b>Non-load duty time</b> is exact duty time not covered by valid load-cycle intervals.</span>
@@ -685,9 +735,9 @@
             <div class="result-row"><span>Total offloaded barrels</span><strong id="review-barrels-offloaded">0.00 bbl</strong></div>
             <div class="result-row"><span>Total difference vs gross</span><strong id="review-difference-gross">0.00 bbl</strong></div>
             <div class="result-row"><span>Total completed load pay</span><strong id="review-completed-pay">$0.00</strong></div>
-            <div class="result-row"><span>Daily completed-load-pay goal</span><strong id="review-goal-amount">$300.00</strong></div>
-            <div class="result-row" id="review-goal-result"><span>Goal status</span><strong id="review-goal-status">Insufficient data</strong></div>
-            <div class="result-row"><span>Goal difference</span><strong id="review-goal-difference">Not available</strong></div>
+            <div class="result-row"><span>Excellent Day Goal</span><strong id="review-goal-amount">$300.00</strong></div>
+            <div class="result-row" id="review-goal-result"><span>Excellent Goal status</span><strong id="review-goal-status">Not eligible</strong></div>
+            <div class="result-row"><span>Excellent Goal difference</span><strong id="review-goal-difference">Not available</strong></div>
             <div class="result-row"><span>Exact shift time</span><strong id="review-exact-duty-time">Not enough time data</strong></div>
             <div class="result-row"><span>Completed-load pay per duty hour</span><strong id="review-completed-pay-hour">$0.00</strong></div>
             <div class="result-row"><span>Total reject pay</span><strong id="review-reject-pay">$0.00</strong></div>
@@ -748,8 +798,10 @@
             <div class="settings-card">
               <h3>Pay Rates</h3>
               <div class="field-grid pay-rate-grid">
-                <label class="full-width" for="settings-daily-completed-load-goal"><span>Daily completed-load-pay goal</span><input id="settings-daily-completed-load-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
-                <label for="settings-deadhead-rate"><span>Deadhead hourly rate</span><input id="settings-deadhead-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-fair-day-goal"><span>Fair Day Goal</span><input id="settings-fair-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-excellent-day-goal"><span>Excellent Day Goal</span><input id="settings-excellent-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <input id="settings-daily-completed-load-goal" type="hidden">
+                <label for="settings-deadhead-rate"><span>Legacy deadhead hourly rate</span><input id="settings-deadhead-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-truck-wash-rate"><span>Truck-wash hourly rate</span><input id="settings-truck-wash-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-breakdown-rate"><span>Breakdown hourly rate</span><input id="settings-breakdown-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-other-hourly-rate"><span>Other hourly default rate</span><input id="settings-other-hourly-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
@@ -759,7 +811,7 @@
                 <label for="settings-reject-rate"><span>Reject-pay rate</span><input id="settings-reject-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-trainer-rate"><span>Trainer-pay rate</span><input id="settings-trainer-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
               </div>
-              <p class="helper-text">Changing the daily goal updates comparisons for all displayed work dates. It does not change saved load pay or total estimated earnings.</p>
+              <p class="helper-text">Changing goals updates displayed comparisons only. It does not change saved load pay or total estimated earnings.</p>
               <details class="pay-table-details">
                 <summary>Loaded-mile pay table</summary>
                 <div id="loaded-mile-pay-editor" class="loaded-mile-pay-editor"></div>
@@ -816,7 +868,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.12.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.12.1</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -942,10 +994,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.12.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.12.1&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.12.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.12.1&updated=' + Date.now());
           });
       }
 
@@ -981,6 +1033,6 @@
       }
     }());
   </script>
-  <script src="script.js?v=1.12.0"></script>
+  <script src="script.js?v=1.12.1"></script>
 </body>
 </html>
