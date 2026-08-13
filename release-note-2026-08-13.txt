@@ -1,0 +1,1 @@
+PWA cache refresh release for the redesigned Load Tracker. This marker accompanies the service-worker cache identity change and does not affect stored data.
