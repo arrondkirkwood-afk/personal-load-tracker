@@ -1,4 +1,5 @@
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -6,9 +7,17 @@ const appDir = path.resolve(__dirname, '..');
 const script = fs.readFileSync(path.join(appDir, 'script.js'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(appDir, 'service-worker.js'), 'utf8');
 const html = fs.readFileSync(path.join(appDir, 'index.html'), 'utf8');
+const baseStyles = fs.readFileSync(path.join(appDir, 'style.css'), 'utf8');
+const redesignStyles = fs.readFileSync(path.join(appDir, 'redesign.css'), 'utf8');
 
 function expectSource(fragment, message) {
   assert.ok(script.includes(fragment), message || `Expected script.js to preserve: ${fragment}`);
+}
+
+function gitBlobSha(content) {
+  const bytes = Buffer.from(content, 'utf8');
+  const header = Buffer.from(`blob ${bytes.length}\0`, 'utf8');
+  return crypto.createHash('sha1').update(Buffer.concat([header, bytes])).digest('hex');
 }
 
 // Storage contract: redesign work must not rename or remove existing persistence keys.
@@ -81,6 +90,16 @@ expectSource('projectId: "arrond-oilfield-load-tracker"', 'Firebase project chan
 ].forEach((id) => {
   assert.ok(html.includes(`id="${id}"`), `Critical UI/data binding ID changed or disappeared: ${id}`);
 });
+
+// Keep the known-good base stylesheet byte-for-byte intact while the redesign is evaluated.
+assert.strictEqual(
+  gitBlobSha(baseStyles),
+  '5c0fef0fac495931813a446baed3967acecac779',
+  'Base style.css changed during isolated redesign work'
+);
+assert.ok(redesignStyles.includes('#dashboard-view'), 'redesign.css no longer contains dashboard overrides');
+assert.ok(serviceWorker.includes("'./redesign.css'"), 'service worker no longer caches the redesign stylesheet');
+assert.ok(serviceWorker.includes('buildRedesignedStylesheet'), 'service worker no longer layers redesign.css over style.css');
 
 // The PWA update contract requires script.js and service-worker.js to agree on version.
 const scriptVersion = script.match(/const APP_VERSION = ["']([^"']+)["'];/);
