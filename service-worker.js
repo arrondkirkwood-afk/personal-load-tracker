@@ -6,6 +6,10 @@ const REDESIGN_STYLES = [
   './records-reports-redesign.css',
   './settings-redesign.css'
 ];
+const EXPORT_SCRIPTS = [
+  './export-cleanup.js',
+  './export-integration.js'
+];
 const APP_FILES = [
   './',
   './index.html',
@@ -17,6 +21,7 @@ const APP_FILES = [
   ...REDESIGN_STYLES,
   './script.js',
   './script.js?v=1.12.1',
+  ...EXPORT_SCRIPTS,
   './service-worker.js',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -32,22 +37,22 @@ function deleteOldAppCaches() {
   ));
 }
 
-async function buildRedesignedStylesheet(request) {
+async function buildCombinedResponse(request, supplementalPaths, contentType) {
   try {
     const responses = await Promise.all([
       fetch(new Request(request, { cache: 'reload' })),
-      ...REDESIGN_STYLES.map((path) => fetch(new Request(new URL(path, self.location.href).toString(), { cache: 'reload' })))
+      ...supplementalPaths.map((path) => fetch(new Request(new URL(path, self.location.href).toString(), { cache: 'reload' })))
     ]);
 
     if (responses.some((response) => !response || response.status !== 200)) {
       return responses[0];
     }
 
-    const styles = await Promise.all(responses.map((response) => response.text()));
-    const response = new Response(styles.join('\n\n'), {
+    const parts = await Promise.all(responses.map((response) => response.text()));
+    const response = new Response(parts.join('\n\n'), {
       status: 200,
       statusText: 'OK',
-      headers: { 'Content-Type': 'text/css; charset=utf-8' }
+      headers: { 'Content-Type': contentType }
     });
 
     const cache = await caches.open(CACHE_NAME);
@@ -56,20 +61,28 @@ async function buildRedesignedStylesheet(request) {
   } catch {
     const cachedResponses = await Promise.all([
       caches.match(request),
-      ...REDESIGN_STYLES.map((path) => caches.match(path))
+      ...supplementalPaths.map((path) => caches.match(path))
     ]);
 
     if (cachedResponses.every(Boolean)) {
-      const styles = await Promise.all(cachedResponses.map((response) => response.text()));
-      return new Response(styles.join('\n\n'), {
+      const parts = await Promise.all(cachedResponses.map((response) => response.text()));
+      return new Response(parts.join('\n\n'), {
         status: 200,
         statusText: 'OK',
-        headers: { 'Content-Type': 'text/css; charset=utf-8' }
+        headers: { 'Content-Type': contentType }
       });
     }
 
     return cachedResponses[0] || Response.error();
   }
+}
+
+function buildRedesignedStylesheet(request) {
+  return buildCombinedResponse(request, REDESIGN_STYLES, 'text/css; charset=utf-8');
+}
+
+function buildEnhancedScript(request) {
+  return buildCombinedResponse(request, EXPORT_SCRIPTS, 'application/javascript; charset=utf-8');
 }
 
 self.addEventListener('install', (event) => {
@@ -117,6 +130,11 @@ self.addEventListener('fetch', (event) => {
 
   if (request.destination === 'style' && url.pathname.endsWith('/style.css')) {
     event.respondWith(buildRedesignedStylesheet(request));
+    return;
+  }
+
+  if (request.destination === 'script' && url.pathname.endsWith('/script.js')) {
+    event.respondWith(buildEnhancedScript(request));
     return;
   }
 
