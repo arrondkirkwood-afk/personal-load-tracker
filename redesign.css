@@ -1,0 +1,107 @@
+/* Load Tracker UI redesign pass 1.
+   Visual-only overrides. No storage, Firebase, calculation, or record-schema changes. */
+
+#dashboard-view .dashboard-hero {
+  border: 0;
+  background: linear-gradient(135deg, #12343b 0%, #18545b 100%);
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(18, 52, 59, .16);
+}
+
+#dashboard-view .dashboard-hero h2,
+#dashboard-view .dashboard-hero .section-kicker,
+#dashboard-view .dashboard-hero label span { color: #fff; }
+#dashboard-view .dashboard-hero .section-kicker { opacity: .72; }
+#dashboard-view .dashboard-hero input { border-color: rgba(255,255,255,.24); background: rgba(255,255,255,.96); }
+#dashboard-view .dashboard-hero .sync-pill { border-color: rgba(255,255,255,.24); background: rgba(255,255,255,.12); color: #fff; }
+
+#dashboard-view .summary-layout {
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+  align-items: start;
+}
+#dashboard-view .summary-layout > section:nth-child(2) { grid-column: 1; grid-row: 1 / span 2; }
+#dashboard-view .summary-layout > section:nth-child(1) { grid-column: 2; grid-row: 1; }
+#dashboard-view .summary-layout > section:nth-child(3) { grid-column: 2; grid-row: 2; }
+#dashboard-view .summary-layout > section:nth-child(4) { display: none; }
+#dashboard-view .summary-card { box-shadow: 0 8px 28px rgba(18,52,59,.06); }
+
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article { display: none; }
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#today-completed-loads),
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#daily-total-earnings),
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#daily-gross-barrels),
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#daily-paid-wait),
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#today-duty-time),
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#today-effective-hourly) {
+  display: grid;
+  min-height: 94px;
+  padding: 16px;
+  border: 0;
+  background: #f3f8f8;
+}
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#daily-total-earnings) { background: #12343b; }
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#daily-total-earnings) span,
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#daily-total-earnings) strong { color: #fff; }
+#dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip strong { font-size: 1.35rem; }
+
+#dashboard-view .today-workday-card .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+#dashboard-view .today-workday-card .metric-strip article { display: none; }
+#dashboard-view .today-workday-card .metric-strip article:has(#workday-dispatcher),
+#dashboard-view .today-workday-card .metric-strip article:has(#workday-duty-time),
+#dashboard-view .today-workday-card .metric-strip article:has(#workday-completed-pay),
+#dashboard-view .today-workday-card .metric-strip article:has(#workday-goal-status) { display: grid; }
+
+#dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip article { display: none; }
+#dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip article:has(#pay-period-completed-count),
+#dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip article:has(#pay-period-total-earnings),
+#dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip article:has(#pay-period-goal-average),
+#dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip article:has(#pay-period-goal-met) { display: grid; }
+#dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+#dashboard-view .daily-goal-card { border-width: 1px; }
+#dashboard-view .recent-panel { margin-top: 16px; }
+#dashboard-view .recent-row { background: #fff; border-color: #e1e8ea; }
+
+@media (min-width: 761px) {
+  .app-header { padding: 14px 18px; }
+  .app-header h1 { font-size: 1.45rem; }
+  .app-header .eyebrow { font-size: .66rem; }
+}
+
+@media (max-width: 1120px) {
+  #dashboard-view .summary-layout { grid-template-columns: 1fr; }
+  #dashboard-view .summary-layout > section:nth-child(1),
+  #dashboard-view .summary-layout > section:nth-child(2),
+  #dashboard-view .summary-layout > section:nth-child(3) { grid-column: 1; grid-row: auto; }
+  #dashboard-view .summary-layout > section:nth-child(2) { order: -2; }
+  #dashboard-view .summary-layout > section:nth-child(1) { order: -1; }
+}
+
+@media (max-width: 760px) {
+  .app-header { padding: 12px 14px; box-shadow: none; }
+  .app-header .eyebrow,
+  .header-meta span:not(:first-child) { display: none; }
+  .app-header h1 { font-size: 1.18rem; }
+  .header-meta { position: absolute; top: calc(18px + var(--safe-top)); right: calc(14px + var(--safe-right)); }
+  .header-meta span:first-child { border: 0; background: transparent; min-height: auto; padding: 0; font-size: .7rem; opacity: .74; }
+  #dashboard-view .dashboard-hero { padding: 16px; border-radius: 14px; }
+  #dashboard-view .dashboard-hero .hero-actions { grid-template-columns: 1fr 1fr; }
+  #dashboard-view .dashboard-hero .hero-actions .button { min-height: 48px; }
+  #dashboard-view .date-inline { grid-template-columns: minmax(0,1fr) auto; }
+  #dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#today-duty-time),
+  #dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article:has(#today-effective-hourly) { display: none; }
+  #dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip article { min-height: 84px; }
+  #dashboard-view .summary-card[aria-labelledby="daily-summary-title"] .metric-strip strong { font-size: 1.18rem; }
+  #dashboard-view .today-workday-card .metric-strip,
+  #dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #dashboard-view .paid-time-panel { margin-bottom: 6px; }
+
+  .nav-item { font-size: 0; }
+  .nav-item::after { font-size: .72rem; }
+  .nav-item[data-view-target="dashboard"]::after { content: "Today"; }
+  .nav-item[data-view-target="new-load"]::after { content: "Load"; }
+  .nav-item[data-view-target="records"]::after { content: "History"; }
+  .nav-item[data-view-target="reports"]::after { content: "Earnings"; }
+  .nav-item[data-view-target="settings"]::after { content: "More"; }
+}
