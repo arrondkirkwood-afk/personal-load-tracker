@@ -10,6 +10,7 @@ const html = fs.readFileSync(path.join(appDir, 'index.html'), 'utf8');
 const baseStyles = fs.readFileSync(path.join(appDir, 'style.css'), 'utf8');
 const redesignStyles = fs.readFileSync(path.join(appDir, 'redesign.css'), 'utf8');
 const recordsReportsStyles = fs.readFileSync(path.join(appDir, 'records-reports-redesign.css'), 'utf8');
+const settingsStyles = fs.readFileSync(path.join(appDir, 'settings-redesign.css'), 'utf8');
 
 function expectSource(fragment, message) {
   assert.ok(script.includes(fragment), message || `Expected script.js to preserve: ${fragment}`);
@@ -102,8 +103,10 @@ assert.ok(redesignStyles.includes('#dashboard-view'), 'redesign.css no longer co
 assert.ok(redesignStyles.includes('#new-load-view'), 'redesign.css no longer contains Add Load overrides');
 assert.ok(recordsReportsStyles.includes('#records-view'), 'records-reports-redesign.css no longer contains History overrides');
 assert.ok(recordsReportsStyles.includes('#reports-view'), 'records-reports-redesign.css no longer contains Earnings overrides');
+assert.ok(settingsStyles.includes('#settings-view'), 'settings-redesign.css no longer contains Settings overrides');
 assert.ok(serviceWorker.includes("'./redesign.css'"), 'service worker no longer caches the primary redesign stylesheet');
 assert.ok(serviceWorker.includes("'./records-reports-redesign.css'"), 'service worker no longer caches the History/Earnings redesign stylesheet');
+assert.ok(serviceWorker.includes("'./settings-redesign.css'"), 'service worker no longer caches the Settings redesign stylesheet');
 assert.ok(serviceWorker.includes('buildRedesignedStylesheet'), 'service worker no longer layers redesign styles over style.css');
 
 // The PWA update contract requires script.js and service-worker.js to agree on version.
