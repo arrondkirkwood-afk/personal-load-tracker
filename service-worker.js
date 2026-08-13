@@ -1,6 +1,6 @@
-const APP_VERSION = '1.12.1';
+const APP_VERSION = '1.13.0';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
-const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}-redesign-20260813`;
+const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const REDESIGN_STYLES = [
   './redesign.css',
   './records-reports-redesign.css',
@@ -15,12 +15,12 @@ const APP_FILES = [
   './index.html',
   './repair.html',
   './manifest.json',
-  './manifest.json?v=1.12.1',
+  './manifest.json?v=1.13.0',
   './style.css',
-  './style.css?v=1.12.1',
+  './style.css?v=1.13.0',
   ...REDESIGN_STYLES,
   './script.js',
-  './script.js?v=1.12.1',
+  './script.js?v=1.13.0',
   ...EXPORT_SCRIPTS,
   './service-worker.js',
   './icons/icon.svg',
