@@ -3,7 +3,8 @@ const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const REDESIGN_STYLES = [
   './redesign.css',
-  './records-reports-redesign.css'
+  './records-reports-redesign.css',
+  './settings-redesign.css'
 ];
 const APP_FILES = [
   './',
