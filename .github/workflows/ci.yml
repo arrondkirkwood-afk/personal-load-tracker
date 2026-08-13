@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - agent/load-tracker-export-cleanup
   pull_request:
 
 jobs:
@@ -21,5 +22,11 @@ jobs:
       - name: Check JavaScript syntax
         run: node --check script.js
 
+      - name: Check export module syntax
+        run: node --check export-cleanup.js
+
       - name: Run regression tests
         run: node tests/regression.test.js
+
+      - name: Run clean export tests
+        run: node tests/export-cleanup.test.js
