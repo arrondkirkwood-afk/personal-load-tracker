@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - agent/load-tracker-ui-redesign
   pull_request:
 
 jobs:
@@ -23,3 +24,6 @@ jobs:
 
       - name: Run regression tests
         run: node tests/regression.test.js
+
+      - name: Run redesign contract guardrails
+        run: node tests/redesign-contract.test.js
