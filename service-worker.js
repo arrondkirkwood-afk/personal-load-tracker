@@ -1,6 +1,10 @@
 const APP_VERSION = '1.12.1';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
+const REDESIGN_STYLES = [
+  './redesign.css',
+  './records-reports-redesign.css'
+];
 const APP_FILES = [
   './',
   './index.html',
@@ -9,7 +13,7 @@ const APP_FILES = [
   './manifest.json?v=1.12.1',
   './style.css',
   './style.css?v=1.12.1',
-  './redesign.css',
+  ...REDESIGN_STYLES,
   './script.js',
   './script.js?v=1.12.1',
   './service-worker.js',
@@ -28,23 +32,18 @@ function deleteOldAppCaches() {
 }
 
 async function buildRedesignedStylesheet(request) {
-  const redesignUrl = new URL('./redesign.css', self.location.href).toString();
-
   try {
-    const [baseResponse, redesignResponse] = await Promise.all([
+    const responses = await Promise.all([
       fetch(new Request(request, { cache: 'reload' })),
-      fetch(new Request(redesignUrl, { cache: 'reload' }))
+      ...REDESIGN_STYLES.map((path) => fetch(new Request(new URL(path, self.location.href).toString(), { cache: 'reload' })))
     ]);
 
-    if (!baseResponse || baseResponse.status !== 200 || !redesignResponse || redesignResponse.status !== 200) {
-      return baseResponse;
+    if (responses.some((response) => !response || response.status !== 200)) {
+      return responses[0];
     }
 
-    const [baseCss, redesignCss] = await Promise.all([
-      baseResponse.text(),
-      redesignResponse.text()
-    ]);
-    const response = new Response(`${baseCss}\n\n${redesignCss}`, {
+    const styles = await Promise.all(responses.map((response) => response.text()));
+    const response = new Response(styles.join('\n\n'), {
       status: 200,
       statusText: 'OK',
       headers: { 'Content-Type': 'text/css; charset=utf-8' }
@@ -54,22 +53,21 @@ async function buildRedesignedStylesheet(request) {
     await cache.put(request, response.clone());
     return response;
   } catch {
-    const cachedBase = await caches.match(request);
-    const cachedRedesign = await caches.match('./redesign.css');
+    const cachedResponses = await Promise.all([
+      caches.match(request),
+      ...REDESIGN_STYLES.map((path) => caches.match(path))
+    ]);
 
-    if (cachedBase && cachedRedesign) {
-      const [baseCss, redesignCss] = await Promise.all([
-        cachedBase.text(),
-        cachedRedesign.text()
-      ]);
-      return new Response(`${baseCss}\n\n${redesignCss}`, {
+    if (cachedResponses.every(Boolean)) {
+      const styles = await Promise.all(cachedResponses.map((response) => response.text()));
+      return new Response(styles.join('\n\n'), {
         status: 200,
         statusText: 'OK',
         headers: { 'Content-Type': 'text/css; charset=utf-8' }
       });
     }
 
-    return cachedBase || Response.error();
+    return cachedResponses[0] || Response.error();
   }
 }
 
