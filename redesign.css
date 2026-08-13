@@ -62,10 +62,103 @@
 #dashboard-view .recent-panel { margin-top: 16px; }
 #dashboard-view .recent-row { background: #fff; border-color: #e1e8ea; }
 
+/* Add Load: improve field hierarchy without removing any controls. */
+#new-load-view .entry-panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+#new-load-view > .entry-panel > .section-heading {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #12343b;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(18,52,59,.12);
+}
+#new-load-view > .entry-panel > .section-heading h2,
+#new-load-view > .entry-panel > .section-heading .section-kicker { color: #fff; }
+#new-load-view > .entry-panel > .section-heading .section-kicker { opacity: .72; }
+#new-load-view > .entry-panel > .section-heading .status-pill {
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+}
+#new-load-view .equipment-bar {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 0;
+  background: #eaf3f2;
+  box-shadow: none;
+}
+#new-load-view .form-section,
+#new-load-view .calculation-panel {
+  padding: 16px;
+  border: 1px solid #dde5e8;
+  background: #fff;
+  box-shadow: 0 7px 22px rgba(18,52,59,.045);
+}
+#new-load-view .form-section-title {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e6ecee;
+}
+#new-load-view .form-section-title span {
+  width: 28px;
+  height: 28px;
+  background: #12343b;
+}
+#new-load-view .form-subsection-title {
+  margin-top: 14px;
+  font-size: .78rem;
+  letter-spacing: .07em;
+}
+#new-load-view label:has(em) input,
+#new-load-view label:has(em) select {
+  border-color: #7ba7a4;
+  background: #fbfefe;
+}
+#new-load-view .calculated-field,
+#new-load-view .calculated-strip article,
+#new-load-view .result-row {
+  border-color: #e2e8ea;
+  background: #f7f9fa;
+}
+#new-load-view .stop-card {
+  border: 0;
+  background: #f5f9f9;
+}
+#new-load-view .toggle-field {
+  border-color: #dde5e8;
+  background: #fbfcfc;
+}
+#new-load-view .calculation-panel {
+  border: 2px solid #9ec5c2;
+  background: #f7fcfb;
+}
+#new-load-view .calculation-panel .review-summary-grid article:has(#pay-entry-total) {
+  background: #12343b;
+  border-color: #12343b;
+}
+#new-load-view .calculation-panel .review-summary-grid article:has(#pay-entry-total) span,
+#new-load-view .calculation-panel .review-summary-grid article:has(#pay-entry-total) strong { color: #fff; }
+#new-load-view .sticky-save-actions {
+  padding: 10px;
+  border: 1px solid #d9e2e5;
+  border-radius: 10px;
+  background: rgba(255,255,255,.97);
+}
+#new-load-view .sticky-save-actions .button.primary,
+#new-load-view .sticky-save-actions .button.secondary {
+  min-height: 50px;
+}
+
 @media (min-width: 761px) {
   .app-header { padding: 14px 18px; }
   .app-header h1 { font-size: 1.45rem; }
   .app-header .eyebrow { font-size: .66rem; }
+  #new-load-view .entry-panel { max-width: 1180px; margin: 0 auto; }
+  #new-load-view .basics-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  #new-load-view .measurement-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
 }
 
 @media (max-width: 1120px) {
@@ -75,6 +168,7 @@
   #dashboard-view .summary-layout > section:nth-child(3) { grid-column: 1; grid-row: auto; }
   #dashboard-view .summary-layout > section:nth-child(2) { order: -2; }
   #dashboard-view .summary-layout > section:nth-child(1) { order: -1; }
+  #new-load-view .basics-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -97,6 +191,30 @@
   #dashboard-view .summary-card[aria-labelledby="pay-period-summary-title"] .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
   #dashboard-view .paid-time-panel { margin-bottom: 6px; }
 
+  #new-load-view > .entry-panel > .section-heading { padding: 14px; border-radius: 12px; }
+  #new-load-view .equipment-bar { border-radius: 10px; }
+  #new-load-view .form-section,
+  #new-load-view .calculation-panel { padding: 13px; border-radius: 12px; }
+  #new-load-view .basics-grid,
+  #new-load-view .measurement-grid { grid-template-columns: 1fr; }
+  #new-load-view .field-grid.two,
+  #new-load-view .field-grid.three,
+  #new-load-view .stop-grid,
+  #new-load-view .toggle-grid,
+  #new-load-view .review-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #new-load-view label { gap: 5px; }
+  #new-load-view input,
+  #new-load-view select,
+  #new-load-view textarea { min-height: 48px; }
+  #new-load-view .calculated-field { min-height: 48px; }
+  #new-load-view .sticky-save-actions {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    bottom: calc(78px + var(--safe-bottom));
+  }
+  #new-load-view .sticky-save-actions .button { min-height: 46px; }
+  #new-load-view .sticky-save-actions .button:nth-child(1),
+  #new-load-view .sticky-save-actions .button:nth-child(2) { min-height: 52px; }
+
   .nav-item { font-size: 0; }
   .nav-item::after { font-size: .72rem; }
   .nav-item[data-view-target="dashboard"]::after { content: "Today"; }
@@ -104,4 +222,12 @@
   .nav-item[data-view-target="records"]::after { content: "History"; }
   .nav-item[data-view-target="reports"]::after { content: "Earnings"; }
   .nav-item[data-view-target="settings"]::after { content: "More"; }
+}
+
+@media (max-width: 430px) {
+  #new-load-view .field-grid.two,
+  #new-load-view .field-grid.three,
+  #new-load-view .stop-grid,
+  #new-load-view .toggle-grid,
+  #new-load-view .review-summary-grid { grid-template-columns: 1fr; }
 }
