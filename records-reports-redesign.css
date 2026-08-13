@@ -1,0 +1,253 @@
+/* Records and earnings redesign layer. Visual-only. */
+
+/* History / Records */
+#records-view .saved-loads {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+#records-view .saved-loads > .section-heading:first-child {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #12343b;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(18,52,59,.12);
+}
+#records-view .saved-loads > .section-heading:first-child h2,
+#records-view .saved-loads > .section-heading:first-child .section-kicker { color: #fff; }
+#records-view .saved-loads > .section-heading:first-child .section-kicker { opacity: .72; }
+#records-view .saved-loads > .section-heading:first-child #log-count {
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+}
+
+#records-view .saved-filter-bar {
+  grid-template-columns: minmax(220px,1.4fr) minmax(170px,.8fr) minmax(150px,.7fr) minmax(150px,.7fr);
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 0;
+  background: #eaf3f2;
+}
+#records-view .saved-filter-bar label:nth-child(5),
+#records-view .saved-filter-bar label:nth-child(6),
+#records-view .saved-filter-bar label:nth-child(7) {
+  grid-row: 2;
+}
+
+#records-view .daily-record-panel {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #dce5e8;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 7px 22px rgba(18,52,59,.05);
+}
+#records-view #daily-record-total {
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: #12343b;
+  color: #fff;
+  font-size: 1.05rem;
+}
+#records-view .daily-record-overview article {
+  border: 0;
+  background: #f3f8f8;
+}
+
+#records-view #saved-load-cards {
+  margin-top: 12px;
+}
+#records-view .load-card {
+  border-color: #dce5e8;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(18,52,59,.045);
+}
+#records-view .load-row {
+  background: #fff;
+}
+#records-view .load-cell strong {
+  font-size: .94rem;
+}
+#records-view .load-details {
+  background: #f9fbfb;
+}
+#records-view .paid-time-records-heading {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid #dce5e8;
+}
+
+/* Earnings / Reports */
+#reports-view .reports-panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+#reports-view .reports-panel > .section-heading:first-child {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #12343b;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(18,52,59,.12);
+}
+#reports-view .reports-panel > .section-heading:first-child h2,
+#reports-view .reports-panel > .section-heading:first-child .section-kicker { color: #fff; }
+#reports-view .reports-panel > .section-heading:first-child .section-kicker { opacity: .72; }
+#reports-view .reports-panel > .section-heading:first-child .status-pill {
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+}
+
+#reports-view .report-controls {
+  margin: 12px 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: #eaf3f2;
+}
+#reports-view #report-summary-grid {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+#reports-view #report-summary-grid .result-row {
+  min-height: 80px;
+  border: 0;
+  background: #f3f8f8;
+}
+
+#reports-view .dispatch-analysis {
+  margin-top: 12px;
+  padding: 0;
+  border: 1px solid #dce5e8;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+#reports-view .dispatch-analysis > summary {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  background: #f7f9fa;
+}
+#reports-view .dispatch-analysis[open] > summary {
+  border-bottom: 1px solid #dce5e8;
+}
+#reports-view .dispatch-analysis > *:not(summary) {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+#reports-view .dispatch-analysis > *:last-child {
+  margin-bottom: 16px;
+}
+#reports-view .analysis-guide {
+  background: #f7f9fa;
+  border-color: #dce5e8;
+}
+
+#reports-view .earnings-review {
+  margin-top: 14px;
+  border: 1px solid #dce5e8;
+  border-radius: 12px;
+  box-shadow: 0 7px 22px rgba(18,52,59,.05);
+}
+#reports-view .earnings-review .review-grid {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+}
+#reports-view .earnings-review .result-row {
+  border: 0;
+  background: #f7f9fa;
+}
+#reports-view .earnings-review .result-row:has(#review-completed-pay),
+#reports-view .earnings-review .result-row:has(#review-exact-duty-time),
+#reports-view .earnings-review .result-row:has(#review-paid-wait),
+#reports-view .earnings-review .result-row:has(#review-completed-pay-hour) {
+  background: #eaf3f2;
+}
+#reports-view .earnings-review .total-row {
+  background: #12343b;
+  border-color: #12343b;
+}
+
+@media (max-width: 1120px) {
+  #records-view .saved-filter-bar {
+    grid-template-columns: repeat(3,minmax(0,1fr));
+  }
+  #records-view .saved-filter-bar label:nth-child(5),
+  #records-view .saved-filter-bar label:nth-child(6),
+  #records-view .saved-filter-bar label:nth-child(7) { grid-row: auto; }
+  #reports-view #report-summary-grid,
+  #reports-view .earnings-review .review-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  #records-view .saved-loads > .section-heading:first-child,
+  #reports-view .reports-panel > .section-heading:first-child {
+    padding: 14px;
+    border-radius: 12px;
+  }
+  #records-view .saved-filter-bar {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    padding: 12px;
+    border-radius: 12px;
+  }
+  #records-view .saved-filter-bar label:first-child {
+    grid-column: 1 / -1;
+  }
+  #records-view .daily-record-panel {
+    padding: 13px;
+  }
+  #records-view .load-card {
+    border-radius: 10px;
+  }
+  #records-view .load-row {
+    padding: 12px;
+  }
+  #records-view .load-cell.route-cell {
+    padding: 9px 0;
+    border-top: 1px solid #e6ecee;
+    border-bottom: 1px solid #e6ecee;
+  }
+  #records-view .record-actions-menu summary {
+    background: #12343b;
+    border-color: #12343b;
+    color: #fff;
+  }
+
+  #reports-view .report-controls {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  #reports-view #report-summary-grid,
+  #reports-view .earnings-review .review-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  #reports-view .dispatch-analysis > summary {
+    min-height: 58px;
+    padding: 14px;
+  }
+  #reports-view .dispatch-analysis > *:not(summary) {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+  #reports-view .earnings-review {
+    padding: 13px;
+  }
+}
+
+@media (max-width: 430px) {
+  #records-view .saved-filter-bar,
+  #reports-view #report-summary-grid,
+  #reports-view .earnings-review .review-grid {
+    grid-template-columns: 1fr;
+  }
+}

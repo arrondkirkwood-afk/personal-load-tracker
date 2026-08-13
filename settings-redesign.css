@@ -1,0 +1,158 @@
+/* Settings / More redesign layer. Visual-only. */
+
+#settings-view .profile-panel,
+#settings-view .settings-panel,
+#settings-view .backup-panel {
+  border-color: #dce5e8;
+  border-radius: 12px;
+  box-shadow: 0 7px 22px rgba(18,52,59,.05);
+}
+
+#settings-view .profile-panel {
+  background: #eaf3f2;
+  border: 0;
+}
+#settings-view .profile-panel .section-heading {
+  margin-bottom: 12px;
+}
+#settings-view .profile-panel .profile-actions {
+  display: grid;
+  gap: 8px;
+}
+
+#settings-view .settings-panel > .section-heading {
+  padding: 16px 18px;
+  margin: -16px -16px 16px;
+  border-radius: 12px 12px 0 0;
+  background: #12343b;
+  color: #fff;
+}
+#settings-view .settings-panel > .section-heading h2,
+#settings-view .settings-panel > .section-heading .section-kicker { color: #fff; }
+#settings-view .settings-panel > .section-heading .section-kicker { opacity: .72; }
+
+#settings-view .settings-grid {
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  gap: 12px;
+}
+#settings-view .settings-card {
+  padding: 16px;
+  border-color: #dce5e8;
+  border-radius: 12px;
+  background: #fff;
+}
+#settings-view .settings-card h3 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e6ecee;
+}
+#settings-view .settings-card.cloud-card {
+  background: #f7fbfb;
+}
+#settings-view .settings-card.app-info-card {
+  grid-column: 1 / -1;
+}
+#settings-view .pay-rate-grid {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+}
+#settings-view .cloud-list,
+#settings-view .app-info-summary-list {
+  padding: 12px;
+  border-radius: 10px;
+  background: #f3f8f8;
+}
+#settings-view .cloud-list strong,
+#settings-view .app-info-summary-list strong {
+  text-align: right;
+}
+#settings-view .migration-panel {
+  border-color: #9ec5c2;
+  background: #f7fcfb;
+}
+#settings-view .diagnostics-details {
+  padding-top: 10px;
+  border-top: 1px solid #e6ecee;
+}
+
+#settings-view .backup-panel {
+  margin-top: 12px;
+}
+#settings-view .backup-panel .backup-reminder {
+  border: 0;
+  border-left: 4px solid #d4a62a;
+  border-radius: 8px;
+}
+#settings-view .backup-actions {
+  grid-template-columns: repeat(5,minmax(0,1fr));
+}
+#settings-view .backup-actions .button {
+  min-height: 48px;
+}
+#settings-view #export-backup-button {
+  background: #12343b;
+}
+#settings-view .import-panel {
+  border-color: #dce5e8;
+  background: #f7f9fa;
+}
+
+@media (max-width: 1120px) {
+  #settings-view .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  #settings-view .settings-card.app-info-card {
+    grid-column: auto;
+  }
+  #settings-view .backup-actions {
+    grid-template-columns: repeat(3,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  #settings-view .profile-panel,
+  #settings-view .settings-panel,
+  #settings-view .backup-panel {
+    padding: 13px;
+    border-radius: 12px;
+  }
+  #settings-view .settings-panel > .section-heading {
+    margin: -13px -13px 14px;
+    padding: 14px;
+  }
+  #settings-view .profile-layout,
+  #settings-view .profile-fields,
+  #settings-view .pay-rate-grid,
+  #settings-view .auth-fields {
+    grid-template-columns: 1fr;
+  }
+  #settings-view .settings-card {
+    padding: 13px;
+  }
+  #settings-view input,
+  #settings-view select {
+    min-height: 48px;
+  }
+  #settings-view .settings-list {
+    grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr);
+  }
+  #settings-view .backup-actions {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  #settings-view #export-backup-button {
+    grid-column: 1 / -1;
+  }
+  #settings-view .import-panel {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 430px) {
+  #settings-view .settings-list {
+    grid-template-columns: 1fr;
+  }
+  #settings-view .cloud-list strong,
+  #settings-view .app-info-summary-list strong {
+    text-align: left;
+    margin-bottom: 8px;
+  }
+}

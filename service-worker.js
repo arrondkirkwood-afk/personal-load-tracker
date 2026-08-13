@@ -1,6 +1,15 @@
 const APP_VERSION = '1.12.1';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
+const REDESIGN_STYLES = [
+  './redesign.css',
+  './records-reports-redesign.css',
+  './settings-redesign.css'
+];
+const EXPORT_SCRIPTS = [
+  './export-cleanup.js',
+  './export-integration.js'
+];
 const APP_FILES = [
   './',
   './index.html',
@@ -9,8 +18,10 @@ const APP_FILES = [
   './manifest.json?v=1.12.1',
   './style.css',
   './style.css?v=1.12.1',
+  ...REDESIGN_STYLES,
   './script.js',
   './script.js?v=1.12.1',
+  ...EXPORT_SCRIPTS,
   './service-worker.js',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -24,6 +35,54 @@ function deleteOldAppCaches() {
       .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
       .map((cacheName) => caches.delete(cacheName))
   ));
+}
+
+async function buildCombinedResponse(request, supplementalPaths, contentType) {
+  try {
+    const responses = await Promise.all([
+      fetch(new Request(request, { cache: 'reload' })),
+      ...supplementalPaths.map((path) => fetch(new Request(new URL(path, self.location.href).toString(), { cache: 'reload' })))
+    ]);
+
+    if (responses.some((response) => !response || response.status !== 200)) {
+      return responses[0];
+    }
+
+    const parts = await Promise.all(responses.map((response) => response.text()));
+    const response = new Response(parts.join('\n\n'), {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': contentType }
+    });
+
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cachedResponses = await Promise.all([
+      caches.match(request),
+      ...supplementalPaths.map((path) => caches.match(path))
+    ]);
+
+    if (cachedResponses.every(Boolean)) {
+      const parts = await Promise.all(cachedResponses.map((response) => response.text()));
+      return new Response(parts.join('\n\n'), {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': contentType }
+      });
+    }
+
+    return cachedResponses[0] || Response.error();
+  }
+}
+
+function buildRedesignedStylesheet(request) {
+  return buildCombinedResponse(request, REDESIGN_STYLES, 'text/css; charset=utf-8');
+}
+
+function buildEnhancedScript(request) {
+  return buildCombinedResponse(request, EXPORT_SCRIPTS, 'application/javascript; charset=utf-8');
 }
 
 self.addEventListener('install', (event) => {
@@ -66,6 +125,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (request.method !== 'GET' || url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (request.destination === 'style' && url.pathname.endsWith('/style.css')) {
+    event.respondWith(buildRedesignedStylesheet(request));
+    return;
+  }
+
+  if (request.destination === 'script' && url.pathname.endsWith('/script.js')) {
+    event.respondWith(buildEnhancedScript(request));
     return;
   }
 
