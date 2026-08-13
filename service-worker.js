@@ -9,6 +9,7 @@ const APP_FILES = [
   './manifest.json?v=1.12.1',
   './style.css',
   './style.css?v=1.12.1',
+  './redesign.css',
   './script.js',
   './script.js?v=1.12.1',
   './service-worker.js',
@@ -24,6 +25,52 @@ function deleteOldAppCaches() {
       .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
       .map((cacheName) => caches.delete(cacheName))
   ));
+}
+
+async function buildRedesignedStylesheet(request) {
+  const redesignUrl = new URL('./redesign.css', self.location.href).toString();
+
+  try {
+    const [baseResponse, redesignResponse] = await Promise.all([
+      fetch(new Request(request, { cache: 'reload' })),
+      fetch(new Request(redesignUrl, { cache: 'reload' }))
+    ]);
+
+    if (!baseResponse || baseResponse.status !== 200 || !redesignResponse || redesignResponse.status !== 200) {
+      return baseResponse;
+    }
+
+    const [baseCss, redesignCss] = await Promise.all([
+      baseResponse.text(),
+      redesignResponse.text()
+    ]);
+    const response = new Response(`${baseCss}\n\n${redesignCss}`, {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'text/css; charset=utf-8' }
+    });
+
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cachedBase = await caches.match(request);
+    const cachedRedesign = await caches.match('./redesign.css');
+
+    if (cachedBase && cachedRedesign) {
+      const [baseCss, redesignCss] = await Promise.all([
+        cachedBase.text(),
+        cachedRedesign.text()
+      ]);
+      return new Response(`${baseCss}\n\n${redesignCss}`, {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'text/css; charset=utf-8' }
+      });
+    }
+
+    return cachedBase || Response.error();
+  }
 }
 
 self.addEventListener('install', (event) => {
@@ -66,6 +113,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (request.method !== 'GET' || url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (request.destination === 'style' && url.pathname.endsWith('/style.css')) {
+    event.respondWith(buildRedesignedStylesheet(request));
     return;
   }
 
