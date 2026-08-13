@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Load Tracker Dashboard Preview</title>
+  <link rel="stylesheet" href="dashboard-preview.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <small>Oilfield Load Tracker</small>
+        <h1>Today</h1>
+      </div>
+      <span class="sync">● Synced</span>
+    </header>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Wednesday · August 12</p>
+        <h2>Workday in progress</h2>
+        <p>Started 5:42 AM · 13 hr 18 min on duty · Dispatcher: Brandon</p>
+      </div>
+      <button class="primary" type="button">+ Add New Load</button>
+    </section>
+
+    <section class="metrics" aria-label="Today summary">
+      <article class="metric featured"><span>Completed loads</span><strong>4</strong></article>
+      <article class="metric featured"><span>Estimated earnings</span><strong>$287.64</strong></article>
+      <article class="metric"><span>Gross barrels</span><strong>731.8</strong></article>
+      <article class="metric"><span>Paid wait</span><strong>1h 35m</strong></article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Today's Loads</p>
+            <h3>Recent activity</h3>
+          </div>
+          <span class="subtle">4 completed</span>
+        </div>
+        <div class="load-list">
+          <div class="load">
+            <div class="load-no">4</div>
+            <div class="route"><strong>Weeks Island → Burns Point</strong><span>Completed 6:41 PM · 43 loaded mi</span></div>
+            <div class="pay">$87.15</div>
+          </div>
+          <div class="load">
+            <div class="load-no">3</div>
+            <div class="route"><strong>Weeks Island → Burns Point</strong><span>Completed 2:38 PM · 43 loaded mi</span></div>
+            <div class="pay">$87.15</div>
+          </div>
+          <div class="load">
+            <div class="load-no">2</div>
+            <div class="route"><strong>Hulin → Forked Island</strong><span>Completed 10:52 AM · 26 loaded mi</span></div>
+            <div class="pay">$65.97</div>
+          </div>
+        </div>
+      </article>
+
+      <aside class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Daily Goal</p>
+            <h3>$300 completed-load pay</h3>
+          </div>
+          <strong class="status-warn">$12.36 short</strong>
+        </div>
+        <div class="progress" aria-label="82 percent of daily goal"><span></span></div>
+        <div class="goal-row"><span>Current</span><strong>$287.64</strong></div>
+        <div class="goal-row"><span>Fair goal</span><strong class="status-good">Met</strong></div>
+        <div class="goal-row"><span>Excellent goal</span><strong>$300.00</strong></div>
+
+        <div class="card-head" style="margin-top:22px">
+          <div>
+            <p class="eyebrow">Quick Actions</p>
+            <h3>What do you need?</h3>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="quick" type="button">Continue Load<span>Resume current draft</span></button>
+          <button class="quick" type="button">Add Paid Time<span>Wash, breakdown, office</span></button>
+          <button class="quick" type="button">Pay Period<span>View current earnings</span></button>
+          <button class="quick" type="button">Backup<span>Protect current records</span></button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <nav class="mobile-nav" aria-label="Primary navigation preview">
+    <button class="active" type="button">Today</button>
+    <button type="button">Loads</button>
+    <button type="button">Earnings</button>
+    <button type="button">History</button>
+    <button type="button">More</button>
+  </nav>
+</body>
+</html>
