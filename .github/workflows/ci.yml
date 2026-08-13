@@ -25,8 +25,14 @@ jobs:
       - name: Check export module syntax
         run: node --check export-cleanup.js
 
+      - name: Check export integration syntax
+        run: node --check export-integration.js
+
       - name: Run regression tests
         run: node tests/regression.test.js
 
       - name: Run clean export tests
         run: node tests/export-cleanup.test.js
+
+      - name: Run export integration tests
+        run: node tests/export-integration.test.js
