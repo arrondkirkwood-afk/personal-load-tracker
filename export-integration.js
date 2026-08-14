@@ -18,21 +18,34 @@
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
-  function runExport(kind) {
+  function buildExport(kind) {
     const cleanup = root.LoadTrackerExportCleanup;
     const snapshotBuilder = root.getTrackerSnapshot;
-    if (!cleanup || typeof snapshotBuilder !== 'function') return false;
+    if (!cleanup || typeof snapshotBuilder !== 'function') return null;
 
     const snapshot = snapshotBuilder();
-    const date = localDateStamp();
-    const result = kind === 'loads'
+    return kind === 'loads'
       ? cleanup.buildCleanLoadExport(snapshot)
       : cleanup.buildCleanDailyEarningsExport(snapshot);
+  }
+
+  function runExport(kind) {
+    const result = buildExport(kind);
+    if (!result) return false;
+    const date = localDateStamp();
     const filename = kind === 'loads'
       ? `personal-oilfield-load-log-${date}.csv`
       : `personal-oilfield-daily-earnings-${date}.csv`;
 
     downloadText(filename, result.csv);
+    return true;
+  }
+
+  async function runProfessionalExport(kind) {
+    const professional = root.LoadTrackerProfessionalExport;
+    const result = buildExport(kind);
+    if (!professional || !result) return false;
+    await professional.downloadProfessionalWorkbook(kind, result, localDateStamp());
     return true;
   }
 
@@ -51,5 +64,22 @@
   replaceExportButton('download-log-button', 'loads');
   replaceExportButton('download-earnings-button', 'earnings');
 
-  root.LoadTrackerExportIntegration = { runExport };
+  function wireProfessionalButton(id, kind) {
+    const button = document.getElementById(id);
+    if (!button || button.dataset.professionalExportWired === 'true') return;
+    button.dataset.professionalExportWired = 'true';
+    button.addEventListener('click', async function () {
+      button.disabled = true;
+      try {
+        await runProfessionalExport(kind);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  wireProfessionalButton('download-log-excel-button', 'loads');
+  wireProfessionalButton('download-earnings-excel-button', 'earnings');
+
+  root.LoadTrackerExportIntegration = { runExport, runProfessionalExport };
 }(typeof globalThis !== 'undefined' ? globalThis : this));
