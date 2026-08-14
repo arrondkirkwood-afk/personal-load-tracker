@@ -24,13 +24,16 @@ function createButton(id) {
 
 const buttons = new Map([
   ['download-log-button', createButton('download-log-button')],
-  ['download-earnings-button', createButton('download-earnings-button')]
+  ['download-earnings-button', createButton('download-earnings-button')],
+  ['download-log-excel-button', createButton('download-log-excel-button')],
+  ['download-earnings-excel-button', createButton('download-earnings-excel-button')]
 ]);
 const links = [];
 const revoked = [];
 const snapshot = Object.freeze({ data: Object.freeze({ loads: Object.freeze([]), dailySummaries: Object.freeze({}) }) });
 let loadBuildCount = 0;
 let earningsBuildCount = 0;
+const professionalDownloads = [];
 
 const context = {
   console,
@@ -82,6 +85,12 @@ const context = {
       return { csv: '\ufeff"Date"\r\n"2026-08-13"' };
     }
   },
+  LoadTrackerProfessionalExport: {
+    downloadProfessionalWorkbook(kind, result, date) {
+      professionalDownloads.push({ kind, result, date });
+      return Promise.resolve(`${kind}-${date}.xlsx`);
+    }
+  },
   globalThis: null
 };
 context.globalThis = context;
@@ -91,8 +100,12 @@ vm.runInContext(integrationSource, context, { filename: 'export-integration.js' 
 
 const wiredLoadButton = buttons.get('download-log-button');
 const wiredEarningsButton = buttons.get('download-earnings-button');
+const wiredLoadExcelButton = buttons.get('download-log-excel-button');
+const wiredEarningsExcelButton = buttons.get('download-earnings-excel-button');
 assert.strictEqual(wiredLoadButton.dataset.cleanExportWired, 'true', 'load CSV button is replaced with clean-export button');
 assert.strictEqual(wiredEarningsButton.dataset.cleanExportWired, 'true', 'earnings CSV button is replaced with clean-export button');
+assert.strictEqual(wiredLoadExcelButton.dataset.professionalExportWired, 'true', 'load Excel button is wired permanently');
+assert.strictEqual(wiredEarningsExcelButton.dataset.professionalExportWired, 'true', 'earnings Excel button is wired permanently');
 
 wiredLoadButton.listeners.click();
 assert.strictEqual(loadBuildCount, 1, 'load export uses clean export engine');
@@ -105,6 +118,11 @@ assert.strictEqual(earningsBuildCount, 1, 'daily earnings export uses clean expo
 assert.strictEqual(links.at(-1).clicked, true, 'earnings export triggers a browser download');
 assert.match(links.at(-1).download, /^personal-oilfield-daily-earnings-\d{4}-\d{2}-\d{2}\.csv$/);
 assert.deepStrictEqual(revoked, ['blob:clean-export', 'blob:clean-export'], 'temporary download URLs are revoked');
+
+wiredLoadExcelButton.listeners.click();
+wiredEarningsExcelButton.listeners.click();
+assert.deepStrictEqual(professionalDownloads.map((download) => download.kind), ['loads', 'earnings'], 'both professional Excel exports use the clean export rows');
+assert.ok(professionalDownloads.every((download) => /^\d{4}-\d{2}-\d{2}$/.test(download.date)), 'professional workbook filenames receive the local date');
 
 const missingButtonContext = {
   console,
