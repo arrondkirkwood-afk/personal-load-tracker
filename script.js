@@ -1,4 +1,4 @@
-const APP_VERSION = "1.12.1";
+const APP_VERSION = "1.13.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -3057,6 +3057,7 @@ async function reloadAfterServiceWorkerUpdate(registration) {
     await waitForControllerChange();
   }
 
+  preserveActiveViewForReload();
   globalThis.location.reload();
 }
 
@@ -3094,10 +3095,8 @@ async function checkForUpdates() {
       return;
     }
 
-    await clearOldAppCaches();
-
     if (!('serviceWorker' in navigator)) {
-      setUpdateStatus('If update does not appear, close and reopen the app.');
+      setUpdateStatus('Update checks are not supported in this browser.');
       return;
     }
 
@@ -3105,32 +3104,21 @@ async function checkForUpdates() {
     const registration = existingRegistration || await registerServiceWorker();
 
     if (!registration) {
-      setUpdateStatus('If update does not appear, close and reopen the app.');
+      setUpdateStatus('Unable to check for updates right now.');
       return;
     }
 
     const updatedRegistration = await registration.update().catch(() => registration);
     const installedWorker = await waitForInstallingWorker(updatedRegistration);
 
-    await clearOldAppCaches();
-
-    if (updatedRegistration.active) {
-      updatedRegistration.active.postMessage({ type: 'CLEAR_OLD_CACHES' });
-    }
-
     if (updatedRegistration.waiting || installedWorker) {
       await reloadAfterServiceWorkerUpdate(updatedRegistration);
       return;
     }
 
-    setUpdateStatus('You are using the latest version. If update does not appear, close and reopen the app.');
-
-    setTimeout(() => {
-      setUpdateStatus('Update complete. Reloading...');
-      globalThis.location.reload();
-    }, 1400);
+    setUpdateStatus('You are using the latest version.');
   } catch {
-    setUpdateStatus('If update does not appear, close and reopen the app.');
+    setUpdateStatus('Unable to check for updates right now.');
   } finally {
     setTimeout(() => {
       if (checkUpdatesButton) {
@@ -3926,6 +3914,26 @@ function activateView(viewName) {
   if (typeof globalThis.scrollTo === 'function') {
     globalThis.setTimeout?.(() => globalThis.scrollTo(0, 0), 0);
   }
+}
+
+function getActiveViewName() {
+  return appViews.find((view) => view.classList.contains('active'))?.dataset.view || 'dashboard';
+}
+
+function preserveActiveViewForReload() {
+  if (!globalThis.location || !globalThis.history?.replaceState) {
+    return;
+  }
+
+  const activeView = getActiveViewName();
+  const hash = `#view=${encodeURIComponent(activeView)}`;
+  globalThis.history.replaceState(null, '', `${globalThis.location.pathname || ''}${globalThis.location.search || ''}${hash}`);
+}
+
+function getPreservedView() {
+  const match = String(globalThis.location?.hash || '').match(/^#view=([^&]+)$/);
+  const viewName = match ? decodeURIComponent(match[1]) : '';
+  return appViews.some((view) => view.dataset.view === viewName) ? viewName : 'dashboard';
 }
 
 function handleNavigationClick(event) {
@@ -8141,7 +8149,7 @@ function initialize() {
   renderSummary();
   updateDailySummary();
   restoreDraftIfAvailable();
-  activateView('dashboard');
+  activateView(getPreservedView());
   registerServiceWorker();
   initializeFirebaseSync();
 }
