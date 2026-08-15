@@ -207,7 +207,7 @@
     ['C', 'D', 'E', 'F'].forEach((column) => { sheet.getColumn(column).width = 12; });
     sheet.views = [{ state: 'frozen', ySplit: 4, showGridLines: false }];
     sheet.properties.pageSetUpPr = { fitToPage: true, autoPageBreaks: false };
-    sheet.headerFooter.oddFooter = '&LPersonal Load Tracker&CPage &P of &N&RProfessional Export';
+    sheet.headerFooter.oddFooter = '&LOilfield Load & Workday Tracker&CPage &P of &N&RProfessional Export';
     return sheet;
   }
 
@@ -312,7 +312,7 @@
     sheet.autoFilter = { from: 'A5', to: `${lastColumn}${Math.max(5, finalRow)}` };
     sheet.properties.pageSetUpPr = { fitToPage: true, autoPageBreaks: false };
     sheet.pageSetup.printTitlesRow = '1:5';
-    sheet.headerFooter.oddFooter = '&LPersonal Load Tracker&CPage &P of &N&RProfessional Export';
+    sheet.headerFooter.oddFooter = '&LOilfield Load & Workday Tracker&CPage &P of &N&RProfessional Export';
     return sheet;
   }
 
@@ -320,8 +320,8 @@
     const ExcelJS = excelLibrary();
     const workbook = new ExcelJS.Workbook();
     const generatedAt = options.generatedAt instanceof Date ? options.generatedAt : new Date();
-    workbook.creator = 'Personal Load Tracker';
-    workbook.lastModifiedBy = 'Personal Load Tracker';
+    workbook.creator = 'Oilfield Load & Workday Tracker';
+    workbook.lastModifiedBy = 'Oilfield Load & Workday Tracker';
     workbook.created = generatedAt;
     workbook.modified = generatedAt;
     workbook.calcProperties.fullCalcOnLoad = true;
