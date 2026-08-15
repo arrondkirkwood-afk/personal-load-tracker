@@ -1,4 +1,4 @@
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.15.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -168,6 +168,8 @@ const fieldIds = [
   'deadhead-start-time',
   'deadhead-end-time',
   'deadhead-miles',
+  'paid-pickup-wait-minutes',
+  'paid-dropoff-wait-minutes',
   'notes',
   'arrived-pickup-time',
   'loaded-time',
@@ -188,6 +190,8 @@ const numberFieldIds = new Set([
   'loaded-miles',
   're-routed-miles',
   'deadhead-miles',
+  'paid-pickup-wait-minutes',
+  'paid-dropoff-wait-minutes',
   'start-meter-reading',
   'end-meter-reading'
 ]);
@@ -267,6 +271,8 @@ const payPeriodSummary = {
   rejectCount: document.getElementById('pay-period-reject-count'),
   assignmentCount: document.getElementById('pay-period-assignment-count'),
   totalEarnings: document.getElementById('pay-period-total-earnings'),
+  officeHours: document.getElementById('pay-period-office-hours'),
+  officePay: document.getElementById('pay-period-office-pay'),
   trainerPay: document.getElementById('pay-period-trainer-pay'),
   perDiemPay: document.getElementById('pay-period-per-diem-pay'),
   sleeperPay: document.getElementById('pay-period-sleeper-pay'),
@@ -465,6 +471,14 @@ const paidTimeControls = {
   miles: document.getElementById('paid-time-miles'), location: document.getElementById('paid-time-location'),
   notes: document.getElementById('paid-time-notes'), duration: document.getElementById('paid-time-duration'),
   pay: document.getElementById('paid-time-pay'), error: document.getElementById('paid-time-error')
+};
+const officeDayControls = {
+  panel: document.getElementById('office-day-panel'), form: document.getElementById('office-day-form'),
+  date: document.getElementById('office-day-date'), arrived: document.getElementById('office-day-arrived'),
+  left: document.getElementById('office-day-left'), rate: document.getElementById('office-day-rate'),
+  notes: document.getElementById('office-day-notes'), hours: document.getElementById('office-day-hours'),
+  pay: document.getElementById('office-day-pay'), perDiem: document.getElementById('office-day-per-diem'),
+  total: document.getElementById('office-day-total'), error: document.getElementById('office-day-error')
 };
 const paySettingsControls = {
   dailyCompletedLoadGoal: document.getElementById('settings-daily-completed-load-goal'),
@@ -4292,11 +4306,11 @@ function calculatePaidWaitMinutes(timeOnLocationMinutes) {
 }
 
 function calculateStopWaitBreakdown(values) {
-  // Wait pay only uses the time spent at each stop after arrival, with the first hour free at each stop.
+  // Stop timestamps describe operations only. Paid wait is always entered manually.
   const pickupStopDurationMinutes = durationBetween(values.arrivedPickupTime, values.loadedTime);
   const unloadStopDurationMinutes = durationBetween(values.arrivedDropoffTime, values.completedTime);
-  const paidPickupWaitMinutes = calculatePaidWaitMinutes(pickupStopDurationMinutes);
-  const paidDropoffWaitMinutes = calculatePaidWaitMinutes(unloadStopDurationMinutes);
+  const paidPickupWaitMinutes = Math.max(0, numberOrNull(values.paidPickupWaitMinutes) ?? 0);
+  const paidDropoffWaitMinutes = Math.max(0, numberOrNull(values.paidDropoffWaitMinutes) ?? 0);
   const totalPaidWaitMinutes = paidPickupWaitMinutes + paidDropoffWaitMinutes;
 
   return {
@@ -4470,6 +4484,8 @@ function normalizeSavedLoad(load) {
     deadheadStartTime: rawLoad.deadheadStartTime || rawLoad.deadheadStart || '',
     deadheadEndTime: rawLoad.deadheadEndTime || rawLoad.deadheadEnd || '',
     deadheadMiles: numberOrNull(rawLoad.deadheadMiles) ?? 0,
+    paidPickupWaitMinutes: numberOrNull(rawLoad.paidPickupWaitMinutes) ?? 0,
+    paidDropoffWaitMinutes: numberOrNull(rawLoad.paidDropoffWaitMinutes) ?? 0,
     notes: rawLoad.notes || '',
     rejectReason: rawLoad.rejectReason || '',
     arrivedPickupTime: rawLoad.arrivedPickupTime || '',
@@ -4671,6 +4687,8 @@ function getPayPeriodEarningsSummary(dateValue) {
     totalPaidDropoffWaitMinutes: sum(records, 'paidDropoffWaitMinutes'),
     totalPaidWaitMinutes: sum(records, 'totalPaidWaitMinutes'),
     totalWaitPay: sum(records, 'waitPay'),
+    officeTimeMinutes: sum(dailySummaries, 'officeTimeMinutes'),
+    officeTimePay: sum(dailySummaries, 'officeTimePay'),
     perDiemPay: sum(dailySummaries, 'perDiemPay'),
     sleeperBerthPay: sum(dailySummaries, 'sleeperBerthPay'),
     trainerPay: sum(dailySummaries, 'trainerPay'),
@@ -4825,7 +4843,6 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const totalEstimatedEntryPay = sum(records, 'estimatedEntryPay');
   const totalLoadedMiles = sum(records, 'loadedMiles');
   const totalReRoutedMiles = sum(records, 'reRoutedMiles');
-  const perDiemPay = addOn.perDiem ? getPayRate('perDiemPay') : 0;
   const sleeperBerthPay = addOn.sleeperBerth ? getPayRate('sleeperBerthPay') : 0;
   const trainerPay = addOn.trainerPay ? getPayRate('trainerPay') : 0;
   const paidTime = paidTimeRecords.filter((item) => item.workDate === date);
@@ -4844,12 +4861,16 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const truckWashMinutes = paidMinutesByCategory('Truck Wash');
   const breakdownMinutes = paidMinutesByCategory('Breakdown');
   const officeTimeMinutes = paidMinutesByCategory('Office Time');
+  const isOfficeOnlyDay = officeTimeMinutes > 0 && records.length === 0;
+  const automaticPerDiem = records.length > 0 || officeTimeMinutes > 0;
+  const perDiemApplied = automaticPerDiem || addOn.perDiem;
+  const perDiemPay = perDiemApplied ? getPayRate('perDiemPay') : 0;
   const trainingTimeMinutes = paidMinutesByCategory('Training Time');
   const otherHourlyMinutes = paidMinutesByCategory('Other Hourly Work');
   const totalHourlyAdditionalMinutes = legacyDeadheadMinutes + truckWashMinutes + breakdownMinutes + officeTimeMinutes + trainingTimeMinutes + otherHourlyMinutes;
   const hourlyAdditionalPay = deadheadPay + truckWashPay + breakdownPay + officeTimePay + trainingTimePay + otherHourlyPay;
   const paidTimeOverlap = getPaidTimeOverlapReview(records, paidTime);
-  const exactDutyMinutes = durationBetween(addOn.shiftStartTime, addOn.shiftEndTime);
+  const exactDutyMinutes = isOfficeOnlyDay ? officeTimeMinutes : durationBetween(addOn.shiftStartTime, addOn.shiftEndTime);
   const timeline = normalizeDailyTimeline(records);
   const estimatedTrackedSpanMinutes = timeline.status === 'valid' ? timeline.spanMinutes : null;
   const usableDutyMinutes = isFiniteNumber(exactDutyMinutes) ? exactDutyMinutes : estimatedTrackedSpanMinutes;
@@ -4858,6 +4879,11 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const utilizationUsable = isFiniteNumber(activeLoadCycleMinutes) && exactDutyMinutes > 0 && activeLoadCycleMinutes <= exactDutyMinutes;
   const classificationUsable = isFiniteNumber(classifiedDutyMinutes) && exactDutyMinutes > 0 && classifiedDutyMinutes <= exactDutyMinutes;
   const goalResult = calculateDailyCompletedLoadPayGoal(records);
+  if (isOfficeOnlyDay) {
+    ['goalStatus', 'fairGoalStatus', 'excellentGoalStatus'].forEach((key) => { goalResult[key] = 'Not applicable — Office Day'; });
+    ['goalDifference', 'fairGoalDifference', 'excellentGoalDifference'].forEach((key) => { goalResult[key] = null; });
+    goalResult.eligibleDispatchedDay = false;
+  }
 
   return {
     date,
@@ -4881,7 +4907,8 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     totalPaidWaitMinutes,
     totalWaitPay,
     totalEstimatedEntryPay,
-    perDiemApplied: addOn.perDiem,
+    perDiemApplied,
+    automaticPerDiem,
     perDiemPay,
     sleeperBerthApplied: addOn.sleeperBerth,
     sleeperBerthPay,
@@ -4893,7 +4920,10 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     legacyDeadheadMinutes,
     truckWashMinutes, breakdownMinutes, officeTimeMinutes, trainingTimeMinutes, otherHourlyMinutes, totalHourlyAdditionalMinutes,
     deadheadPay, truckWashPay, breakdownPay, officeTimePay, trainingTimePay, otherHourlyPay, vacationPay, hourlyAdditionalPay,
-    otherPaidTimePay: hourlyAdditionalPay,
+    otherPaidTimePay: hourlyAdditionalPay - officeTimePay,
+    isOfficeOnlyDay,
+    workdayStatus: isOfficeOnlyDay ? 'Office Day' : getWorkdayStatus(addOn),
+    dispatcher: isOfficeOnlyDay ? 'Not applicable' : (addOn.defaultDispatcher || 'Unknown'),
     paidTimeOverlapMinutes: paidTimeOverlap.overlapMinutes,
     paidTimeOverlapStatus: paidTimeOverlap.status,
     paidTimeOverlapWarnings: paidTimeOverlap.warnings,
@@ -5146,6 +5176,8 @@ function updateDashboardStats(summaryRecord) {
   setElementText(document.getElementById('header-month-load-count'), `Month: ${monthCompleted.length} completed`);
   setElementText(document.getElementById('header-pay-period-load-count'), `Pay period: ${payPeriodRecords.filter(isCompleted).length} completed`);
   setElementText(payPeriodSummary.totalEarnings, formatMoney(payPeriodRecord.totalEstimatedEarnings));
+  setElementText(payPeriodSummary.officeHours, formatDuration(payPeriodRecord.officeTimeMinutes));
+  setElementText(payPeriodSummary.officePay, formatMoney(payPeriodRecord.officeTimePay));
   setElementText(payPeriodSummary.completedCount, String(payPeriodRecord.completedLoadCount));
   setElementText(payPeriodSummary.rejectCount, String(payPeriodRecord.rejectCount));
   setElementText(payPeriodSummary.assignmentCount, String(payPeriodRecord.completedLoadCount + payPeriodRecord.rejectCount));
@@ -5194,9 +5226,9 @@ function updateDashboardStats(summaryRecord) {
   setElementText(dailyGoal.fairDifference, formatSpecificGoalDifference(summaryRecord.fairGoalStatus, summaryRecord.fairGoalDifference));
   setGoalResultClass(dailyGoal.card, summaryRecord.goalStatus, 'daily-goal-card');
   const workday = getDailyAddOn(selectedDate);
-  setElementText(workdayControls.status, getWorkdayStatus(workday));
+  setElementText(workdayControls.status, summaryRecord.workdayStatus);
   setElementText(workdayControls.date, selectedDate);
-  setElementText(workdayControls.dispatcher, workday.defaultDispatcher || 'Unknown');
+  setElementText(workdayControls.dispatcher, summaryRecord.dispatcher);
   setElementText(workdayControls.completedLoads, String(summaryRecord.completedLoadCount));
   setElementText(workdayControls.completedPay, formatMoney(summaryRecord.completedLoadPay));
   setElementText(workdayControls.totalEarnings, formatMoney(summaryRecord.totalEstimatedDailyEarnings));
@@ -5219,6 +5251,8 @@ function updateDailySummary() {
   setElementText(daily.todayHourlyPay, formatMoney(summaryRecord.hourlyAdditionalPay));
   setElementText(daily.todayVacationPay, formatMoney(summaryRecord.vacationPay));
   setElementText(daily.todayOtherPaidTime, formatMoney(summaryRecord.otherPaidTimePay));
+  setElementText(document.getElementById('today-office-hours'), formatDuration(summaryRecord.officeTimeMinutes));
+  setElementText(document.getElementById('today-office-pay'), formatMoney(summaryRecord.officeTimePay));
   setElementText(daily.todayWaitPay, formatMoney(summaryRecord.totalWaitPay));
   setElementText(daily.todayAddOns, formatMoney(summaryRecord.perDiemPay + summaryRecord.sleeperBerthPay + summaryRecord.trainerPay));
   setElementText(daily.todayDutyTime, formatMaybeDuration(summaryRecord.exactDutyMinutes));
@@ -6064,6 +6098,8 @@ function loadEntryForEdit(loadId) {
     }
   });
 
+  updateAddMoreVisibility(true);
+
   daily.date.value = load.loadDate || daily.date.value;
   applyDailyAddOnsToControls();
   renderSummary();
@@ -6402,8 +6438,29 @@ function handleFormInput(event) {
     handleLoadDateChange();
   }
 
+  updateAddMoreVisibility();
+
   renderSummary();
   scheduleDraftSave();
+}
+
+function updateAddMoreVisibility(forceFromValues = false) {
+  const deadheadToggle = document.getElementById('has-deadhead');
+  const waitToggle = document.getElementById('has-paid-wait');
+  const hasDeadhead = Number(fields.deadheadMiles?.value || 0) > 0 || Boolean(fields.deadheadStartTime?.value || fields.deadheadEndTime?.value);
+  const hasWait = Number(fields.paidPickupWaitMinutes?.value || 0) > 0 || Number(fields.paidDropoffWaitMinutes?.value || 0) > 0;
+  if (forceFromValues) {
+    if (deadheadToggle) deadheadToggle.checked = hasDeadhead;
+    if (waitToggle) waitToggle.checked = hasWait;
+  }
+  const showDeadhead = Boolean(deadheadToggle?.checked);
+  const showWait = Boolean(waitToggle?.checked);
+  const deadheadFields = document.getElementById('deadhead-fields');
+  const waitFields = document.getElementById('paid-wait-fields');
+  const addMore = document.getElementById('load-add-more');
+  if (deadheadFields) deadheadFields.hidden = !showDeadhead;
+  if (waitFields) waitFields.hidden = !showWait;
+  if (addMore && (showDeadhead || showWait)) addMore.open = true;
 }
 
 function toCsvValue(value) {
@@ -7298,13 +7355,16 @@ function buildAnalysisDays(records, startDate = '', endDate = '') {
     loads.map((load) => normalizeDispatcherName(load.dispatcher, loads)).filter(Boolean).forEach((name) => {
       if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
     });
-    const dispatcher = names.size === 0 ? 'Unknown' : (names.size === 1 ? [...names.values()][0] : 'Mixed Dispatchers');
+    const dispatcher = summary.isOfficeOnlyDay ? 'Not applicable' : (names.size === 0 ? 'Unknown' : (names.size === 1 ? [...names.values()][0] : 'Mixed Dispatchers'));
     const day = { ...summary, dispatcher, loads, missingDispatcherLoads: loads.filter((load) => !String(load.dispatcher || '').trim()).length };
     return { ...day, ...getDailyDispatchOutcome(day) };
   });
 }
 
 function getDailyDispatchOutcome(day) {
+  if (day?.isOfficeOnlyDay) {
+    return { dispatchOutcome: 'Office Day', dutyTimeCategory: 'Office Day', dispatchOutcomeExplanation: 'Office-only workday; completed-load goals and dispatcher evaluation do not apply.' };
+  }
   if (!isFiniteNumber(day?.exactDutyMinutes) || day.exactDutyMinutes <= 0) {
     return {
       dispatchOutcome: 'Insufficient Time Data',
@@ -7973,6 +8033,7 @@ function escapeHtml(value) {
 
 function getPaidTimeDefaultRate(category) {
   if (category === 'Vacation Time') return VACATION_DAILY_RATE;
+  if (category === 'Office Time') return 24;
   const map = { Deadhead: 'deadheadHourlyRate', 'Truck Wash': 'truckWashHourlyRate', Breakdown: 'breakdownHourlyRate', 'Other Hourly Work': 'otherHourlyRate' };
   return getPayRate(map[category] || 'otherHourlyRate');
 }
@@ -8029,6 +8090,15 @@ function renderPaidTimeRecords() {
 }
 
 function fillPaidTimeForm(record, duplicate = false) {
+  if (record.category === 'Office Time' && paidTimeControls.category) {
+    const options = Array.from(paidTimeControls.category.children || []);
+    if (!options.some((option) => option.value === 'Office Time')) {
+      const option = document.createElement('option');
+      option.value = 'Office Time';
+      option.textContent = 'Office Time (legacy)';
+      paidTimeControls.category.appendChild(option);
+    }
+  }
   const mapping = { date:'workDate', category:'category', custom:'customCategoryName', quantity:'quantity', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
   Object.entries(mapping).forEach(([control, key]) => {
     if (paidTimeControls[control]) paidTimeControls[control].value = record[key] ?? '';
@@ -8060,6 +8130,55 @@ function downloadPaidTimeCsv() {
 function syncPaidTimeToCloud(record) {
   if (!isCloudSignedIn()) return;
   queueCloudWrite(() => cloudSync.sdk.setDoc(cloudDocument('paidTime', toCloudDocumentId(record.id)), sanitizeForFirestore({ ...record, appVersion: APP_VERSION, dataSchemaVersion: DATA_SCHEMA_VERSION, cloudUpdatedAt: cloudSync.sdk.serverTimestamp() }), { merge: true }), 'Paid time could not be synced to Firebase yet.');
+}
+
+function renderOfficeDayCalculation() {
+  const minutes = durationBetween(officeDayControls.arrived?.value, officeDayControls.left?.value);
+  const officePay = isFiniteNumber(minutes) ? minutes / 60 * 24 : 0;
+  const perDiem = getPayRate('perDiemPay');
+  if (officeDayControls.rate) officeDayControls.rate.value = '24';
+  setElementText(officeDayControls.hours, formatDuration(minutes || 0));
+  setElementText(officeDayControls.pay, formatMoney(officePay));
+  setElementText(officeDayControls.perDiem, formatMoney(perDiem));
+  setElementText(officeDayControls.total, formatMoney(officePay + perDiem));
+}
+
+function openOfficeDayForm(date = daily.date?.value || todayLocal()) {
+  const existing = paidTimeRecords.find((item) => item.workDate === date && item.category === 'Office Time');
+  if (officeDayControls.date) officeDayControls.date.value = date;
+  if (officeDayControls.arrived) officeDayControls.arrived.value = existing?.startTime || '';
+  if (officeDayControls.left) officeDayControls.left.value = existing?.endTime || '';
+  if (officeDayControls.notes) officeDayControls.notes.value = existing?.notes || '';
+  if (officeDayControls.panel) officeDayControls.panel.hidden = false;
+  renderOfficeDayCalculation();
+}
+
+function saveOfficeDay(event) {
+  event?.preventDefault?.();
+  const workDate = officeDayControls.date?.value;
+  const startTime = officeDayControls.arrived?.value;
+  const endTime = officeDayControls.left?.value;
+  const durationMinutes = durationBetween(startTime, endTime);
+  if (!workDate || !startTime || !endTime || !isFiniteNumber(durationMinutes) || durationMinutes <= 0) {
+    if (officeDayControls.error) { officeDayControls.error.textContent = 'Enter a work date and valid office arrival and departure times.'; officeDayControls.error.className = 'validation-summary show'; }
+    return;
+  }
+  const previous = paidTimeRecords.find((item) => item.workDate === workDate && item.category === 'Office Time');
+  const record = normalizePaidTimeRecord({
+    ...previous,
+    workDate, category: 'Office Time', startTime, endTime, hourlyRate: 24,
+    notes: officeDayControls.notes?.value || '',
+    updatedAt: new Date().toISOString()
+  });
+  paidTimeRecords = [record, ...paidTimeRecords.filter((item) => item.id !== record.id)];
+  storeJson(PAID_TIME_STORAGE_KEY, paidTimeRecords, 'paid-time records');
+  if (!isCloudSignedIn()) markLocalChangesPending('Office Day saved locally. Sign in to sync it to Firebase.');
+  syncPaidTimeToCloud(record);
+  refreshAllDailyEarningsRecords();
+  daily.date.value = workDate;
+  updateDailySummary();
+  renderPaidTimeRecords();
+  if (officeDayControls.panel) officeDayControls.panel.hidden = true;
 }
 
 function savePaidTime(event) {
@@ -8171,6 +8290,12 @@ function initializeAnalysisInputs() {
 
 form?.addEventListener('submit', saveLoad);
 paidTimeControls.form?.addEventListener('submit', savePaidTime);
+officeDayControls.form?.addEventListener('submit', saveOfficeDay);
+officeDayControls.form?.addEventListener('input', renderOfficeDayCalculation);
+document.getElementById('show-office-day-button')?.addEventListener('click', () => openOfficeDayForm());
+document.getElementById('cancel-office-day-button')?.addEventListener('click', () => { if (officeDayControls.panel) officeDayControls.panel.hidden = true; });
+document.getElementById('has-deadhead')?.addEventListener('change', () => updateAddMoreVisibility());
+document.getElementById('has-paid-wait')?.addEventListener('change', () => updateAddMoreVisibility());
 paidTimeControls.form?.addEventListener('input', renderPaidTimeCalculation);
 paidTimeControls.category?.addEventListener('change', () => { updatePaidTimeCategoryControls(); renderPaidTimeCalculation(); });
 document.getElementById('show-paid-time-button')?.addEventListener('click', () => {

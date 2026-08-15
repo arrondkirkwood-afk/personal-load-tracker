@@ -248,25 +248,27 @@ function assertWaitMinutes(name, overrides, expected) {
 }
 
 assertWaitMinutes(
-  'loading 1 hour 30 minutes and offloading under 1 hour',
+  'stop timestamps never create paid wait',
   {
     arrivedPickupTime: '10:00',
     loadedTime: '11:30',
     arrivedDropoffTime: '14:00',
     completedTime: '14:45'
   },
-  { pickup: 30, dropoff: 0, total: 30 }
+  { pickup: 0, dropoff: 0, total: 0 }
 );
 
 assertWaitMinutes(
-  'offloading 2 hours 15 minutes',
+  'manual wait values are used exactly',
   {
     arrivedPickupTime: '12:00',
     loadedTime: '12:30',
     arrivedDropoffTime: '15:00',
-    completedTime: '17:15'
+    completedTime: '17:15',
+    paidPickupWaitMinutes: 15,
+    paidDropoffWaitMinutes: 75
   },
-  { pickup: 0, dropoff: 75, total: 75 }
+  { pickup: 15, dropoff: 75, total: 90 }
 );
 
 assertWaitMinutes(
@@ -286,6 +288,7 @@ assert.strictEqual(derived({
   arrivedDropoffTime: '20:30',
   completedTime: '21:00'
 }).totalPaidWaitMinutes, 0, 'driving time is not counted as wait time');
+assert.strictEqual(derived({ paidPickupWaitMinutes: null, paidDropoffWaitMinutes: null }).waitPay, 0, 'blank manual wait fields add zero wait pay');
 
 const weightCheck = derived({
   grossBarrels: 100,
@@ -808,6 +811,42 @@ context.savePaidTime({ preventDefault() {} });
 const vacationRows = JSON.parse(storage.get('personalOilfieldLoadTracker.paidTime')).filter((item) => item.workDate === '2026-09-04' && item.category === 'Vacation Time');
 assert.strictEqual(vacationRows.length, 1, 'a second vacation entry on the same date updates instead of duplicates');
 assert.strictEqual(vacationRows[0].id, vacationId, 'vacation update retains the original record ID');
+
+setField('office-day-date', '2026-09-08');
+setField('office-day-arrived', '08:00');
+setField('office-day-left', '16:00');
+setField('office-day-notes', 'Office support');
+context.saveOfficeDay({ preventDefault() {} });
+let officeRows = JSON.parse(storage.get('personalOilfieldLoadTracker.paidTime')).filter((item) => item.workDate === '2026-09-08' && item.category === 'Office Time');
+assert.strictEqual(officeRows.length, 1, 'Office Day saves through existing paid-time storage');
+assert.strictEqual(officeRows[0].durationMinutes, 480, 'Office Day calculates eight office hours');
+assert.strictEqual(officeRows[0].estimatedPay, 192, 'Office Day pays $24 per hour');
+const officeId = officeRows[0].id;
+let officeSummary = context.getDailyEarningsSummary('2026-09-08');
+assert.strictEqual(officeSummary.perDiemPay, context.getPayRate('perDiemPay'), 'Office Day receives automatic per diem once');
+assert.strictEqual(officeSummary.totalEstimatedDailyEarnings, 192 + context.getPayRate('perDiemPay'), 'Office pay and per diem are combined once');
+assert.strictEqual(officeSummary.exactDutyMinutes, 480, 'office-only duty time uses arrival and departure');
+assert.strictEqual(officeSummary.effectiveHourlyEarnings, (192 + context.getPayRate('perDiemPay')) / 8, 'office-only effective hourly earnings use office duty hours');
+assert.strictEqual(officeSummary.workdayStatus, 'Office Day', 'office-only workday status is Office Day');
+assert.strictEqual(officeSummary.excellentGoalStatus, 'Not applicable — Office Day', 'office-only day is excluded from completed-load goals');
+assert.strictEqual(context.getDailyDispatchOutcome(officeSummary).dispatchOutcome, 'Office Day', 'office-only dispatch outcome is Office Day');
+setField('office-day-arrived', '09:00');
+setField('office-day-left', '17:00');
+context.saveOfficeDay({ preventDefault() {} });
+officeRows = JSON.parse(storage.get('personalOilfieldLoadTracker.paidTime')).filter((item) => item.workDate === '2026-09-08' && item.category === 'Office Time');
+assert.strictEqual(officeRows.length, 1, 'saving Office Day again updates rather than duplicates');
+assert.strictEqual(officeRows[0].id, officeId, 'Office Day update preserves its record ID');
+
+saveLoadRecord({ 'load-date': '2026-09-09', 'load-number': '1', 'ticket-number': 'AUTO-PER-DIEM', 'bol-number': 'AUTO-PER-DIEM', 'loaded-miles': '10' });
+const loadDaySummary = context.getDailyEarningsSummary('2026-09-09');
+assert.strictEqual(loadDaySummary.perDiemPay, context.getPayRate('perDiemPay'), 'load days receive automatic per diem');
+assert.strictEqual(loadDaySummary.perDiemPay, context.getPayRate('perDiemPay'), 'per diem is counted only once per work date');
+
+const officePeriod = context.getPayPeriodEarningsSummary('2026-09-08');
+assert.ok(officePeriod.officeTimeMinutes >= 480, 'pay-period summary totals office hours');
+assert.ok(officePeriod.officeTimePay >= 192, 'pay-period summary totals office pay');
+assert.ok(officePeriod.perDiemPay >= context.getPayRate('perDiemPay'), 'pay-period summary totals per diem');
+assert.ok(officePeriod.totalEstimatedEarnings >= 192 + context.getPayRate('perDiemPay'), 'pay-period summary totals all earnings');
 const paidOverlap = context.getPaidTimeOverlapReview(
   [analysisLoad({ id: 'overlap-load', arrivedPickupTime: '14:00', completedTime: '16:00' })],
   [context.normalizePaidTimeRecord({ id: 'overlap-paid', category: 'Deadhead', startTime: '13:30', endTime: '15:00', hourlyRate: 24 })]
@@ -827,10 +866,13 @@ assert.ok(script.includes("const PAID_TIME_STORAGE_KEY = 'personalOilfieldLoadTr
 assert.ok(script.includes("cloudDocument('paidTime'"), 'paid time uses dedicated Firebase documents');
 assert.ok(script.includes("getPendingDeletes().paidTime") && script.includes("clearPendingDelete('paidTime'"), 'paid-time deletion tombstones are retried after reconnection');
 assert.ok(script.includes("'Deadhead pay'") && script.includes("'Total hourly additional pay'"), 'daily and analysis exports include paid-time earnings');
-assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Add Paid Time'), 'new app identity and paid-time workflow are visible');
+assert.ok(html.includes('Oilfield Load &amp; Workday Tracker') && html.includes('Other Paid Time'), 'new app identity and paid-time workflow are visible');
 assert.ok(html.includes('<option>Vacation Time</option>'), 'Paid Time includes Vacation Time');
 assert.ok(!html.includes('<option>Deadhead</option>') && html.includes('<option>Truck Wash</option>') && html.includes('<option>Breakdown</option>'), 'Deadhead is no longer offered as a new general paid-time category');
 assert.ok(script.includes("category === 'Deadhead'"), 'legacy Deadhead paid-time records remain readable');
+assert.ok(!html.includes('<option>Office Time</option>') && script.includes("record.category === 'Office Time'"), 'Office Time is removed from new generic entries while legacy records remain editable');
+assert.ok(html.includes('id="show-office-day-button"') && html.includes('id="office-day-panel" hidden'), 'Office Day is dedicated and hidden until requested');
+assert.ok(html.includes('id="load-add-more"') && html.includes('Were there deadhead miles?') && html.includes('Was there paid wait time?'), 'Add More gates deadhead and paid-wait controls');
 assert.ok(html.includes('Total Daily Earnings') && html.includes('Effective hourly earnings'), 'dashboard exposes unified daily earnings and hourly results');
 assert.ok(!html.match(/Favorite Route/i), 'Favorite Route controls are removed from the interface');
 assert.ok(!html.match(/>[^<]*Assignments?[^<]*</i), 'user-facing interface uses Loads instead of Assignments');
@@ -862,6 +904,7 @@ assert.ok(script.includes("const SETTINGS_STORAGE_KEY = 'personalOilfieldLoadTra
 assert.ok(script.includes("const FAVORITE_ROUTES_STORAGE_KEY = 'personalOilfieldLoadTracker.favoriteRoutes'"), 'favorite routes storage key is preserved');
 assert.ok(script.includes("const DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.currentDraft'"), 'draft storage key is preserved');
 assert.ok(script.includes('const DATA_SCHEMA_VERSION = 2'), 'data schema version remains 2');
+assert.ok(script.includes("cloudDocument('paidTime'"), 'Office Day continues to use the existing Firebase paid-time path');
 assert.ok(script.includes('pendingDeletes'), 'metadata stores pending cloud deletions');
 assert.ok(!script.includes('restoreLocalSafetySnapshot'), 'normal sign-out cannot call the old startup rollback helper');
 assert.ok(script.includes('processPendingDeletes({ countAsWrite: false, throwOnFailure: true })'), 'manual sync processes pending deletion tombstones');
@@ -869,7 +912,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.14.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.15.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -878,7 +921,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.14.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.15.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -890,7 +933,7 @@ assert.ok(serviceWorker.includes("cacheName.startsWith(CACHE_PREFIX) && cacheNam
 assert.ok(serviceWorker.includes("'./export-cleanup.js'") && serviceWorker.includes("'./export-integration.js'"), 'clean export scripts remain available offline');
 assert.ok(serviceWorker.includes("'./professional-export.js'") && serviceWorker.includes("'./vendor/exceljs.min.js'"), 'professional Excel export engine remains available offline');
 assert.ok(html.includes('id="download-log-excel-button"') && html.includes('id="download-earnings-excel-button"'), 'professional Excel export buttons remain available');
-assert.ok(html.includes('vendor/exceljs.min.js?v=1.14.0'), 'versioned Excel workbook library loads before the app');
+assert.ok(html.includes('vendor/exceljs.min.js?v=1.15.0'), 'versioned Excel workbook library loads before the app');
 assert.ok(script.includes("setUpdateStatus('You are using the latest version.')"), 'no-update check reports the latest-version result');
 assert.ok(!script.includes("setUpdateStatus('You are using the latest version. If update does not appear, close and reopen the app.')"), 'no-update check no longer uses the old reload path');
 assert.ok(script.includes('preserveActiveViewForReload();'), 'a real service-worker update preserves the active view before reload');

@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Load &amp; Workday">
-  <link rel="manifest" href="manifest.json?v=1.14.0">
+  <link rel="manifest" href="manifest.json?v=1.15.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.14.0">
+  <link rel="stylesheet" href="style.css?v=1.15.0">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.14.0</strong></span>
+          <span>Version <strong id="app-version">1.15.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -61,6 +61,7 @@
           </div>
           <div class="hero-actions">
             <button class="button primary" type="button" data-view-target="new-load">New Load</button>
+            <button class="button secondary" id="show-office-day-button" type="button">Office Day</button>
             <button class="button secondary" id="continue-draft-button" type="button" hidden>Continue Current Load</button>
           </div>
         </div>
@@ -115,6 +116,8 @@
               <article><span>Hourly additional pay</span><strong id="today-hourly-pay">$0.00</strong></article>
               <article><span>Vacation pay</span><strong id="today-vacation-pay">$0.00</strong></article>
               <article><span>Other paid time</span><strong id="today-other-paid-time">$0.00</strong></article>
+              <article><span>Office hours</span><strong id="today-office-hours">0 hr 0 min</strong></article>
+              <article><span>Office pay</span><strong id="today-office-pay">$0.00</strong></article>
               <article><span>Wait pay</span><strong id="today-wait-pay">$0.00</strong></article>
               <article><span>Daily add-ons</span><strong id="today-add-ons">$0.00</strong></article>
               <article><span>Gross barrels</span><strong id="daily-gross-barrels">0.00 bbl</strong></article>
@@ -158,6 +161,8 @@
               <article><span>Rejects</span><strong id="pay-period-reject-count">0</strong></article>
               <article><span>Total loads</span><strong id="pay-period-assignment-count">0</strong></article>
               <article><span>Total earnings</span><strong id="pay-period-total-earnings">$0.00</strong></article>
+              <article><span>Office hours</span><strong id="pay-period-office-hours">0 hr 0 min</strong></article>
+              <article><span>Office pay</span><strong id="pay-period-office-pay">$0.00</strong></article>
               <article><span>Trainer</span><strong id="pay-period-trainer-pay">$0.00</strong></article>
               <article><span>Per diem</span><strong id="pay-period-per-diem-pay">$0.00</strong></article>
               <article><span>Sleeper</span><strong id="pay-period-sleeper-pay">$0.00</strong></article>
@@ -198,12 +203,32 @@
             <article class="empty-card">No recent loads yet.</article>
           </div>
         </section>
+        <section class="panel paid-time-panel" id="office-day-panel" hidden aria-labelledby="office-day-title">
+          <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="office-day-title">Office Day</h2></div></div>
+          <form id="office-day-form">
+            <div class="field-grid two">
+              <label for="office-day-date"><span>Work date</span><input id="office-day-date" type="date" required></label>
+              <label for="office-day-arrived"><span>Arrived at office</span><input id="office-day-arrived" type="time" required></label>
+              <label for="office-day-left"><span>Left office</span><input id="office-day-left" type="time" required></label>
+              <label for="office-day-rate"><span>Hourly rate</span><input id="office-day-rate" type="number" value="24" readonly></label>
+              <label class="full-width" for="office-day-notes"><span>Notes</span><textarea id="office-day-notes"></textarea></label>
+            </div>
+            <div class="calculated-strip">
+              <article><span>Office hours</span><strong id="office-day-hours">0 hr 0 min</strong></article>
+              <article><span>Office pay</span><strong id="office-day-pay">$0.00</strong></article>
+              <article><span>Automatic per diem</span><strong id="office-day-per-diem">$50.00</strong></article>
+              <article><span>Office-day total</span><strong id="office-day-total">$50.00</strong></article>
+            </div>
+            <p class="validation-summary" id="office-day-error" role="alert"></p>
+            <div class="button-row"><button class="button primary" type="submit">Save Office Day</button><button class="button ghost" id="cancel-office-day-button" type="button">Cancel</button></div>
+          </form>
+        </section>
         <details class="panel paid-time-panel" id="paid-time-entry-panel">
-          <summary><strong>Add Paid Time</strong></summary>
+          <summary><strong>Other Paid Time</strong></summary>
           <form id="paid-time-form">
             <div class="field-grid">
               <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
-              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Truck Wash</option><option>Breakdown</option><option>Office Time</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
+              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Truck Wash</option><option>Breakdown</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
               <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
               <label for="paid-time-quantity"><span id="paid-time-quantity-label">Hours</span><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly></label>
               <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
@@ -322,6 +347,13 @@
                   <span>Loading end time</span>
                   <input id="loaded-time" type="time">
                 </label>
+                <details class="optional-section full-width" id="load-add-more">
+                  <summary><strong>Add More</strong></summary>
+                  <div class="toggle-grid compact">
+                    <label class="toggle-field" for="has-deadhead"><input id="has-deadhead" type="checkbox"><span>Were there deadhead miles?</span></label>
+                    <label class="toggle-field" for="has-paid-wait"><input id="has-paid-wait" type="checkbox"><span>Was there paid wait time?</span></label>
+                  </div>
+                  <div class="field-grid" id="deadhead-fields" hidden>
                 <label for="deadhead-start-time">
                   <span>Deadhead start time</span>
                   <input id="deadhead-start-time" type="time">
@@ -339,6 +371,12 @@
                   <input id="deadhead-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="deadhead-miles-error">
                   <small id="deadhead-miles-error" class="field-error"></small>
                 </label>
+                  </div>
+                  <div class="field-grid two" id="paid-wait-fields" hidden>
+                    <label for="paid-pickup-wait-minutes"><span>Paid loading wait minutes</span><input id="paid-pickup-wait-minutes" type="number" inputmode="numeric" min="0" step="1"></label>
+                    <label for="paid-dropoff-wait-minutes"><span>Paid offloading wait minutes</span><input id="paid-dropoff-wait-minutes" type="number" inputmode="numeric" min="0" step="1"></label>
+                  </div>
+                </details>
                 <label for="loaded-miles">
                   <span>Loaded miles</span>
                   <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
@@ -868,7 +906,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.14.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.15.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -996,10 +1034,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.14.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.15.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.14.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.15.0&updated=' + Date.now());
           });
       }
 
@@ -1035,7 +1073,7 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.14.0"></script>
-  <script src="script.js?v=1.14.0"></script>
+  <script src="vendor/exceljs.min.js?v=1.15.0"></script>
+  <script src="script.js?v=1.15.0"></script>
 </body>
 </html>
