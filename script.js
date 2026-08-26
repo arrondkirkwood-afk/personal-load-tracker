@@ -1,4 +1,4 @@
-const APP_VERSION = "1.15.1";
+const APP_VERSION = "1.16.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -151,6 +151,7 @@ const fieldIds = [
   'ticket-number',
   'bol-number',
   'lease-number',
+  'customer',
   'load-status',
   'dispatcher',
   'product-type',
@@ -1874,6 +1875,10 @@ function applyCloudStateToApp() {
   });
   const cloudPaidTime = normalizePaidTimeRecords(cloudSync.state.paidTime || []);
   const pendingDeletes = getPendingDeletes();
+  const weeksIslandLoadsNeedingPlains = cloudSync.state.loads.filter((load) => (
+    /weeks\s+island/i.test(String(load?.pickupLocation || ''))
+    && !String(load?.customer || load?.oilCompany || load?.loadAccount || '').trim()
+  ));
   const cloudLoads = filterTombstonedLoads(cloudSync.state.loads.map(normalizeSavedLoad));
   const localLoads = filterTombstonedLoads(localBeforeApply.loads);
   const localOnlyLoads = getLoadsMissingFromCloud(localLoads, cloudLoads);
@@ -1939,6 +1944,13 @@ function applyCloudStateToApp() {
 
   if (localOnlyLoads.length > 0 && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
     scheduleCloudBackfill(localOnlyLoads);
+  }
+
+  if (weeksIslandLoadsNeedingPlains.length > 0 && cloudSync.pendingWrites === 0 && !cloudSync.state.hasPendingWrites) {
+    weeksIslandLoadsNeedingPlains
+      .map((cloudLoad) => savedLoads.find((load) => load.id === cloudLoad.id))
+      .filter(Boolean)
+      .forEach((load) => syncLoadToCloud(load));
   }
 
   if (countPendingDeletes(pendingDeletes) > 0) {
@@ -4451,6 +4463,9 @@ function calculateDerived(values) {
 
 function normalizeSavedLoad(load) {
   const rawLoad = isPlainObject(load) ? load : {};
+  const pickupLocation = rawLoad.pickupLocation || '';
+  const suppliedCustomer = String(rawLoad.customer || rawLoad.oilCompany || rawLoad.loadAccount || '').trim();
+  const customer = suppliedCustomer || (/weeks\s+island/i.test(pickupLocation) ? 'Plains' : '');
   const normalized = {
     ...rawLoad,
     id: rawLoad.id || `${rawLoad.savedAt || Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -4466,10 +4481,11 @@ function normalizeSavedLoad(load) {
     ticketNumber: rawLoad.ticketNumber || '',
     bolNumber: rawLoad.bolNumber || '',
     leaseNumber: rawLoad.leaseNumber || rawLoad.lease || rawLoad.leaseId || '',
+    customer,
     loadStatus: rawLoad.loadStatus || COMPLETED_STATUS,
     dispatcher: String(rawLoad.dispatcher || '').trim(),
     productType: rawLoad.productType || '',
-    pickupLocation: rawLoad.pickupLocation || '',
+    pickupLocation,
     pickupState: normalizeState(rawLoad.pickupState),
     dropoffLocation: rawLoad.dropoffLocation || '',
     dropoffState: normalizeState(rawLoad.dropoffState),
@@ -5106,6 +5122,7 @@ function renderLoadReviewSummary(values, derived) {
     ['Ticket number', values.ticketNumber || '-'],
     ['Lease number', values.leaseNumber || '-'],
     ['Pickup', `${values.pickupLocation || 'Pickup'}${values.pickupState ? `, ${displayState(values.pickupState)}` : ''}`],
+    ['Oil company', values.customer || '-'],
     ['Gross barrels', formatBarrels(values.grossBarrels)],
     ['API gravity', isFiniteNumber(values.apiGravity) ? values.apiGravity.toFixed(1) : '-'],
     ['Temperature', isFiniteNumber(values.loadTemperature) ? `${values.loadTemperature.toFixed(1)} deg` : '-'],
@@ -5427,6 +5444,7 @@ function getSavedFilterRecords() {
       load.trailerNumber,
       load.pickupLocation,
       load.dropoffLocation,
+      load.customer,
       load.productType,
       load.notes
     ].some((value) => String(value || '').toLowerCase().includes(query)));
@@ -5552,6 +5570,7 @@ function renderSavedLoadCards(records) {
           ${detailItem('BOL number', load.bolNumber || '-')}
           ${detailItem('Jotform number', load.jotformConfirmationNumber || '-')}
           ${detailItem('Lease number', load.leaseNumber || '-')}
+          ${detailItem('Oil company', load.customer || '-')}
           ${detailItem('Dispatcher', load.dispatcher || 'Unknown')}
           ${detailItem('Pickup state', displayState(load.pickupState))}
           ${detailItem('Drop-off state', displayState(load.dropoffState))}
@@ -6030,6 +6049,7 @@ function startNextLoadFrom(previousRecord) {
     fields.pickupState.value = previousRecord.pickupState || '';
     fields.dropoffLocation.value = previousRecord.dropoffLocation || '';
     fields.dropoffState.value = previousRecord.dropoffState || '';
+    fields.customer.value = previousRecord.customer || '';
     fields.productType.value = previousRecord.productType || 'Crude Oil';
     fields.loadedMiles.value = isFiniteNumber(previousRecord.loadedMiles) ? previousRecord.loadedMiles : '';
   } else {
@@ -6232,6 +6252,7 @@ function buildLoadReportMarkup(load, dailySummary = null) {
     ['Ticket number', load.ticketNumber],
     ['BOL number', load.bolNumber],
     ['Lease number', load.leaseNumber],
+    ['Oil company', load.customer],
     ['Dispatcher', load.dispatcher || 'Unknown'],
     ['Pickup location', load.pickupLocation],
     ['Pickup state', displayState(load.pickupState)],
@@ -6503,6 +6524,7 @@ function downloadLoadLog() {
     'Pickup state',
     'Drop off location',
     'Drop-off state',
+    'Oil company',
     'State route group',
     'Product type',
     'Lease number',
@@ -6570,6 +6592,7 @@ function downloadLoadLog() {
       displayState(load.pickupState),
       load.dropoffLocation,
       displayState(load.dropoffState),
+      load.customer,
       getStateRoute(load),
       load.productType,
       load.leaseNumber,
@@ -7944,7 +7967,7 @@ function downloadDispatchAnalysis() {
   const baselineCheck = reconcileBaselineAnalysis(result, allDayRows);
   const filteredCheck = reconcileFilteredLoadAnalysis(loadResult, dispatcherRows);
   const generated = new Date().toISOString();
-  const headers = ['Section','Group','Metric','Value','Unit','Generated timestamp','Report Start','Report End','Active Filters','Date','Load number','Ticket','BOL','Jotform','Dispatcher','Pickup location','Pickup state','Drop-off location','Drop-off state','State route','Exact route','Status','Base pay','Wait pay','Load-entry earnings','Deadhead minutes','Deadhead miles','Pickup-site minutes','Travel minutes','Drop-off-site minutes','Cycle minutes'];
+  const headers = ['Section','Group','Metric','Value','Unit','Generated timestamp','Report Start','Report End','Active Filters','Date','Load number','Ticket','BOL','Jotform','Dispatcher','Pickup location','Pickup state','Drop-off location','Drop-off state','Oil company','State route','Exact route','Status','Base pay','Wait pay','Load-entry earnings','Deadhead minutes','Deadhead miles','Pickup-site minutes','Travel minutes','Drop-off-site minutes','Cycle minutes'];
   const metricRow = (section, group, metric, value, unit = '') => [section,group,metric,value,unit,generated,range.start,range.end,filterDescription];
   const metricRows = (section, values, group = '') => values.map(([metric, value, unit]) => metricRow(section, group, metric, value, unit));
   const loadSummaryMetrics = (row) => [
@@ -8011,7 +8034,7 @@ function downloadDispatchAnalysis() {
     ...(filtersActive ? metricRows('Filtered Data Completeness', completenessMetrics(records).map(([metric,value]) => [metric,value,'loads'])) : []),
     ...metricRows('Baseline Reconciliation', [['Status',baselineCheck.ok ? 'Baseline calculations reconciled.' : 'Analysis calculation needs review','']]),
     ...metricRows('Filtered Load Reconciliation', [['Status',filteredCheck.ok ? 'Filtered load calculations reconciled.' : 'Analysis calculation needs review','']]),
-    ...records.map((load) => ['Underlying Loads','','','', '',generated,range.start,range.end,filterDescription,load.loadDate,load.loadNumber,load.ticketNumber,load.bolNumber,load.jotformConfirmationNumber,normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown',load.pickupLocation,displayState(load.pickupState),load.dropoffLocation,displayState(load.dropoffState),getStateRoute(load),formatRoute(load),load.loadStatus,formatCsvNumber(load.estimatedPay),formatCsvNumber(load.waitPay),formatCsvNumber(load.estimatedEntryPay),formatCsvNumber(load.deadheadTravelMinutes),formatCsvNumber(load.deadheadMiles),formatCsvNumber(load.pickupTimeMinutes),formatCsvNumber(load.travelTimeMinutes),formatCsvNumber(load.dropoffTimeMinutes),formatCsvNumber(load.cycleTimeMinutes)])
+    ...records.map((load) => ['Underlying Loads','','','', '',generated,range.start,range.end,filterDescription,load.loadDate,load.loadNumber,load.ticketNumber,load.bolNumber,load.jotformConfirmationNumber,normalizeDispatcherName(load.dispatcher, rangeRecords) || 'Unknown',load.pickupLocation,displayState(load.pickupState),load.dropoffLocation,displayState(load.dropoffState),load.customer,getStateRoute(load),formatRoute(load),load.loadStatus,formatCsvNumber(load.estimatedPay),formatCsvNumber(load.waitPay),formatCsvNumber(load.estimatedEntryPay),formatCsvNumber(load.deadheadTravelMinutes),formatCsvNumber(load.deadheadMiles),formatCsvNumber(load.pickupTimeMinutes),formatCsvNumber(load.travelTimeMinutes),formatCsvNumber(load.dropoffTimeMinutes),formatCsvNumber(load.cycleTimeMinutes)])
   ];
   downloadCsv(`dispatch-earnings-analysis-${range.start}-${range.end}.csv`, headers, rows);
 }

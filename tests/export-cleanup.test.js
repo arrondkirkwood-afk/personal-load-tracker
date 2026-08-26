@@ -7,7 +7,8 @@ const {
   payPeriodLabel
 } = require('../export-cleanup.js');
 
-assert.strictEqual(LOAD_HEADERS.length, 27, 'load log stays intentionally narrow');
+assert.strictEqual(LOAD_HEADERS.length, 28, 'load log stays intentionally narrow');
+assert.ok(LOAD_HEADERS.includes('Oil company'), 'load log identifies Shell, Harvest, and Plains loads');
 assert.strictEqual(DAILY_HEADERS.length, 23, 'daily earnings log stays intentionally narrow');
 assert.ok(!LOAD_HEADERS.includes('Driver'), 'repeated driver field is removed from personal load log');
 assert.ok(!LOAD_HEADERS.includes('Total loaded miles'), 'redundant total-loaded-miles field is removed');
@@ -31,6 +32,7 @@ const duplicateOlder = {
   pickupState: 'LA',
   dropoffLocation: 'Station South',
   dropoffState: 'TX',
+  customer: 'Plains',
   grossBarrels: 188.44,
   loadedMiles: 84.5,
   estimatedPay: 122.29,

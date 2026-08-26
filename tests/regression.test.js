@@ -453,6 +453,8 @@ assert.ok(Array.isArray(backup.data.favoriteRoutes), 'backup safely preserves le
 const legacyLoad = context.normalizeSavedLoad({ id: 'legacy', loadDate: '2026-07-01', pickupLocation: 'Old Lease', dropoffLocation: 'Old Station' });
 assert.strictEqual(legacyLoad.dispatcher, '', 'existing records without dispatcher remain valid');
 assert.strictEqual(legacyLoad.pickupState, '', 'existing records without pickup state remain valid');
+assert.strictEqual(context.normalizeSavedLoad({ id: 'weeks', pickupLocation: 'Weeks Island Central 1-6, LA' }).customer, 'Plains', 'historical Weeks Island loads are assigned to Plains');
+assert.strictEqual(context.normalizeSavedLoad({ id: 'existing-company', pickupLocation: 'Weeks Island', customer: 'Shell' }).customer, 'Shell', 'migration does not overwrite an existing oil company');
 assert.strictEqual(legacyLoad.cycleTimeMinutes, null, 'missing times are not treated as zero');
 assert.doesNotThrow(() => context.parseBackupText(JSON.stringify({ loads: [{ id: 'old-backup', loadDate: '2026-06-01' }] })), 'older backups import without new fields');
 
@@ -912,7 +914,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.15.1'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.16.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -921,7 +923,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.15.1', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.16.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -933,7 +935,7 @@ assert.ok(serviceWorker.includes("cacheName.startsWith(CACHE_PREFIX) && cacheNam
 assert.ok(serviceWorker.includes("'./export-cleanup.js'") && serviceWorker.includes("'./export-integration.js'"), 'clean export scripts remain available offline');
 assert.ok(serviceWorker.includes("'./professional-export.js'") && serviceWorker.includes("'./vendor/exceljs.min.js'"), 'professional Excel export engine remains available offline');
 assert.ok(html.includes('id="download-log-excel-button"') && html.includes('id="download-earnings-excel-button"'), 'professional Excel export buttons remain available');
-assert.ok(html.includes('vendor/exceljs.min.js?v=1.15.1'), 'versioned Excel workbook library loads before the app');
+assert.ok(html.includes('vendor/exceljs.min.js?v=1.16.0'), 'versioned Excel workbook library loads before the app');
 assert.ok(script.includes("setUpdateStatus('You are using the latest version.')"), 'no-update check reports the latest-version result');
 assert.ok(!script.includes("setUpdateStatus('You are using the latest version. If update does not appear, close and reopen the app.')"), 'no-update check no longer uses the old reload path');
 assert.ok(script.includes('preserveActiveViewForReload();'), 'a real service-worker update preserves the active view before reload');
