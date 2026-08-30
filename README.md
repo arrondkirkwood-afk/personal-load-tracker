@@ -132,7 +132,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version: `1.16.0`, cache name `personal-oilfield-load-tracker-v1.16.0`.
+Current app version and cache version: `1.17.0`, cache name `personal-oilfield-load-tracker-v1.17.0`.
 
 To update the app:
 
@@ -167,3 +167,4 @@ GitHub is only needed when changing the app files, not for daily use.
 - Dispatch and Earnings Analysis keeps the dispatcher filter while removing the pickup-state, drop-off-state, state-route, and exact-route filters from the screen. The underlying saved fields remain compatible with existing records and backups.
 - Daily dispatch outcomes use completed-load base pay, the configured daily goal, and exact Start/End Workday times. Wait pay, paid time, and daily add-ons remain separate from completed-load productivity.
 - The analysis begins with goal, exact-workday, and dispatcher-result cards, followed by expandable daily results, dispatcher comparisons, and automatically normalized pickup-to-drop-off route performance.
+- The Earnings view includes an automatic visual dashboard for the selected report range. It charts completed-load pay against the Fair Goal, exact workday hours against the 14-hour review threshold, and highlights long days that also missed the goal. The embedded learning guide explains how to interpret each measure.
