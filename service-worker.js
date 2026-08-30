@@ -1,14 +1,16 @@
-const APP_VERSION = '1.17.0';
+const APP_VERSION = '1.18.0';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const REDESIGN_STYLES = [
   './redesign.css',
   './records-reports-redesign.css',
-  './settings-redesign.css'
+  './settings-redesign.css',
+  './workbook-builder.css'
 ];
 const EXPORT_SCRIPTS = [
   './export-cleanup.js',
   './professional-export.js',
+  './complete-workbook-export.js',
   './export-integration.js'
 ];
 const APP_FILES = [
@@ -16,15 +18,15 @@ const APP_FILES = [
   './index.html',
   './repair.html',
   './manifest.json',
-  './manifest.json?v=1.17.0',
+  './manifest.json?v=1.18.0',
   './style.css',
-  './style.css?v=1.17.0',
+  './style.css?v=1.18.0',
   ...REDESIGN_STYLES,
   './script.js',
-  './script.js?v=1.17.0',
+  './script.js?v=1.18.0',
   ...EXPORT_SCRIPTS,
   './vendor/exceljs.min.js',
-  './vendor/exceljs.min.js?v=1.17.0',
+  './vendor/exceljs.min.js?v=1.18.0',
   './vendor/EXCELJS-LICENSE.txt',
   './service-worker.js',
   './icons/icon.svg',

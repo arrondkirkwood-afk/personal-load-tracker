@@ -914,7 +914,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.17.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.18.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -923,7 +923,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.17.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.18.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -935,7 +935,7 @@ assert.ok(serviceWorker.includes("cacheName.startsWith(CACHE_PREFIX) && cacheNam
 assert.ok(serviceWorker.includes("'./export-cleanup.js'") && serviceWorker.includes("'./export-integration.js'"), 'clean export scripts remain available offline');
 assert.ok(serviceWorker.includes("'./professional-export.js'") && serviceWorker.includes("'./vendor/exceljs.min.js'"), 'professional Excel export engine remains available offline');
 assert.ok(html.includes('id="download-log-excel-button"') && html.includes('id="download-earnings-excel-button"'), 'professional Excel export buttons remain available');
-assert.ok(html.includes('vendor/exceljs.min.js?v=1.17.0'), 'versioned Excel workbook library loads before the app');
+assert.ok(html.includes('vendor/exceljs.min.js?v=1.18.0'), 'versioned Excel workbook library loads before the app');
 assert.ok(script.includes("setUpdateStatus('You are using the latest version.')"), 'no-update check reports the latest-version result');
 assert.ok(!script.includes("setUpdateStatus('You are using the latest version. If update does not appear, close and reopen the app.')"), 'no-update check no longer uses the old reload path');
 assert.ok(script.includes('preserveActiveViewForReload();'), 'a real service-worker update preserves the active view before reload');
@@ -943,7 +943,14 @@ assert.ok(html.includes('data-view-target="dashboard">Today</button>')
   && html.includes('data-view-target="new-load">Load</button>')
   && html.includes('data-view-target="records">History</button>')
   && html.includes('data-view-target="reports">Earnings</button>')
-  && html.includes('data-view-target="settings">More</button>'), 'navigation uses Today, Load, History, Earnings, and More');
+  && html.includes('data-view-target="workbook">Workbook</button>')
+  && html.includes('data-view-target="settings">More</button>'), 'navigation uses Today, Load, History, Earnings, Workbook, and More');
+
+assert.ok(html.includes('id="download-complete-workbook-button"')
+  && html.includes('Build a spreadsheet with visuals')
+  && html.includes('No CSV conversion'), 'Workbook page exposes the complete Excel report builder');
+assert.ok(serviceWorker.includes("'./complete-workbook-export.js'")
+  && serviceWorker.includes("'./workbook-builder.css'"), 'complete workbook files remain available offline');
 assert.ok(script.includes("globalThis.addEventListener?.('pageshow', resumeCloudSync)"), 'iOS foreground resume restarts stale Firebase listeners');
 assert.ok(script.includes("globalThis.document?.addEventListener?.('visibilitychange'"), 'standalone PWA visibility resume is handled');
 assert.ok(script.includes('cloudSync.sdk.enableNetwork?.(cloudSync.db)'), 'foreground recovery re-enables the Firestore network');

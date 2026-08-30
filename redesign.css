@@ -221,6 +221,7 @@
   .nav-item[data-view-target="new-load"]::after { content: "Load"; }
   .nav-item[data-view-target="records"]::after { content: "History"; }
   .nav-item[data-view-target="reports"]::after { content: "Earnings"; }
+  .nav-item[data-view-target="workbook"]::after { content: "Workbook"; }
   .nav-item[data-view-target="settings"]::after { content: "More"; }
 }
 

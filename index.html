@@ -8,10 +8,10 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.17.0">
+  <link rel="manifest" href="manifest.json?v=1.18.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.17.0">
+  <link rel="stylesheet" href="style.css?v=1.18.0">
 </head>
 <body>
   <main class="app">
@@ -22,7 +22,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.17.0</strong></span>
+          <span>Version <strong id="app-version">1.18.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -33,6 +33,7 @@
         <button class="nav-item" type="button" data-view-target="new-load">Load</button>
         <button class="nav-item" type="button" data-view-target="records">History</button>
         <button class="nav-item" type="button" data-view-target="reports">Earnings</button>
+        <button class="nav-item" type="button" data-view-target="workbook">Workbook</button>
         <button class="nav-item" type="button" data-view-target="settings">More</button>
       </nav>
 
@@ -803,6 +804,62 @@
         </section>
       </section>
 
+      <section class="app-view" id="workbook-view" data-view="workbook" aria-labelledby="workbook-title">
+        <section class="panel workbook-builder-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Complete Excel Report</p>
+              <h2 id="workbook-title">Build a spreadsheet with visuals</h2>
+            </div>
+            <span class="status-pill">No CSV conversion</span>
+          </div>
+          <p class="workbook-intro">Choose the period you want to study. The tracker will create one presentation-ready Excel workbook from the records already saved in this app.</p>
+          <div class="workbook-range-card">
+            <label for="workbook-range-mode"><span>Report range</span><select id="workbook-range-mode">
+              <option value="current-pay-period">Current pay period</option>
+              <option value="previous-pay-period">Previous pay period</option>
+              <option value="selected-date">Selected work date</option>
+              <option value="current-month">Current month</option>
+              <option value="previous-month">Previous month</option>
+              <option value="custom">Custom range</option>
+              <option value="overall">All saved records</option>
+            </select></label>
+            <label for="workbook-start-date"><span>Start date</span><input id="workbook-start-date" type="date"></label>
+            <label for="workbook-end-date"><span>End date</span><input id="workbook-end-date" type="date"></label>
+          </div>
+          <div class="workbook-preview" aria-live="polite">
+            <article><span>Dates included</span><strong id="workbook-range-label">-</strong></article>
+            <article><span>Daily records</span><strong id="workbook-day-count">0</strong></article>
+            <article><span>Load records</span><strong id="workbook-load-count">0</strong></article>
+          </div>
+          <section class="workbook-contents" aria-labelledby="workbook-contents-title">
+            <h3 id="workbook-contents-title">What your workbook includes</h3>
+            <div class="workbook-sheet-grid">
+              <article><strong>1. Dashboard</strong><span>Goal results, daily pay, hours, discrepancies and visual charts</span></article>
+              <article><strong>2. Daily Analysis</strong><span>One row per workday with goal variance and 14-hour flags</span></article>
+              <article><strong>3. Load Timing</strong><span>Loading, travel, unloading and full-cycle time for every load</span></article>
+              <article><strong>4. Source Data</strong><span>Clean daily and load records supporting the calculations</span></article>
+              <article><strong>5. How to Analyze</strong><span>Plain-English instructions for reading and checking the results</span></article>
+            </div>
+          </section>
+          <div class="workbook-download-card">
+            <button class="button primary" id="download-complete-workbook-button" type="button">Download Complete Excel Report</button>
+            <p id="complete-workbook-status" class="save-status" aria-live="polite"></p>
+          </div>
+          <details class="workbook-copy-guide">
+            <summary><strong>How to save and make a copy</strong></summary>
+            <ol>
+              <li>Download the workbook for the period you selected.</li>
+              <li>Open it in Microsoft Excel on your MacBook.</li>
+              <li>Select <strong>File → Save As</strong> and give it the pay-period dates.</li>
+              <li>Keep that copy unchanged as your permanent evidence for the period.</li>
+              <li>Return here and download a new workbook for the next period.</li>
+            </ol>
+          </details>
+          <p class="report-disclosure permanent-disclosure">This export creates a separate presentation copy. Downloading or editing the Excel file does not change the records in your Load Tracker.</p>
+        </section>
+      </section>
+
       <section class="app-view" id="settings-view" data-view="settings" aria-labelledby="settings-title">
         <section class="panel profile-panel" aria-labelledby="profile-title">
           <div class="section-heading">
@@ -915,7 +972,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.17.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.18.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1043,10 +1100,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.17.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.18.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.17.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.18.0&updated=' + Date.now());
           });
       }
 
@@ -1082,7 +1139,7 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.17.0"></script>
-  <script src="script.js?v=1.17.0"></script>
+  <script src="vendor/exceljs.min.js?v=1.18.0"></script>
+  <script src="script.js?v=1.18.0"></script>
 </body>
 </html>
