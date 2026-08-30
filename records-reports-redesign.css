@@ -152,6 +152,36 @@
   border-color: #dce5e8;
 }
 
+#reports-view .performance-dashboard { margin:16px 0; padding:16px; border:1px solid #dce5e8; border-radius:14px; background:#fff; box-shadow:0 8px 26px rgba(18,52,59,.06); }
+#reports-view .performance-dashboard-heading,#reports-view .chart-title { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#reports-view .performance-kpi-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px; margin:14px 0; }
+#reports-view .performance-kpi { min-height:108px; display:grid; align-content:center; gap:5px; padding:13px; border-left:4px solid #4f7e82; border-radius:10px; background:#f3f8f8; }
+#reports-view .performance-kpi.is-success { border-left-color:#2f855a; }
+#reports-view .performance-kpi.is-warning { border-left-color:#d69e2e; background:#fff9e8; }
+#reports-view .performance-kpi.is-danger { border-left-color:#c53030; background:#fff1f1; }
+#reports-view .performance-kpi span,#reports-view .performance-kpi small { color:#53676c; }
+#reports-view .performance-kpi strong { font-size:1.35rem; color:#12343b; }
+#reports-view .performance-chart-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+#reports-view .performance-chart { padding:14px; border:1px solid #e1e8ea; border-radius:11px; background:#f9fbfb; }
+#reports-view .chart-title { margin-bottom:12px; }
+#reports-view .chart-title span { color:#607277; font-size:.76rem; }
+#reports-view .legend-dot { display:inline-block; width:9px; height:9px; margin-right:4px; border-radius:2px; background:#d69e2e; }
+#reports-view .legend-dot.hours { background:#c53030; }
+#reports-view .dashboard-chart-row { display:grid; grid-template-columns:72px minmax(100px,1fr) 62px; gap:8px; align-items:center; min-height:29px; font-size:.78rem; }
+#reports-view .dashboard-chart-label { color:#53676c; }
+#reports-view .dashboard-chart-row strong { text-align:right; color:#12343b; }
+#reports-view .dashboard-chart-track { position:relative; height:12px; overflow:visible; border-radius:999px; background:#e4ecee; }
+#reports-view .dashboard-chart-bar { display:block; height:100%; border-radius:inherit; background:#4f7e82; }
+#reports-view .dashboard-chart-bar.is-success { background:#2f855a; }
+#reports-view .dashboard-chart-bar.is-warning { background:#d69e2e; }
+#reports-view .dashboard-chart-bar.is-danger { background:#c53030; }
+#reports-view .dashboard-chart-bar.is-neutral { background:#4f7e82; }
+#reports-view .dashboard-goal-marker,#reports-view .dashboard-hour-marker { position:absolute; top:-3px; width:2px; height:18px; background:#7b4f00; }
+#reports-view .dashboard-hour-marker { background:#8b1d1d; }
+#reports-view .dashboard-learning-guide { margin-top:13px; padding:12px 14px; border:1px solid #cfe0df; border-radius:10px; background:#eef7f6; }
+#reports-view .dashboard-learning-guide ol { margin:12px 0 0 20px; padding:0; }
+#reports-view .dashboard-learning-guide li { margin-bottom:8px; line-height:1.45; }
+
 #reports-view .earnings-review {
   margin-top: 14px;
   border: 1px solid #dce5e8;
@@ -187,6 +217,7 @@
   #reports-view .earnings-review .review-grid {
     grid-template-columns: repeat(2,minmax(0,1fr));
   }
+  #reports-view .performance-kpi-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -242,6 +273,8 @@
   #reports-view .earnings-review {
     padding: 13px;
   }
+  #reports-view .performance-chart-grid { grid-template-columns:1fr; }
+  #reports-view .performance-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 
 @media (max-width: 430px) {
@@ -250,4 +283,7 @@
   #reports-view .earnings-review .review-grid {
     grid-template-columns: 1fr;
   }
+  #reports-view .performance-kpi-grid { grid-template-columns:1fr; }
+  #reports-view .performance-dashboard { padding:12px; }
+  #reports-view .dashboard-chart-row { grid-template-columns:58px minmax(80px,1fr) 56px; gap:6px; font-size:.72rem; }
 }
