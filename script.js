@@ -1,4 +1,4 @@
-const APP_VERSION = "1.16.0";
+const APP_VERSION = "1.17.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -7720,6 +7720,88 @@ function renderReportSummary() {
   renderDispatchAnalysis(range.start, range.end);
 }
 
+function clampChartPercent(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function formatChartDate(value) {
+  const parts = String(value || '').split('-');
+  return parts.length === 3 ? `${parts[1]}/${parts[2]}` : String(value || '-');
+}
+
+function buildPerformanceDashboard(days) {
+  const eligibleDays = days.filter((day) => day.eligibleDispatchedDay);
+  const exactDays = eligibleDays.filter((day) => isFiniteNumber(day.exactDutyMinutes) && day.exactDutyMinutes > 0);
+  const goalMisses = eligibleDays.filter((day) => day.fairGoalStatus === 'Below goal');
+  const longDays = exactDays.filter((day) => day.exactDutyMinutes >= 840);
+  const poorOutcomeDays = exactDays.filter((day) => day.exactDutyMinutes >= 840 && day.fairGoalStatus === 'Below goal');
+  const totalCompletedPay = sum(eligibleDays, 'completedLoadPay');
+  const totalGoal = eligibleDays.reduce((total, day) => total + (isFiniteNumber(day.fairDayGoal) ? day.fairDayGoal : getFairDayGoal()), 0);
+  const goalVariance = totalCompletedPay - totalGoal;
+  const exactMinutes = sum(exactDays, 'exactDutyMinutes');
+  const exactCompletedPay = sum(exactDays, 'completedLoadPay');
+  const completedPayPerHour = exactMinutes > 0 ? exactCompletedPay / (exactMinutes / 60) : null;
+  const maxEarnings = Math.max(getFairDayGoal(), ...eligibleDays.map((day) => day.completedLoadPay || 0), 1);
+  const maxHours = Math.max(14, ...exactDays.map((day) => day.exactDutyMinutes / 60), 1);
+
+  const earningsRows = eligibleDays.map((day) => {
+    const goal = isFiniteNumber(day.fairDayGoal) ? day.fairDayGoal : getFairDayGoal();
+    const width = clampChartPercent(day.completedLoadPay / maxEarnings * 100);
+    const goalPosition = clampChartPercent(goal / maxEarnings * 100);
+    const missed = day.completedLoadPay < goal;
+    return `<div class="dashboard-chart-row">
+      <span class="dashboard-chart-label">${escapeHtml(formatChartDate(day.date))}</span>
+      <div class="dashboard-chart-track" aria-label="${escapeHtml(`${day.date}: ${formatMoney(day.completedLoadPay)} against ${formatMoney(goal)} goal`)}">
+        <span class="dashboard-chart-bar ${missed ? 'is-warning' : 'is-success'}" style="width:${width.toFixed(1)}%"></span>
+        <span class="dashboard-goal-marker" style="left:${goalPosition.toFixed(1)}%" title="Fair Goal ${escapeHtml(formatMoney(goal))}"></span>
+      </div>
+      <strong>${escapeHtml(formatMoney(day.completedLoadPay))}</strong>
+    </div>`;
+  }).join('');
+
+  const hoursRows = exactDays.map((day) => {
+    const hours = day.exactDutyMinutes / 60;
+    const width = clampChartPercent(hours / maxHours * 100);
+    const thresholdPosition = clampChartPercent(14 / maxHours * 100);
+    return `<div class="dashboard-chart-row">
+      <span class="dashboard-chart-label">${escapeHtml(formatChartDate(day.date))}</span>
+      <div class="dashboard-chart-track" aria-label="${escapeHtml(`${day.date}: ${hours.toFixed(1)} duty hours`)}">
+        <span class="dashboard-chart-bar ${hours >= 14 ? 'is-danger' : 'is-neutral'}" style="width:${width.toFixed(1)}%"></span>
+        <span class="dashboard-hour-marker" style="left:${thresholdPosition.toFixed(1)}%" title="14-hour review threshold"></span>
+      </div>
+      <strong>${hours.toFixed(1)}h</strong>
+    </div>`;
+  }).join('');
+
+  return `<section class="performance-dashboard" aria-labelledby="performance-dashboard-title">
+    <div class="performance-dashboard-heading">
+      <div><p class="section-kicker">Visual Dashboard</p><h3 id="performance-dashboard-title">Earnings and workday outcomes</h3></div>
+      <span class="status-pill">${eligibleDays.length} dispatched day${eligibleDays.length === 1 ? '' : 's'}</span>
+    </div>
+    <div class="performance-kpi-grid">
+      <article class="performance-kpi ${goalVariance < 0 ? 'is-warning' : 'is-success'}"><span>Fair Goal variance</span><strong>${goalVariance >= 0 ? '+' : '-'}${formatMoney(Math.abs(goalVariance))}</strong><small>${goalVariance >= 0 ? 'Above' : 'Below'} combined Fair Goals</small></article>
+      <article class="performance-kpi ${goalMisses.length ? 'is-warning' : 'is-success'}"><span>Below Fair Goal</span><strong>${goalMisses.length}</strong><small>${eligibleDays.length ? formatPercentValue(goalMisses.length / eligibleDays.length * 100) : 'Not available'} of dispatched days</small></article>
+      <article class="performance-kpi ${longDays.length ? 'is-danger' : 'is-success'}"><span>14-hour reviews</span><strong>${longDays.length}</strong><small>Exact-time days at or above 14h</small></article>
+      <article class="performance-kpi ${poorOutcomeDays.length ? 'is-danger' : ''}"><span>Long + below goal</span><strong>${poorOutcomeDays.length}</strong><small>Strongest discrepancy indicator</small></article>
+      <article class="performance-kpi"><span>Completed pay/hour</span><strong>${formatMaybeMoney(completedPayPerHour)}</strong><small>Exact-time dispatched days</small></article>
+    </div>
+    <div class="performance-chart-grid">
+      <article class="performance-chart"><div class="chart-title"><h4>Completed-load pay vs Fair Goal</h4><span><i class="legend-dot goal"></i> Goal marker</span></div>${earningsRows || '<p class="helper-text">No eligible dispatched days in this range.</p>'}</article>
+      <article class="performance-chart"><div class="chart-title"><h4>Exact workday hours</h4><span><i class="legend-dot hours"></i> 14-hour marker</span></div>${hoursRows || '<p class="helper-text">Enter Start Workday and End Workday to create this chart.</p>'}</article>
+    </div>
+    <details class="dashboard-learning-guide"><summary><strong>Learn to read this dashboard</strong></summary>
+      <ol>
+        <li><strong>Start with Fair Goal variance.</strong> A negative number shows the combined shortage from dispatched workdays in this range.</li>
+        <li><strong>Compare the yellow bars with the goal marker.</strong> The distance between them is the daily earnings shortage.</li>
+        <li><strong>Check 14-hour reviews.</strong> A long day is not automatically unproductive, but a long day below goal deserves review.</li>
+        <li><strong>Use completed pay per hour.</strong> This shows how much load pay the assignments produced for each exact duty hour.</li>
+        <li><strong>Open Daily Dispatch Results below.</strong> Confirm the dates and underlying records before drawing a conclusion.</li>
+      </ol>
+      <p class="helper-text">Practice: select one pay period, identify the worst discrepancy day, then open that date and determine whether cycle time, waiting, non-load time, or the assigned load mix explains it.</p>
+    </details>
+  </section>`;
+}
+
 function setFilterOptions(select, values) {
   if (!select) return;
   const current = select.value;
@@ -7793,6 +7875,7 @@ function renderDispatchAnalysis(startDate, endDate) {
   reportControls.analysisContent.innerHTML = `
     <div class="readiness-banner"><strong>${escapeHtml(readiness.label)}</strong><p>${escapeHtml(readiness.detail)}</p></div>
     ${analysisTopCards(result)}
+    ${buildPerformanceDashboard(filters.dispatcher ? result.days.filter((day) => day.dispatcher === filters.dispatcher) : result.days)}
     <details class="analysis-section-card" open><summary><strong>Performance Insights</strong></summary><ul class="insight-list">${getPerformanceInsights(result).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></details>
     <p class="report-disclosure permanent-disclosure">The 14-hour result is a personal review indicator only. This tracker is not an ELD and does not make a legal hours-of-service determination.</p>
     <h4>Overall Date-Range Baseline</h4><div class="review-grid analysis-summary">${overallMetrics.map(([label, value]) => reportMetric(label, String(value))).join('')}</div>
