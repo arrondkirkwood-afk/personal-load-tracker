@@ -132,7 +132,9 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version: `1.18.0`, cache name `personal-oilfield-load-tracker-v1.18.0`.
+Current app version and cache version: `1.19.0`, cache name `personal-oilfield-load-tracker-v1.19.0`.
+
+The Reports view includes a Timesheet Generator for the company 1st-15th and 16th-month-end pay periods. It reads existing loads, workday summaries, paid wait, deadhead, and paid-time records; offers report-only corrections in a preview; and downloads a clean US-letter PDF without modifying source records. The employee name and number default to Arrond Kirkwood and 0135 and can be changed under More.
 
 To update the app:
 

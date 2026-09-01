@@ -8,10 +8,11 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.18.0">
+  <link rel="manifest" href="manifest.json?v=1.19.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.18.0">
+  <link rel="stylesheet" href="style.css?v=1.19.0">
+  <link rel="stylesheet" href="timesheet.css?v=1.19.0">
 </head>
 <body>
   <main class="app">
@@ -22,7 +23,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.18.0</strong></span>
+          <span>Version <strong id="app-version">1.19.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -765,6 +766,27 @@
           </details>
         </section>
 
+        <section class="panel timesheet-generator" aria-labelledby="timesheet-title">
+          <div class="section-heading">
+            <div><p class="section-kicker">Company form</p><h2 id="timesheet-title">Timesheet Generator</h2></div>
+            <span class="status-pill">Report-only</span>
+          </div>
+          <p class="helper-text">Builds a clean employee hourly work schedule from saved loads, paid time, and workday times. Preview corrections affect only this PDF.</p>
+          <div class="report-controls">
+            <label for="timesheet-anchor-date"><span>Pay period containing</span><input id="timesheet-anchor-date" type="date"></label>
+            <label for="timesheet-period-start"><span>Beginning date</span><input id="timesheet-period-start" type="date" readonly></label>
+            <label for="timesheet-period-end"><span>Ending date</span><input id="timesheet-period-end" type="date" readonly></label>
+          </div>
+          <div class="button-row"><button class="button primary" id="preview-timesheet-button" type="button">Preview Timesheet</button></div>
+          <p id="timesheet-status" class="save-status" aria-live="polite"></p>
+          <section id="timesheet-preview" class="timesheet-preview" hidden aria-label="Timesheet preview">
+            <div id="timesheet-warning-summary" class="timesheet-warnings" role="alert"></div>
+            <div class="timesheet-preview-scroll"><table><thead><tr><th>Date</th><th>Ticket #</th><th>Lease</th><th>Job Performed</th><th>Station</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Total</th></tr></thead><tbody id="timesheet-preview-body"></tbody><tfoot><tr><th colspan="7">Hourly entries total</th><th id="timesheet-hours-total">0.00</th><th></th></tr></tfoot></table></div>
+            <p class="helper-text">Edit any preview cell as needed. These corrections are never saved to the source load or activity records.</p>
+            <div class="button-row"><button class="button primary" id="download-timesheet-button" type="button">Download PDF</button><button class="button ghost" id="reset-timesheet-preview-button" type="button">Reset Preview</button></div>
+          </section>
+        </section>
+
         <section class="panel earnings-review" aria-labelledby="earnings-review-title">
           <div class="section-heading compact">
             <div>
@@ -900,6 +922,15 @@
           </div>
           <div class="settings-grid">
             <div class="settings-card">
+              <h3>Timesheet Identity</h3>
+              <div class="field-grid">
+                <label for="settings-timesheet-name"><span>Employee name</span><input id="settings-timesheet-name" type="text" autocomplete="name"></label>
+                <label for="settings-timesheet-number"><span>Employee number</span><input id="settings-timesheet-number" type="text" inputmode="numeric"></label>
+              </div>
+              <button class="button primary" id="save-timesheet-settings-button" type="button">Save Timesheet Identity</button>
+              <p class="save-status" id="timesheet-settings-status" aria-live="polite"></p>
+            </div>
+            <div class="settings-card">
               <h3>Pay Rates</h3>
               <div class="field-grid pay-rate-grid">
                 <label for="settings-fair-day-goal"><span>Fair Day Goal</span><input id="settings-fair-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
@@ -972,7 +1003,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.18.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.19.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1100,10 +1131,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.18.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.19.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.18.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.19.0&updated=' + Date.now());
           });
       }
 
@@ -1139,7 +1170,8 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.18.0"></script>
-  <script src="script.js?v=1.18.0"></script>
+  <script src="vendor/exceljs.min.js?v=1.19.0"></script>
+  <script src="script.js?v=1.19.0"></script>
+  <script src="timesheet.js?v=1.19.0"></script>
 </body>
 </html>
