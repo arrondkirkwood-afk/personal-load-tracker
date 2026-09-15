@@ -3,9 +3,9 @@
 
   const DEFAULT_NAME = 'Arrond Kirkwood';
   const DEFAULT_NUMBER = '0135';
-  const COLUMNS = ['date', 'job', 'loads', 'perDiem', 'timeIn', 'timeOut', 'hours'];
-  const COLUMN_LABELS = ['Date', 'Work Description', 'Loads', 'Per Diem', 'Time In', 'Time Out', 'Hours'];
-  const COLUMN_WIDTHS = [58, 250, 48, 58, 52, 52, 48];
+  const COLUMNS = ['date', 'job', 'loads', 'rejects', 'perDiem', 'timeIn', 'timeOut', 'hours'];
+  const COLUMN_LABELS = ['Date', 'Work Description', 'Loads', 'Rejects', 'Per Diem', 'Time In', 'Time Out', 'Hours'];
+  const COLUMN_WIDTHS = [52, 220, 45, 45, 52, 48, 48, 56];
   let previewRows = [];
   let previewRange = null;
 
@@ -31,6 +31,10 @@
       number: clean(appSettings?.timesheetEmployeeNumber) || DEFAULT_NUMBER
     };
   }
+  function isReject(load) {
+    const status = clean(load?.loadStatus || load?.status || load?.load_status).toLowerCase();
+    return status === 'reject' || status === 'rejected';
+  }
   function rowWarnings(row) {
     const warnings = [];
     if (!row.date) warnings.push('date');
@@ -38,7 +42,7 @@
     return warnings;
   }
   function makeRow(values) {
-    const row = { loads: '', perDiem: '', timeIn: '', timeOut: '', hours: '', ...values };
+    const row = { loads: '', rejects: '', perDiem: '', timeIn: '', timeOut: '', hours: '', ...values };
     row.warnings = rowWarnings(row);
     return row;
   }
@@ -48,6 +52,13 @@
     const detail = clean(item.customCategoryName) || clean(item.customCategory) || clean(item.notes);
     if (!detail || detail.toLowerCase() === category.toLowerCase()) return category;
     return `${category} - ${detail}`;
+  }
+  function haulingDescription(completedCount, rejectCount, perDiem) {
+    const parts = [];
+    if (completedCount > 0) parts.push(`${completedCount} ${completedCount === 1 ? 'Load' : 'Loads'}`);
+    if (rejectCount > 0) parts.push(`${rejectCount} ${rejectCount === 1 ? 'Reject' : 'Rejects'}`);
+    if (perDiem) parts.push('Per Diem');
+    return parts.join(' / ') || 'Workday';
   }
   function rowRank(row) {
     if (row.kind === 'load') return 0;
@@ -65,16 +76,23 @@
     });
 
     [...byDate.keys()].sort().forEach((date) => {
-      const dayLoads = byDate.get(date);
-      const perDiem = dayLoads.length > 0 || paid.some((item) => item.workDate === date && item.category === 'Office Time');
+      const dayRecords = byDate.get(date);
+      const completedLoads = dayRecords.filter((load) => !isReject(load));
+      const rejectedLoads = dayRecords.filter((load) => isReject(load));
+      const completedCount = completedLoads.length;
+      const rejectCount = rejectedLoads.length;
+      const perDiem = dayRecords.length > 0 || paid.some((item) => item.workDate === date && item.category === 'Office Time');
+
       rows.push(makeRow({
         kind: 'load', hourly: false, workDate: date,
-        sourceId: dayLoads.map((load) => load.id).filter(Boolean).join(','),
-        date: shortDate(date), job: `${dayLoads.length} ${dayLoads.length === 1 ? 'Load' : 'Loads'}${perDiem ? ' / Per Diem' : ''}`,
-        loads: String(dayLoads.length), perDiem: perDiem ? 'Yes' : ''
+        sourceId: dayRecords.map((load) => load.id).filter(Boolean).join(','),
+        date: shortDate(date), job: haulingDescription(completedCount, rejectCount, perDiem),
+        loads: completedCount ? String(completedCount) : '',
+        rejects: rejectCount ? String(rejectCount) : '',
+        perDiem: perDiem ? 'Yes' : ''
       }));
 
-      dayLoads.forEach((load) => {
+      dayRecords.forEach((load) => {
         const paidWait = number(load.paidPickupWaitMinutes) + number(load.paidDropoffWaitMinutes);
         if (paidWait > 0) rows.push(makeRow({
           kind: 'wait', hourly: true, workDate: date, sourceId: load.id, date: shortDate(date),
@@ -94,10 +112,11 @@
         const category = clean(item.category) || 'Other Hourly Work';
         const isVacation = category === 'Vacation Time';
         const isHourly = !isVacation && number(item.durationMinutes) > 0;
-        const officePerDiem = category === 'Office Time';
+        const perDiemAlreadyShown = rows.some((row) => row.workDate === item.workDate && row.perDiem === 'Yes');
+        const officePerDiem = category === 'Office Time' && !perDiemAlreadyShown;
         rows.push(makeRow({
           kind: 'activity', hourly: isHourly, workDate: item.workDate, sourceId: item.id, date: shortDate(item.workDate),
-          job: activityDescription(item), loads: '', perDiem: officePerDiem ? 'Yes' : '',
+          job: activityDescription(item), loads: '', rejects: '', perDiem: officePerDiem ? 'Yes' : '',
           timeIn: isHourly ? clean(item.startTime) : '', timeOut: isHourly ? clean(item.endTime) : '',
           hours: isHourly ? hours(number(item.durationMinutes)) : ''
         }));
@@ -124,7 +143,18 @@
     const header = table.querySelector?.('thead tr');
     if (header) header.innerHTML = COLUMN_LABELS.map((label) => `<th>${escapeHtml(label)}</th>`).join('');
     const footer = table.querySelector?.('tfoot tr');
-    if (footer) footer.innerHTML = `<th colspan="6">Hourly entries total</th><th id="timesheet-hours-total">0.00</th>`;
+    if (footer) {
+      footer.innerHTML = '<th colspan="2">Totals</th><th id="timesheet-loads-total">0</th><th id="timesheet-rejects-total">0</th><th colspan="3">Hourly time total</th><th id="timesheet-hours-total">0.00</th>';
+    }
+  }
+  function pageTotals(rows) {
+    return {
+      loads: rows.reduce((sum, row) => sum + number(row.loads), 0),
+      rejects: rows.reduce((sum, row) => sum + number(row.rejects), 0),
+      perDiemDays: rows.filter((row) => row.perDiem === 'Yes').length,
+      hourlyHours: rows.reduce((sum, row) => sum + (row.hourly ? number(row.hours) : 0), 0),
+      vacationDays: rows.filter((row) => row.job === 'Vacation Day').length
+    };
   }
   function renderPreview() {
     const body = document.getElementById('timesheet-preview-body');
@@ -132,14 +162,18 @@
     updatePreviewHeadings(body);
     body.innerHTML = previewRows.length
       ? previewRows.map((row, rowIndex) => `<tr class="${row.warnings.length ? 'has-warning' : ''}">${COLUMNS.map((key) => `<td contenteditable="true" data-row="${rowIndex}" data-field="${key}">${escapeHtml(row[key] || '')}</td>`).join('')}</tr>`).join('')
-      : '<tr><td colspan="7">No saved records in this pay period.</td></tr>';
+      : '<tr><td colspan="8">No saved records in this pay period.</td></tr>';
     const warningRows = previewRows.filter((row) => row.warnings.length);
     document.getElementById('timesheet-warning-summary').textContent = warningRows.length
       ? `${warningRows.length} row${warningRows.length === 1 ? '' : 's'} need review: ${warningRows.map((row) => `${row.date || 'undated'} missing ${row.warnings.join(', ')}`).join('; ')}.`
       : '';
-    const hoursTotal = previewRows.reduce((sum, row) => sum + (row.hourly ? number(row.hours) : 0), 0).toFixed(2);
+    const totals = pageTotals(previewRows);
+    const loadsCell = document.getElementById('timesheet-loads-total');
+    const rejectsCell = document.getElementById('timesheet-rejects-total');
     const hoursCell = document.getElementById('timesheet-hours-total');
-    if (hoursCell) hoursCell.textContent = hoursTotal;
+    if (loadsCell) loadsCell.textContent = String(totals.loads);
+    if (rejectsCell) rejectsCell.textContent = String(totals.rejects);
+    if (hoursCell) hoursCell.textContent = totals.hourlyHours.toFixed(2);
     document.getElementById('timesheet-preview').hidden = false;
   }
   function buildPreview() {
@@ -147,22 +181,15 @@
     previewRange = { start: document.getElementById('timesheet-period-start').value, end: document.getElementById('timesheet-period-end').value };
     previewRows = buildTimesheetRows(savedLoads || [], paidTimeRecords || [], dailyAddOns || {}, previewRange);
     renderPreview();
-    const loadTotal = previewRows.reduce((sum, row) => sum + number(row.loads), 0);
-    document.getElementById('timesheet-status').textContent = `${previewRows.length} row${previewRows.length === 1 ? '' : 's'} prepared, ${loadTotal} total load${loadTotal === 1 ? '' : 's'}. Source records were not changed.`;
+    const totals = pageTotals(previewRows);
+    document.getElementById('timesheet-status').textContent =
+      `${previewRows.length} row${previewRows.length === 1 ? '' : 's'} prepared: ${totals.loads} load${totals.loads === 1 ? '' : 's'}, ${totals.rejects} reject${totals.rejects === 1 ? '' : 's'}, ${totals.hourlyHours.toFixed(2)} hourly hour${totals.hourlyHours === 1 ? '' : 's'}. Source records were not changed.`;
   }
 
   function pdfEscape(text) { return clean(text).replace(/[^\x20-\x7e]/g, '-').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
   function fit(text, width, size) { const max = Math.max(1, Math.floor(width / (size * .54))); const value = clean(text); return value.length > max ? `${value.slice(0, Math.max(1, max - 1))}.` : value; }
   function pdfText(x, y, text, size = 7, bold = false) { return `BT /${bold ? 'F2' : 'F1'} ${size} Tf 1 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)} Tm (${pdfEscape(text)}) Tj ET\n`; }
   function pdfLine(x1, y1, x2, y2, width = .5) { return `${width} w ${x1} ${y1} m ${x2} ${y2} l S\n`; }
-  function pageTotals(rows) {
-    return {
-      loads: rows.reduce((sum, row) => sum + number(row.loads), 0),
-      perDiemDays: rows.filter((row) => row.perDiem === 'Yes').length,
-      hourlyHours: rows.reduce((sum, row) => sum + (row.hourly ? number(row.hours) : 0), 0),
-      vacationDays: rows.filter((row) => row.job === 'Vacation Day').length
-    };
-  }
   function buildPage(rows, pageNumber, pageCount, id, range, grandTotals) {
     const left = 28; const right = 594; const rowHeight = 23; const tableTop = 690; const tableBottom = tableTop - rowHeight * (rows.length + 1);
     let out = '0 G 0 g\n';
@@ -180,9 +207,10 @@
     out += pdfText(left, tableBottom - 18, `Hourly entries on this page: ${page.hourlyHours.toFixed(2)}`, 8, true);
     if (pageNumber === pageCount) {
       out += pdfText(left, tableBottom - 36, `Total Loads: ${grandTotals.loads}`, 8, true);
-      out += pdfText(165, tableBottom - 36, `Per Diem Days: ${grandTotals.perDiemDays}`, 8, true);
-      out += pdfText(310, tableBottom - 36, `Hourly Hours: ${grandTotals.hourlyHours.toFixed(2)}`, 8, true);
-      out += pdfText(455, tableBottom - 36, `Vacation Days: ${grandTotals.vacationDays}`, 8, true);
+      out += pdfText(150, tableBottom - 36, `Total Rejects: ${grandTotals.rejects}`, 8, true);
+      out += pdfText(290, tableBottom - 36, `Per Diem Days: ${grandTotals.perDiemDays}`, 8, true);
+      out += pdfText(left, tableBottom - 54, `Hourly Hours: ${grandTotals.hourlyHours.toFixed(2)}`, 8, true);
+      out += pdfText(150, tableBottom - 54, `Vacation Days: ${grandTotals.vacationDays}`, 8, true);
     }
     out += pdfText(502, 22, `Page ${pageNumber} of ${pageCount}`, 7);
     return out;
@@ -239,6 +267,6 @@
       const row = previewRows[number(cell.dataset.row)]; row[cell.dataset.field] = cell.textContent.trim(); row.warnings = rowWarnings(row); renderPreview();
     });
   }
-  globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings };
+  globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 }());
