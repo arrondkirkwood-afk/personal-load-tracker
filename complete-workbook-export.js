@@ -205,7 +205,7 @@
   }
 
   function formatCell(cell, type) {
-    const formats = { currency: '$#,##0.00;[Red]-$#,##0.00', number: '#,##0.00', integer: '#,##0', percent: '0.0%', hours: '0.00', date: 'yyyy-mm-dd' };
+    const formats = { currency: '$#,##0.00;[Red]-$#,##0.00', number: '#,##0.00', signed: '+#,##0.00;[Red]-#,##0.00;0.00', integer: '#,##0', percent: '0.0%', hours: '0.00', date: 'yyyy-mm-dd' };
     if (formats[type]) cell.numFmt = formats[type];
   }
 
@@ -327,7 +327,12 @@
     const typed = result.rows.map((row)=>row.map((value,index)=>index===0?excelDate(value):(typeof value==='number'?value:safeText(value))));
     sheet.addTable({name:name==='Daily Source'?'DailySourceTable':'LoadSourceTable',ref:'A5',headerRow:true,totalsRow:false,style:{theme:'TableStyleMedium2',showRowStripes:true},columns:result.headers.map((header)=>({name:header})),rows:typed.length?typed:[result.headers.map(()=>null)]});
     result.headers.forEach((header,index)=>{sheet.getColumn(index+1).width=header==='Notes'?38:Math.min(24,Math.max(11,header.length+2));});
-    for(let row=6;row<=Math.max(6,typed.length+5);row+=1) formatCell(sheet.getCell(row,1),'date');
+    const finalRow = Math.max(6,typed.length+5);
+    for(let row=6;row<=finalRow;row+=1) formatCell(sheet.getCell(row,1),'date');
+    const differenceColumn = result.headers.indexOf('Difference barrels') + 1;
+    if (differenceColumn > 0) {
+      for(let row=6;row<=finalRow;row+=1) formatCell(sheet.getCell(row,differenceColumn),'signed');
+    }
     return sheet;
   }
 

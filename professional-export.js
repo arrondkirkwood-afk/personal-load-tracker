@@ -288,7 +288,8 @@
       const types = COLUMN_TYPES[kind];
       if (types.dates?.includes(header)) applyColumnFormat(sheet, columnNumber, 'yyyy-mm-dd', 6, finalRow);
       if (types.currency?.includes(header)) applyColumnFormat(sheet, columnNumber, '$#,##0.00;[Red]-$#,##0.00', 6, finalRow);
-      if (types.decimals?.includes(header)) applyColumnFormat(sheet, columnNumber, '#,##0.00;[Red]-#,##0.00', 6, finalRow);
+      if (header === 'Difference barrels') applyColumnFormat(sheet, columnNumber, '+#,##0.00;[Red]-#,##0.00;0.00', 6, finalRow);
+      else if (types.decimals?.includes(header)) applyColumnFormat(sheet, columnNumber, '#,##0.00;[Red]-#,##0.00', 6, finalRow);
       if (types.oneDecimal?.includes(header)) applyColumnFormat(sheet, columnNumber, '#,##0.0;[Red]-#,##0.0', 6, finalRow);
       if (types.integers?.includes(header)) applyColumnFormat(sheet, columnNumber, '#,##0', 6, finalRow);
       if (types.text?.includes(header)) applyColumnFormat(sheet, columnNumber, '@', 6, finalRow);

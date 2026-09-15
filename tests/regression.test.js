@@ -687,8 +687,13 @@ const operationalLoad = context.normalizeSavedLoad({
   deadheadMiles: 31.5
 });
 assert.strictEqual(operationalLoad.barrelsOffloaded, 178.5, 'total barrels offloaded equals end meter minus start meter');
-assert.strictEqual(operationalLoad.differenceVsGrossBarrels, 1.5, 'metered difference equals gross barrels minus offloaded barrels');
-assert.strictEqual(operationalLoad.offloadStatus, 'Short by 1.50 barrels', 'positive metered difference is labeled as shortage');
+assert.strictEqual(operationalLoad.differenceVsGrossBarrels, -1.5, 'metered difference equals offloaded barrels minus gross barrels');
+assert.strictEqual(operationalLoad.offloadStatus, 'Short by 1.50 barrels', 'negative metered difference is labeled as shortage');
+assert.strictEqual(context.formatMeteredDifference(operationalLoad.differenceVsGrossBarrels), 'Shortage: -1.50 bbl', 'shortage display includes an explicit minus sign');
+const overageLoad = context.calculateDerived({ ...loadValues({ grossBarrels: 180, startMeterReading: 1000, endMeterReading: 1181.5 }) });
+assert.strictEqual(overageLoad.differenceVsGrossBarrels, 1.5, 'overage is stored as a positive difference');
+assert.strictEqual(overageLoad.offloadStatus, 'Over by 1.50 barrels', 'positive metered difference is labeled as overage');
+assert.strictEqual(context.formatMeteredDifference(overageLoad.differenceVsGrossBarrels), 'Overage: +1.50 bbl', 'overage display includes an explicit plus sign');
 assert.strictEqual(operationalLoad.estimatedGrossTruckWeight, 103000, 'gross truck weight uses empty weight plus corrected load weight');
 assert.strictEqual(operationalLoad.deadheadTravelMinutes, 45, 'deadhead duration handles crossing midnight');
 assert.strictEqual(operationalLoad.deadheadMiles, 31.5, 'load-specific deadhead miles persist');
@@ -923,7 +928,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.19.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.19.1', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');

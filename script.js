@@ -1,4 +1,4 @@
-const APP_VERSION = "1.19.0";
+const APP_VERSION = "1.19.1";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -3820,10 +3820,10 @@ function formatMeteredDifference(value) {
 
   const rounded = Number(value.toFixed(2));
   if (rounded > 0) {
-    return `Shortage: ${rounded.toFixed(2)} bbl`;
+    return `Overage: +${rounded.toFixed(2)} bbl`;
   }
   if (rounded < 0) {
-    return `Overage: ${Math.abs(rounded).toFixed(2)} bbl`;
+    return `Shortage: -${Math.abs(rounded).toFixed(2)} bbl`;
   }
   return 'Exact match: 0.00 bbl';
 }
@@ -4385,11 +4385,11 @@ function getOffloadStatus(difference) {
   const rounded = Number(difference.toFixed(2));
 
   if (rounded > 0) {
-    return `Short by ${rounded.toFixed(2)} barrels`;
+    return `Over by ${rounded.toFixed(2)} barrels`;
   }
 
   if (rounded < 0) {
-    return `Over by ${Math.abs(rounded).toFixed(2)} barrels`;
+    return `Short by ${Math.abs(rounded).toFixed(2)} barrels`;
   }
 
   return 'Matches gross barrels exactly';
@@ -4419,7 +4419,7 @@ function calculateDerived(values) {
     ? values.endMeterReading - values.startMeterReading
     : null;
   const differenceVsGrossBarrels = isFiniteNumber(barrelsOffloaded) && isFiniteNumber(values.grossBarrels)
-    ? values.grossBarrels - barrelsOffloaded
+    ? barrelsOffloaded - values.grossBarrels
     : null;
   const regularMiles = valueOrZero(values.loadedMiles);
   const reRoutedMiles = valueOrZero(values.reRoutedMiles);
@@ -6497,6 +6497,18 @@ function formatCsvNumber(value, decimals = 2) {
   return isFiniteNumber(value) ? value.toFixed(decimals) : '';
 }
 
+function formatSignedCsvNumber(value, decimals = 2) {
+  if (!isFiniteNumber(value)) {
+    return '';
+  }
+
+  const rounded = Number(value.toFixed(decimals));
+  if (rounded > 0) {
+    return `+${rounded.toFixed(decimals)}`;
+  }
+  return rounded.toFixed(decimals);
+}
+
 function downloadCsv(filename, headers, rows) {
   const csv = [headers, ...rows]
     .map((row) => row.map(toCsvValue).join(','))
@@ -6628,7 +6640,7 @@ function downloadLoadLog() {
       formatCsvNumber(load.startMeterReading),
       formatCsvNumber(load.endMeterReading),
       formatCsvNumber(load.barrelsOffloaded),
-      formatCsvNumber(load.differenceVsGrossBarrels),
+      formatSignedCsvNumber(load.differenceVsGrossBarrels),
       load.offloadStatus,
       load.jotformConfirmationNumber,
       load.arrivedPickupTime,
@@ -6735,7 +6747,7 @@ function downloadDailyEarningsSummary() {
       formatCsvNumber(record.totalMilesIncludingReRoute, 1),
       formatCsvNumber(record.totalGrossBarrels),
       formatCsvNumber(record.totalBarrelsOffloaded),
-      formatCsvNumber(record.totalDifferenceVsGrossBarrels),
+      formatSignedCsvNumber(record.totalDifferenceVsGrossBarrels),
       formatCsvNumber(record.completedLoadPay),
       record.eligibleDispatchedDay ? 'Yes' : 'No',
       formatCsvNumber(record.fairDayGoal),
