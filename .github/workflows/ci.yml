@@ -20,21 +20,33 @@ jobs:
           node-version: '20'
 
       - name: Check JavaScript syntax
-        run: node --check script.js
-
-      - name: Check clean export syntax
         run: |
+          node --check script.js
+          node --check timesheet.js
+          node --check daily-closeout.js
+          node --check paycheck-reconciliation.js
           node --check export-cleanup.js
+          node --check professional-export.js
+          node --check complete-workbook-export.js
           node --check export-integration.js
 
-      - name: Run regression tests
+      - name: Run core regression tests
         run: node tests/regression.test.js
 
       - name: Run redesign contract guardrails
         run: node tests/redesign-contract.test.js
+
+      - name: Run timesheet tests
+        run: node tests/timesheet.test.js
 
       - name: Run clean export tests
         run: node tests/export-cleanup.test.js
 
       - name: Run export integration tests
         run: node tests/export-integration.test.js
+
+      - name: Run professional Excel export tests
+        run: node tests/professional-export.test.js
+
+      - name: Run complete workbook tests
+        run: node tests/complete-workbook-export.test.js
