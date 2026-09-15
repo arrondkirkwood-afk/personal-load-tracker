@@ -25,7 +25,6 @@
     const hourlyMinutes = paid
       .filter((item) => clean(item.category) !== 'Vacation Time')
       .reduce((sum, item) => sum + number(item.durationMinutes), 0);
-    const vacationDays = paid.filter((item) => clean(item.category) === 'Vacation Time').length;
     const paidWaitMinutes = loads.reduce((sum, load) => sum + number(load.paidPickupWaitMinutes) + number(load.paidDropoffWaitMinutes), 0);
     const hasActivity = loads.length > 0 || paid.length > 0 || Boolean(addOn.shiftStartTime || addOn.shiftEndTime);
     const perDiem = Boolean(summary.perDiemApplied ?? addOn.perDiem ?? hasActivity);
@@ -33,7 +32,7 @@
     if (needsReview > 0) warnings.push(`${needsReview} load record${needsReview === 1 ? '' : 's'} need an explicit Completed Load or Reject status`);
     if (hasActivity && !addOn.shiftStartTime) warnings.push('shift start is missing');
     if (hasActivity && !addOn.shiftEndTime) warnings.push('shift end is missing');
-    return { date, loads, paid, addOn, summary, completed, rejects, needsReview, hourlyMinutes, vacationDays, paidWaitMinutes, perDiem, hasActivity, warnings };
+    return { date, addOn, completed, rejects, needsReview, hourlyMinutes, paidWaitMinutes, perDiem, hasActivity, warnings };
   }
 
   function render() {
@@ -83,8 +82,15 @@
   function wire() {
     byId('daily-date')?.addEventListener('change', render);
     byId('daily-closeout-review-button')?.addEventListener('click', reviewWorkday);
+    if (root.MutationObserver) {
+      const observer = new root.MutationObserver(() => root.setTimeout?.(render, 0));
+      ['today-completed-loads', 'today-rejects', 'daily-total-earnings', 'workday-status'].forEach((id) => {
+        const element = byId(id);
+        if (element) observer.observe(element, { childList: true, characterData: true, subtree: true });
+      });
+    }
+    root.addEventListener?.('pageshow', render);
     render();
-    root.setInterval?.(render, 2000);
   }
 
   if (root.document?.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', wire);
