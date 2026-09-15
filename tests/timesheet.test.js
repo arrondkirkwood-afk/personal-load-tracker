@@ -38,7 +38,8 @@ const loads = [
   { id: 's4', loadDate: '2026-09-01', loadStatus: 'Reject' },
   { id: 'l1', loadDate: '2026-09-09', loadStatus: 'Completed Load', ticketNumber: 'T1', leaseNumber: 'Lease A', pickupLocation: 'Pickup A', dropoffLocation: 'Station A', paidPickupWaitMinutes: 30, paidDropoffWaitMinutes: 60, deadheadMiles: 12, deadheadTravelMinutes: 30, deadheadStartTime: '06:00', deadheadEndTime: '06:30' },
   { id: 'l2', loadDate: '2026-09-09', loadStatus: 'Completed Load', bolNumber: 'B2', pickupLocation: 'Lease B', dropoffLocation: 'Station B' },
-  { id: 'l3', loadDate: '2026-09-10', loadStatus: 'Completed Load', ticketNumber: '', pickupLocation: '', dropoffLocation: '' }
+  { id: 'l3', loadDate: '2026-09-10', loadStatus: 'Completed Load', ticketNumber: '', pickupLocation: '', dropoffLocation: '' },
+  { id: 'u1', loadDate: '2026-09-10', loadStatus: '', ticketNumber: 'UNKNOWN' }
 ];
 const paid = [
   { id: 'o1', workDate: '2026-09-08', category: 'Office Time', startTime: '08:00', endTime: '16:00', durationMinutes: 480 },
@@ -54,6 +55,10 @@ assert.strictEqual(sept1.loads, '3', '9/1 counts only completed loads as hauled 
 assert.strictEqual(sept1.rejects, '1', '9/1 counts the reject separately');
 assert.strictEqual(sept1.job, '3 Loads / 1 Reject / Per Diem', '9/1 description reflects saved app statuses');
 assert.ok(rows.some((row) => row.job === '2 Loads / Per Diem' && row.loads === '2' && row.rejects === '' && row.perDiem === 'Yes'), 'ordinary hauling day is summarized into one load/per-diem row');
+const sept10 = rows.find((row) => row.kind === 'load' && row.workDate === '2026-09-10');
+assert.strictEqual(sept10.loads, '1', 'unknown load status does not count as hauled');
+assert.ok(sept10.job.includes('1 Needs Review'), 'unknown load status is visibly flagged for review');
+assert.ok(sept10.warnings.includes('load status'), 'unknown load status creates a timesheet warning');
 assert.strictEqual(rows.filter((row) => row.date === '9/9/26' && row.perDiem === 'Yes').length, 1, 'per diem appears only once on a qualifying day');
 assert.strictEqual(rows.filter((row) => row.kind === 'load').length, 3, 'load tickets are consolidated to one row per work date');
 assert.ok(rows.every((row) => !Object.prototype.hasOwnProperty.call(row, 'ticket')), 'timesheet rows do not expose ticket numbers');
@@ -62,6 +67,7 @@ assert.ok(rows.some((row) => row.job === 'Truck Wash - Wash bay' && row.hours ==
 assert.ok(rows.some((row) => row.job === 'Breakdown - Getting truck/trailer lights repaired' && row.timeIn === '06:30' && row.timeOut === '10:00' && row.hours === '3.50'), 'breakdown time includes its description and hourly detail');
 assert.ok(rows.some((row) => row.job === 'Vacation Day'), 'vacation is shown as a vacation day');
 assert.ok(rows.some((row) => row.job === 'Paid Wait Time' && row.hours === '1.50'), 'already-calculated paid wait is reused');
+assert.ok(!rows.find((row) => row.job === 'Paid Wait Time').warnings.includes('time in/out'), 'paid wait minutes do not create a false missing clock-time warning');
 assert.ok(rows.some((row) => row.job === 'Deadhead - 12.0 mi' && row.hours === '0.50'), 'deadhead miles and recorded time remain distinct');
 
 const dateOrder = rows.map((row) => row.workDate);
@@ -84,6 +90,7 @@ const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf
 const timesheetSource = fs.readFileSync(path.join(__dirname, '..', 'timesheet.js'), 'utf8');
 assert.ok(html.includes('id="timesheet-preview"') && timesheetSource.includes('contenteditable="true"'), 'preview supports report-only correction cells');
 assert.ok(timesheetSource.includes("['date', 'job', 'loads', 'rejects', 'perDiem', 'timeIn', 'timeOut', 'hours']"), 'preview/PDF use organized load and reject timesheet columns');
+assert.ok(timesheetSource.includes('data-label='), 'mobile timesheet preview includes field labels for card layout');
 assert.ok(html.includes('id="settings-timesheet-name"') && html.includes('id="settings-timesheet-number"'), 'timesheet identity is editable in settings');
 assert.ok(sw.includes("'./timesheet.js'") && sw.includes("'./timesheet.css'"), 'timesheet assets are available offline');
 console.log('Timesheet Generator tests passed');

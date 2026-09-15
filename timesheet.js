@@ -31,14 +31,14 @@
       number: clean(appSettings?.timesheetEmployeeNumber) || DEFAULT_NUMBER
     };
   }
-  function isReject(load) {
-    const status = clean(load?.loadStatus || load?.status || load?.load_status).toLowerCase();
-    return status === 'reject' || status === 'rejected';
-  }
+  function loadStatus(load) { return clean(load?.loadStatus || load?.status || load?.load_status).toLowerCase(); }
+  function isCompleted(load) { const status = loadStatus(load); return status === 'completed load' || status === 'completed'; }
+  function isReject(load) { const status = loadStatus(load); return status === 'reject' || status === 'rejected'; }
   function rowWarnings(row) {
     const warnings = [];
     if (!row.date) warnings.push('date');
-    if (row.hourly && (!row.timeIn || !row.timeOut)) warnings.push('time in/out');
+    if (row.hourly && row.requiresClockTimes !== false && (!row.timeIn || !row.timeOut)) warnings.push('time in/out');
+    if (number(row.needsReview) > 0) warnings.push('load status');
     return warnings;
   }
   function makeRow(values) {
@@ -53,10 +53,11 @@
     if (!detail || detail.toLowerCase() === category.toLowerCase()) return category;
     return `${category} - ${detail}`;
   }
-  function haulingDescription(completedCount, rejectCount, perDiem) {
+  function haulingDescription(completedCount, rejectCount, needsReviewCount, perDiem) {
     const parts = [];
     if (completedCount > 0) parts.push(`${completedCount} ${completedCount === 1 ? 'Load' : 'Loads'}`);
     if (rejectCount > 0) parts.push(`${rejectCount} ${rejectCount === 1 ? 'Reject' : 'Rejects'}`);
+    if (needsReviewCount > 0) parts.push(`${needsReviewCount} Needs Review`);
     if (perDiem) parts.push('Per Diem');
     return parts.join(' / ') || 'Workday';
   }
@@ -77,25 +78,28 @@
 
     [...byDate.keys()].sort().forEach((date) => {
       const dayRecords = byDate.get(date);
-      const completedLoads = dayRecords.filter((load) => !isReject(load));
+      const completedLoads = dayRecords.filter((load) => isCompleted(load));
       const rejectedLoads = dayRecords.filter((load) => isReject(load));
+      const reviewLoads = dayRecords.filter((load) => !isCompleted(load) && !isReject(load));
       const completedCount = completedLoads.length;
       const rejectCount = rejectedLoads.length;
+      const needsReviewCount = reviewLoads.length;
       const perDiem = dayRecords.length > 0 || paid.some((item) => item.workDate === date && item.category === 'Office Time');
 
       rows.push(makeRow({
         kind: 'load', hourly: false, workDate: date,
         sourceId: dayRecords.map((load) => load.id).filter(Boolean).join(','),
-        date: shortDate(date), job: haulingDescription(completedCount, rejectCount, perDiem),
+        date: shortDate(date), job: haulingDescription(completedCount, rejectCount, needsReviewCount, perDiem),
         loads: completedCount ? String(completedCount) : '',
         rejects: rejectCount ? String(rejectCount) : '',
+        needsReview: needsReviewCount,
         perDiem: perDiem ? 'Yes' : ''
       }));
 
       dayRecords.forEach((load) => {
         const paidWait = number(load.paidPickupWaitMinutes) + number(load.paidDropoffWaitMinutes);
         if (paidWait > 0) rows.push(makeRow({
-          kind: 'wait', hourly: true, workDate: date, sourceId: load.id, date: shortDate(date),
+          kind: 'wait', hourly: true, requiresClockTimes: false, workDate: date, sourceId: load.id, date: shortDate(date),
           job: 'Paid Wait Time', hours: hours(paidWait)
         }));
         if (number(load.deadheadMiles) > 0 || number(load.deadheadTravelMinutes) > 0) rows.push(makeRow({
@@ -161,7 +165,7 @@
     if (!body) return;
     updatePreviewHeadings(body);
     body.innerHTML = previewRows.length
-      ? previewRows.map((row, rowIndex) => `<tr class="${row.warnings.length ? 'has-warning' : ''}">${COLUMNS.map((key) => `<td contenteditable="true" data-row="${rowIndex}" data-field="${key}">${escapeHtml(row[key] || '')}</td>`).join('')}</tr>`).join('')
+      ? previewRows.map((row, rowIndex) => `<tr class="${row.warnings.length ? 'has-warning' : ''}">${COLUMNS.map((key, columnIndex) => `<td contenteditable="true" data-label="${escapeHtml(COLUMN_LABELS[columnIndex])}" data-row="${rowIndex}" data-field="${key}">${escapeHtml(row[key] || '')}</td>`).join('')}</tr>`).join('')
       : '<tr><td colspan="8">No saved records in this pay period.</td></tr>';
     const warningRows = previewRows.filter((row) => row.warnings.length);
     document.getElementById('timesheet-warning-summary').textContent = warningRows.length

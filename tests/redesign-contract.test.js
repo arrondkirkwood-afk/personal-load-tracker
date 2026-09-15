@@ -104,10 +104,11 @@ assert.ok(redesignStyles.includes('#new-load-view'), 'redesign.css no longer con
 assert.ok(recordsReportsStyles.includes('#records-view'), 'records-reports-redesign.css no longer contains History overrides');
 assert.ok(recordsReportsStyles.includes('#reports-view'), 'records-reports-redesign.css no longer contains Earnings overrides');
 assert.ok(settingsStyles.includes('#settings-view'), 'settings-redesign.css no longer contains Settings overrides');
-assert.ok(serviceWorker.includes("'./redesign.css'"), 'service worker no longer caches the primary redesign stylesheet');
-assert.ok(serviceWorker.includes("'./records-reports-redesign.css'"), 'service worker no longer caches the History/Earnings redesign stylesheet');
-assert.ok(serviceWorker.includes("'./settings-redesign.css'"), 'service worker no longer caches the Settings redesign stylesheet');
-assert.ok(serviceWorker.includes('buildRedesignedStylesheet'), 'service worker no longer layers redesign styles over style.css');
+assert.ok(serviceWorker.includes("'./redesign.css'"), 'service worker caches the primary redesign stylesheet');
+assert.ok(serviceWorker.includes("'./records-reports-redesign.css'"), 'service worker caches the History/Reports redesign stylesheet');
+assert.ok(serviceWorker.includes("'./settings-redesign.css'"), 'service worker caches the Settings redesign stylesheet');
+assert.ok(html.includes('redesign.css?v=') && html.includes('records-reports-redesign.css?v=') && html.includes('settings-redesign.css?v='), 'redesign styles load directly from HTML');
+assert.ok(!serviceWorker.includes('buildRedesignedStylesheet') && !serviceWorker.includes('buildEnhancedScript'), 'service worker no longer concatenates CSS or JavaScript at runtime');
 
 // The PWA update contract requires script.js and service-worker.js to agree on version.
 const scriptVersion = script.match(/const APP_VERSION = ["']([^"']+)["'];/);

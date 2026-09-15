@@ -8,11 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.19.1">
+  <link rel="manifest" href="manifest.json?v=1.20.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.19.1">
-  <link rel="stylesheet" href="timesheet.css?v=1.19.1">
+  <link rel="stylesheet" href="style.css?v=1.20.0">
+  <link rel="stylesheet" href="redesign.css?v=1.20.0">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.20.0">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.20.0">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.20.0">
+  <link rel="stylesheet" href="timesheet.css?v=1.20.0">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.20.0">
 </head>
 <body>
   <main class="app">
@@ -23,7 +28,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.19.1</strong></span>
+          <span>Version <strong id="app-version">1.20.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -33,8 +38,7 @@
         <button class="nav-item active" type="button" data-view-target="dashboard">Today</button>
         <button class="nav-item" type="button" data-view-target="new-load">Load</button>
         <button class="nav-item" type="button" data-view-target="records">History</button>
-        <button class="nav-item" type="button" data-view-target="reports">Earnings</button>
-        <button class="nav-item" type="button" data-view-target="workbook">Workbook</button>
+        <button class="nav-item" type="button" data-view-target="reports">Reports</button>
         <button class="nav-item" type="button" data-view-target="settings">More</button>
       </nav>
 
@@ -103,6 +107,22 @@
             </details>
             <p class="helper-text">Times are manually entered and remain editable. This tracker is not an ELD or official HOS record.</p>
           </section>
+          <section class="panel summary-card daily-closeout-card" id="daily-closeout-panel" aria-labelledby="daily-closeout-title">
+            <div class="section-heading compact">
+              <div><p class="section-kicker">Daily Closeout</p><h2 id="daily-closeout-title">Check the day before the timesheet</h2></div>
+              <span class="status-pill" id="daily-closeout-status" data-state="neutral">No activity</span>
+            </div>
+            <div class="metric-strip tight">
+              <article><span>Completed loads</span><strong id="daily-closeout-completed">0</strong></article>
+              <article><span>Rejects</span><strong id="daily-closeout-rejects">0</strong></article>
+              <article><span>Per diem</span><strong id="daily-closeout-per-diem">No</strong></article>
+              <article><span>Hourly work</span><strong id="daily-closeout-hourly">0.00 hr</strong></article>
+              <article><span>Paid wait</span><strong id="daily-closeout-wait">0.00 hr</strong></article>
+              <article><span>Shift</span><strong id="daily-closeout-shift">Incomplete</strong></article>
+            </div>
+            <p class="daily-closeout-summary" id="daily-closeout-summary">No saved activity for this date.</p>
+            <div class="button-row compact"><button class="button secondary" id="daily-closeout-review-button" type="button">Review Workday</button></div>
+          </section>
           <section class="panel summary-card" aria-labelledby="daily-summary-title">
             <div class="section-heading compact">
               <div>
@@ -161,7 +181,7 @@
             <div class="metric-strip tight">
               <article><span>Completed loads</span><strong id="pay-period-completed-count">0</strong></article>
               <article><span>Rejects</span><strong id="pay-period-reject-count">0</strong></article>
-              <article><span>Total loads</span><strong id="pay-period-assignment-count">0</strong></article>
+              <article><span>Total records</span><strong id="pay-period-assignment-count">0</strong></article>
               <article><span>Total earnings</span><strong id="pay-period-total-earnings">$0.00</strong></article>
               <article><span>Office hours</span><strong id="pay-period-office-hours">0 hr 0 min</strong></article>
               <article><span>Office pay</span><strong id="pay-period-office-pay">$0.00</strong></article>
@@ -183,7 +203,7 @@
             <div class="metric-strip tight">
               <article><span>Completed loads</span><strong id="month-completed-count">0</strong></article>
               <article><span>Rejects</span><strong id="month-reject-count">0</strong></article>
-              <article><span>Total loads</span><strong id="month-assignment-count">0</strong></article>
+              <article><span>Total records</span><strong id="month-assignment-count">0</strong></article>
               <article><span>Total estimated earnings</span><strong id="month-total-earnings">$0.00</strong></article>
               <article><span>Fair Goal days</span><strong id="month-fair-goal-met">0</strong></article>
               <article><span>Excellent Goal days</span><strong id="month-goal-met">0</strong></article>
@@ -712,6 +732,11 @@
             </div>
             <span id="earnings-date-label" class="status-pill">-</span>
           </div>
+          <div class="report-shortcuts" aria-label="Report tools">
+            <a class="button secondary" href="#timesheet-title">Timesheet</a>
+            <button class="button secondary" type="button" data-view-target="workbook">Complete Workbook</button>
+            <a class="button secondary" href="#paycheck-reconciliation-title">Paycheck Check</a>
+          </div>
           <div class="report-controls">
             <label for="report-range-mode">
               <span>Report range</span>
@@ -787,6 +812,32 @@
           </section>
         </section>
 
+        <section class="panel paycheck-reconciliation" aria-labelledby="paycheck-reconciliation-title">
+          <div class="section-heading">
+            <div><p class="section-kicker">Payroll Verification</p><h2 id="paycheck-reconciliation-title">Paycheck reconciliation</h2></div>
+            <span class="status-pill">Personal check</span>
+          </div>
+          <p class="helper-text">Compares the gross earnings estimated from your saved tracker records with the gross pay shown on your paycheck. It does not change source records.</p>
+          <div class="report-controls">
+            <label for="reconcile-anchor-date"><span>Pay period containing</span><input id="reconcile-anchor-date" type="date"></label>
+            <label for="reconcile-period-start"><span>Beginning date</span><input id="reconcile-period-start" type="date" readonly></label>
+            <label for="reconcile-period-end"><span>Ending date</span><input id="reconcile-period-end" type="date" readonly></label>
+            <label for="reconcile-paycheck-gross"><span>Paycheck gross pay</span><input id="reconcile-paycheck-gross" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
+          </div>
+          <div class="reconciliation-grid">
+            <article><span>Tracker expected gross</span><strong id="reconcile-expected">$0.00</strong></article>
+            <article><span>Difference</span><strong id="reconcile-difference">Enter paycheck gross</strong></article>
+            <article><span>Completed-load pay</span><strong id="reconcile-completed-pay">$0.00</strong></article>
+            <article><span>Reject pay</span><strong id="reconcile-reject-pay">$0.00</strong></article>
+            <article><span>Wait pay</span><strong id="reconcile-wait-pay">$0.00</strong></article>
+            <article><span>Hourly/office/additional pay</span><strong id="reconcile-hourly-pay">$0.00</strong></article>
+            <article><span>Vacation pay</span><strong id="reconcile-vacation-pay">$0.00</strong></article>
+            <article><span>Per diem</span><strong id="reconcile-per-diem-pay">$0.00</strong></article>
+            <article><span>Sleeper + trainer</span><strong id="reconcile-other-addons">$0.00</strong></article>
+          </div>
+          <p class="reconciliation-status" id="reconcile-status" data-state="neutral">Enter paycheck gross to compare.</p>
+        </section>
+
         <section class="panel earnings-review" aria-labelledby="earnings-review-title">
           <div class="section-heading compact">
             <div>
@@ -835,6 +886,7 @@
             </div>
             <span class="status-pill">No CSV conversion</span>
           </div>
+          <div class="button-row compact"><button class="button ghost" type="button" data-view-target="reports">Back to Reports</button></div>
           <p class="workbook-intro">Choose the period you want to study. The tracker will create one presentation-ready Excel workbook from the records already saved in this app.</p>
           <div class="workbook-range-card">
             <label for="workbook-range-mode"><span>Report range</span><select id="workbook-range-mode">
@@ -1003,7 +1055,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.19.1</strong>
+                <span>Application version</span><strong id="settings-app-version">1.20.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1131,10 +1183,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.19.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.20.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.19.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.20.0&updated=' + Date.now());
           });
       }
 
@@ -1170,8 +1222,14 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.19.1"></script>
-  <script src="script.js?v=1.19.1"></script>
-  <script src="timesheet.js?v=1.19.1"></script>
+  <script src="vendor/exceljs.min.js?v=1.20.0"></script>
+  <script src="script.js?v=1.20.0"></script>
+  <script src="export-cleanup.js?v=1.20.0"></script>
+  <script src="professional-export.js?v=1.20.0"></script>
+  <script src="complete-workbook-export.js?v=1.20.0"></script>
+  <script src="export-integration.js?v=1.20.0"></script>
+  <script src="timesheet.js?v=1.20.0"></script>
+  <script src="daily-closeout.js?v=1.20.0"></script>
+  <script src="paycheck-reconciliation.js?v=1.20.0"></script>
 </body>
 </html>
