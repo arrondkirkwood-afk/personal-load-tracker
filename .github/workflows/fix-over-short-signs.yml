@@ -171,3 +171,5 @@ assert.strictEqual(context.formatMeteredDifference(overageLoad.differenceVsGross
           git add script.js professional-export.js complete-workbook-export.js tests/regression.test.js service-worker.js index.html manifest.json README.md
           git commit -m "Correct overage and shortage sign convention"
           git push
+
+# Registered-workflow trigger
