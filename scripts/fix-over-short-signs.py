@@ -124,6 +124,11 @@ assert.strictEqual(overageLoad.differenceVsGrossBarrels, 1.5, 'overage is stored
 assert.strictEqual(overageLoad.offloadStatus, 'Over by 1.50 barrels', 'positive metered difference is labeled as overage');
 assert.strictEqual(context.formatMeteredDifference(overageLoad.differenceVsGrossBarrels), 'Overage: +1.50 bbl', 'overage display includes an explicit plus sign');""",
 )
+replace_once(
+    'tests/regression.test.js',
+    "assert.strictEqual(appVersionMatch[1], '1.19.0', 'app version is updated');",
+    "assert.strictEqual(appVersionMatch[1], '1.19.1', 'app version is updated');",
+)
 
 # Bump the PWA shell so installed copies receive this correction.
 replace_once('service-worker.js', "const APP_VERSION = '1.19.0';", "const APP_VERSION = '1.19.1';")
