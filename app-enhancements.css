@@ -1,0 +1,29 @@
+.daily-closeout-card .metric-strip,
+.paycheck-reconciliation .metric-strip { margin-top: .75rem; }
+
+#daily-closeout-status[data-state="ready"],
+#reconcile-status[data-state="ready"] { color: var(--success); }
+#daily-closeout-status[data-state="review"],
+#reconcile-status[data-state="review"] { color: var(--danger); }
+
+.daily-closeout-summary,
+.reconciliation-status { margin: .75rem 0 0; line-height: 1.45; color: var(--muted); }
+
+.report-shortcuts { display: flex; flex-wrap: wrap; gap: .6rem; margin: .9rem 0 1rem; }
+.report-shortcuts .button { flex: 0 0 auto; }
+
+.paycheck-reconciliation { margin-top: 1rem; }
+.reconciliation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; margin-top: .9rem; }
+.reconciliation-grid article { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: .75rem; background: var(--surface-soft); display: grid; gap: .2rem; }
+.reconciliation-grid span { color: var(--muted); font-size: .78rem; font-weight: 750; }
+.reconciliation-grid strong { font-size: 1rem; }
+
+@media (max-width: 760px) {
+  .reconciliation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-shortcuts .button { flex: 1 1 46%; }
+}
+
+@media (max-width: 520px) {
+  .reconciliation-grid { grid-template-columns: 1fr; }
+  .report-shortcuts .button { flex-basis: 100%; }
+}
