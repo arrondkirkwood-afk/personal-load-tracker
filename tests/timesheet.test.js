@@ -38,26 +38,35 @@ const loads = [
 ];
 const paid = [
   { id: 'o1', workDate: '2026-09-08', category: 'Office Time', startTime: '08:00', endTime: '16:00', durationMinutes: 480 },
-  { id: 'w1', workDate: '2026-09-09', category: 'Truck Wash', startTime: '18:00', endTime: '19:15', durationMinutes: 75, notes: 'Wash bay' }
+  { id: 'w1', workDate: '2026-09-09', category: 'Truck Wash', startTime: '18:00', endTime: '19:15', durationMinutes: 75, notes: 'Wash bay' },
+  { id: 'b1', workDate: '2026-09-09', category: 'Breakdown', startTime: '06:30', endTime: '10:00', durationMinutes: 210, notes: 'Getting truck/trailer lights repaired' },
+  { id: 'v1', workDate: '2026-09-11', category: 'Vacation Time', durationMinutes: 0 }
 ];
 const rows = api.buildTimesheetRows(loads, paid, { '2026-09-09': { shiftStartTime: '05:30', shiftEndTime: '17:30' } }, range);
-assert.ok(rows.some((row) => row.job === '2 Loads / Per Diem'), 'load days group records and apply per diem once');
+assert.ok(rows.some((row) => row.job === '2 Loads / Per Diem' && row.loads === '2' && row.perDiem === 'Yes'), 'each hauling day is summarized into one load/per-diem row');
 assert.strictEqual(rows.filter((row) => row.date === '9/9/26' && row.job.includes('Per Diem')).length, 1, 'per diem appears once on each qualifying load day');
+assert.strictEqual(rows.filter((row) => row.kind === 'load').length, 2, 'load tickets are consolidated to one row per hauling day');
+assert.ok(rows.every((row) => !Object.prototype.hasOwnProperty.call(row, 'ticket')), 'timesheet rows do not expose ticket numbers');
 assert.ok(rows.some((row) => row.job === 'Office Time' && row.hours === '8.00'), 'office-only activity is included');
-assert.ok(rows.some((row) => row.job === 'Truck Wash' && row.hours === '1.25'), 'truck wash time is included');
+assert.ok(rows.some((row) => row.job === 'Truck Wash - Wash bay' && row.hours === '1.25'), 'hourly activity descriptions are retained');
+assert.ok(rows.some((row) => row.job === 'Breakdown - Getting truck/trailer lights repaired' && row.timeIn === '06:30' && row.timeOut === '10:00' && row.hours === '3.50'), 'breakdown time includes its description and hourly detail');
+assert.ok(rows.some((row) => row.job === 'Vacation Day'), 'vacation is shown as a vacation day');
 assert.ok(rows.some((row) => row.job === 'Paid Wait Time' && row.hours === '1.50'), 'already-calculated paid wait is reused');
 assert.ok(rows.some((row) => row.job === 'Deadhead - 12.0 mi' && row.hours === '0.50'), 'deadhead miles and recorded time remain distinct');
-assert.ok(rows.some((row) => row.warnings.includes('ticket/BOL') && row.warnings.includes('lease') && row.warnings.includes('station')), 'missing load information is flagged');
-assert.strictEqual(rows.filter((row) => row.hourly).reduce((sum, row) => sum + Number(row.hours || 0), 0), 11.25, 'Hours total counts hourly rows only');
+const dateOrder = rows.map((row) => row.workDate);
+assert.strictEqual(JSON.stringify(dateOrder), JSON.stringify([...dateOrder].sort()), 'rows are sorted by the real ISO work date, not formatted date text');
+assert.strictEqual(rows.filter((row) => row.hourly).reduce((sum, row) => sum + Number(row.hours || 0), 0), 14.75, 'Hours total counts hourly rows only');
 
-const manyRows = Array.from({ length: 55 }, (_, index) => ({ date: '9/9/26', ticket: `T${index}`, lease: 'Lease', job: '1 Load / Per Diem', station: 'Station', timeIn: '', timeOut: '', hours: '', total: '', hourly: false }));
+const manyRows = Array.from({ length: 55 }, () => ({ workDate: '2026-09-09', date: '9/9/26', job: '1 Load / Per Diem', loads: '1', perDiem: 'Yes', timeIn: '', timeOut: '', hours: '', hourly: false }));
 const pdf = api.buildPdf(manyRows, { name: 'Arrond Kirkwood', number: '0135' }, range);
 assert.strictEqual(pdf.type, 'application/pdf');
 assert.ok(pdf.size > 1000, 'multi-page PDF is generated');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-assert.ok(html.includes('id="timesheet-preview"') && fs.readFileSync(path.join(__dirname, '..', 'timesheet.js'), 'utf8').includes('contenteditable="true"'), 'preview supports report-only correction cells');
+const timesheetSource = fs.readFileSync(path.join(__dirname, '..', 'timesheet.js'), 'utf8');
+assert.ok(html.includes('id="timesheet-preview"') && timesheetSource.includes('contenteditable="true"'), 'preview supports report-only correction cells');
+assert.ok(timesheetSource.includes("['date', 'job', 'loads', 'perDiem', 'timeIn', 'timeOut', 'hours']"), 'preview/PDF use the simplified organized timesheet columns');
 assert.ok(html.includes('id="settings-timesheet-name"') && html.includes('id="settings-timesheet-number"'), 'timesheet identity is editable in settings');
 assert.ok(sw.includes("'./timesheet.js'") && sw.includes("'./timesheet.css'"), 'timesheet assets are available offline');
 console.log('Timesheet Generator tests passed');
