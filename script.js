@@ -1,4 +1,4 @@
-const APP_VERSION = "1.20.1";
+const APP_VERSION = "1.21.0";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -6482,10 +6482,8 @@ function updateAddMoreVisibility(forceFromValues = false) {
   const showWait = Boolean(waitToggle?.checked);
   const deadheadFields = document.getElementById('deadhead-fields');
   const waitFields = document.getElementById('paid-wait-fields');
-  const addMore = document.getElementById('load-add-more');
   if (deadheadFields) deadheadFields.hidden = !showDeadhead;
   if (waitFields) waitFields.hidden = !showWait;
-  if (addMore && (showDeadhead || showWait)) addMore.open = true;
 }
 
 function toCsvValue(value) {
@@ -8162,6 +8160,7 @@ function getPaidTimeDefaultRate(category) {
 
 function updatePaidTimeCategoryControls() {
   const isVacation = paidTimeControls.category?.value === 'Vacation Time';
+  const isCustom = paidTimeControls.category?.value === 'Other Hourly Work';
   [paidTimeControls.start, paidTimeControls.end].forEach((control) => {
     if (!control) return;
     control.required = !isVacation;
@@ -8178,6 +8177,8 @@ function updatePaidTimeCategoryControls() {
   }
   setElementText(document.getElementById('paid-time-rate-label'), isVacation ? 'Daily rate' : 'Hourly rate');
   setElementText(document.getElementById('paid-time-quantity-label'), isVacation ? 'Days' : 'Hours');
+  const customField = document.getElementById('paid-time-custom-field');
+  if (customField) customField.hidden = !isCustom;
 }
 
 function readPaidTimeForm() {
@@ -8211,6 +8212,31 @@ function renderPaidTimeRecords() {
   }).join('') : `<article class="empty-card">No paid-time records for ${escapeHtml(selectedDate)}.</article>`;
 }
 
+function openPaidTimeForm(options = {}) {
+  const selectedDate = options.date || fields.loadDate?.value || daily.date?.value || todayLocal();
+  if (paidTimeControls.date && !paidTimeControls.date.value) paidTimeControls.date.value = selectedDate;
+  if (options.date && paidTimeControls.date) paidTimeControls.date.value = options.date;
+  if (options.category && paidTimeControls.category) paidTimeControls.category.value = options.category;
+  if (paidTimeControls.dispatcher && !paidTimeControls.dispatcher.value) paidTimeControls.dispatcher.value = fields.dispatcher?.value || getRecentDispatcherForDate(selectedDate);
+  if (paidTimeControls.truck && !paidTimeControls.truck.value) paidTimeControls.truck.value = fields.truckNumber?.value || driverProfile.truckNumber || '';
+  if (paidTimeControls.trailer && !paidTimeControls.trailer.value) paidTimeControls.trailer.value = fields.trailerNumber?.value || driverProfile.trailerNumber || '';
+  if (paidTimeControls.rate && !paidTimeControls.rate.value) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Deadhead'));
+  updatePaidTimeCategoryControls();
+  renderPaidTimeCalculation();
+  if (paidTimeControls.panel) {
+    paidTimeControls.panel.hidden = false;
+    document.body?.classList?.add?.('modal-open');
+    requestAnimationFrame(() => paidTimeControls.category?.focus({ preventScroll: true }));
+  }
+}
+
+function closePaidTimeForm(options = {}) {
+  if (paidTimeControls.panel) paidTimeControls.panel.hidden = true;
+  document.body?.classList?.remove?.('modal-open');
+  const otherPaidToggle = document.getElementById('has-other-paid-time');
+  if (otherPaidToggle && options.resetQuestion !== false) otherPaidToggle.checked = false;
+}
+
 function fillPaidTimeForm(record, duplicate = false) {
   if (record.category === 'Office Time' && paidTimeControls.category) {
     const options = Array.from(paidTimeControls.category.children || []);
@@ -8226,9 +8252,7 @@ function fillPaidTimeForm(record, duplicate = false) {
     if (paidTimeControls[control]) paidTimeControls[control].value = record[key] ?? '';
   });
   editingPaidTimeId = duplicate ? null : record.id;
-  if (paidTimeControls.panel) paidTimeControls.panel.open = true;
-  updatePaidTimeCategoryControls();
-  renderPaidTimeCalculation();
+  openPaidTimeForm({ date: record.workDate, category: record.category });
 }
 
 function printPaidTimeRecord(record) {
@@ -8343,7 +8367,7 @@ function savePaidTime(event) {
   updateDailySummary();
   renderPaidTimeRecords();
   paidTimeControls.form?.reset();
-  if (paidTimeControls.panel) paidTimeControls.panel.open = false;
+  closePaidTimeForm();
 }
 
 function initialize() {
@@ -8418,22 +8442,29 @@ document.getElementById('show-office-day-button')?.addEventListener('click', () 
 document.getElementById('cancel-office-day-button')?.addEventListener('click', () => { if (officeDayControls.panel) officeDayControls.panel.hidden = true; });
 document.getElementById('has-deadhead')?.addEventListener('change', () => updateAddMoreVisibility());
 document.getElementById('has-paid-wait')?.addEventListener('change', () => updateAddMoreVisibility());
+document.getElementById('has-other-paid-time')?.addEventListener('change', (event) => {
+  if (event.target.checked) openPaidTimeForm({ date: fields.loadDate?.value, category: 'Breakdown' });
+});
 paidTimeControls.form?.addEventListener('input', renderPaidTimeCalculation);
 paidTimeControls.category?.addEventListener('change', () => { updatePaidTimeCategoryControls(); renderPaidTimeCalculation(); });
 document.getElementById('show-paid-time-button')?.addEventListener('click', () => {
-  if (paidTimeControls.date && !paidTimeControls.date.value) paidTimeControls.date.value = daily.date.value;
-  if (paidTimeControls.rate && !paidTimeControls.rate.value) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Deadhead'));
-  if (paidTimeControls.panel) {
-    paidTimeControls.panel.open = true;
-    requestAnimationFrame(() => {
-      paidTimeControls.panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      window.setTimeout(() => paidTimeControls.category?.focus({ preventScroll: true }), 250);
-    });
-  }
+  openPaidTimeForm({ date: daily.date.value });
 });
 document.getElementById('save-paid-time-draft-button')?.addEventListener('click', () => storeJson(PAID_TIME_DRAFT_STORAGE_KEY, readPaidTimeForm(), 'paid-time draft'));
 document.getElementById('download-paid-time-button')?.addEventListener('click', downloadPaidTimeCsv);
-document.getElementById('cancel-paid-time-button')?.addEventListener('click', () => { editingPaidTimeId = null; paidTimeControls.form?.reset(); if (paidTimeControls.panel) paidTimeControls.panel.open = false; });
+function cancelPaidTimeEntry() {
+  editingPaidTimeId = null;
+  paidTimeControls.form?.reset();
+  closePaidTimeForm();
+}
+document.getElementById('cancel-paid-time-button')?.addEventListener('click', cancelPaidTimeEntry);
+document.getElementById('close-paid-time-button')?.addEventListener('click', cancelPaidTimeEntry);
+paidTimeControls.panel?.addEventListener('click', (event) => {
+  if (event.target === paidTimeControls.panel) cancelPaidTimeEntry();
+});
+document.addEventListener?.('keydown', (event) => {
+  if (event.key === 'Escape' && paidTimeControls.panel && !paidTimeControls.panel.hidden) cancelPaidTimeEntry();
+});
 document.getElementById('paid-time-records')?.addEventListener('click', (event) => {
   const editButton = event.target.closest?.('[data-edit-paid-time]');
   const duplicateButton = event.target.closest?.('[data-duplicate-paid-time]');

@@ -8,16 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.20.1">
+  <link rel="manifest" href="manifest.json?v=1.21.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.20.1">
-  <link rel="stylesheet" href="redesign.css?v=1.20.1">
-  <link rel="stylesheet" href="records-reports-redesign.css?v=1.20.1">
-  <link rel="stylesheet" href="settings-redesign.css?v=1.20.1">
-  <link rel="stylesheet" href="workbook-builder.css?v=1.20.1">
-  <link rel="stylesheet" href="timesheet.css?v=1.20.1">
-  <link rel="stylesheet" href="app-enhancements.css?v=1.20.1">
+  <link rel="stylesheet" href="style.css?v=1.21.0">
+  <link rel="stylesheet" href="redesign.css?v=1.21.0">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.21.0">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.21.0">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.21.0">
+  <link rel="stylesheet" href="timesheet.css?v=1.21.0">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.21.0">
 </head>
 <body>
   <main class="app">
@@ -28,7 +28,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.20.1</strong></span>
+          <span>Version <strong id="app-version">1.21.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -55,8 +55,8 @@
       <section class="app-view active" id="dashboard-view" data-view="dashboard" aria-labelledby="dashboard-title">
         <div class="panel dashboard-hero">
           <div class="hero-copy">
-            <p class="section-kicker">Dashboard</p>
-            <h2 id="dashboard-title">Today at a glance</h2>
+            <p class="section-kicker">Today</p>
+            <h2 id="dashboard-title">What do you need to add?</h2>
             <div class="date-inline">
               <label for="daily-date">
                 <span>Selected work date</span>
@@ -66,15 +66,15 @@
             </div>
           </div>
           <div class="hero-actions">
-            <button class="button primary" type="button" data-view-target="new-load">New Load</button>
-            <button class="button secondary" id="show-paid-time-button" type="button" aria-controls="paid-time-entry-panel">Add Paid Time</button>
-            <button class="button secondary" id="show-office-day-button" type="button">Office Day</button>
+            <button class="button primary" type="button" data-view-target="new-load">+ New Load</button>
+            <button class="button secondary" id="show-paid-time-button" type="button" aria-controls="paid-time-entry-panel">+ Paid Time</button>
+            <button class="button secondary" id="show-office-day-button" type="button">+ Office Day</button>
             <button class="button secondary" id="continue-draft-button" type="button" hidden>Continue Current Load</button>
           </div>
         </div>
 
         <div class="summary-layout">
-          <section class="panel summary-card today-workday-card" aria-labelledby="workday-card-title">
+          <section class="panel summary-card today-workday-card dashboard-workday" aria-labelledby="workday-card-title">
             <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="workday-card-title">Workday</h2></div><span class="status-pill" id="workday-status">Not Started</span></div>
             <div class="metric-strip tight">
               <article><span>Work date</span><strong id="workday-date">-</strong></article>
@@ -108,27 +108,11 @@
             </details>
             <p class="helper-text">Times are manually entered and remain editable. This tracker is not an ELD or official HOS record.</p>
           </section>
-          <section class="panel summary-card daily-closeout-card" id="daily-closeout-panel" aria-labelledby="daily-closeout-title">
-            <div class="section-heading compact">
-              <div><p class="section-kicker">Daily Closeout</p><h2 id="daily-closeout-title">Check the day before the timesheet</h2></div>
-              <span class="status-pill" id="daily-closeout-status" data-state="neutral">No activity</span>
-            </div>
-            <div class="metric-strip tight">
-              <article><span>Completed loads</span><strong id="daily-closeout-completed">0</strong></article>
-              <article><span>Rejects</span><strong id="daily-closeout-rejects">0</strong></article>
-              <article><span>Per diem</span><strong id="daily-closeout-per-diem">No</strong></article>
-              <article><span>Hourly work</span><strong id="daily-closeout-hourly">0.00 hr</strong></article>
-              <article><span>Paid wait</span><strong id="daily-closeout-wait">0.00 hr</strong></article>
-              <article><span>Shift</span><strong id="daily-closeout-shift">Incomplete</strong></article>
-            </div>
-            <p class="daily-closeout-summary" id="daily-closeout-summary">No saved activity for this date.</p>
-            <div class="button-row compact"><button class="button secondary" id="daily-closeout-review-button" type="button">Review Workday</button></div>
-          </section>
-          <section class="panel summary-card" aria-labelledby="daily-summary-title">
+          <section class="panel summary-card dashboard-today-total" aria-labelledby="daily-summary-title">
             <div class="section-heading compact">
               <div>
-                <p class="section-kicker">Daily Summary</p>
-                <h2 id="daily-summary-title">Selected date</h2>
+                <p class="section-kicker">Today's Total</p>
+                <h2 id="daily-summary-title">Pay and activity</h2>
               </div>
               <span class="status-pill"><strong id="loads-hauled-selected-date">0</strong>&nbsp;completed</span>
             </div>
@@ -159,9 +143,10 @@
               <div><span>Excellent status</span><strong id="daily-goal-status">Not eligible</strong></div>
               <div><span>Excellent difference</span><strong id="daily-goal-difference">Not available</strong></div>
             </article>
+            <div class="button-row compact dashboard-report-link"><button class="button ghost" type="button" data-view-target="reports">View pay period and earnings details</button></div>
           </section>
 
-          <section class="panel summary-card" aria-labelledby="pay-period-summary-title">
+          <section class="panel summary-card dashboard-period-detail" aria-labelledby="pay-period-summary-title">
             <div class="section-heading compact">
               <div>
                 <p class="section-kicker">Pay Period Containing Selected Date</p>
@@ -226,6 +211,22 @@
             <article class="empty-card">No recent loads yet.</article>
           </div>
         </section>
+        <section class="panel summary-card daily-closeout-card dashboard-closeout" id="daily-closeout-panel" aria-labelledby="daily-closeout-title">
+          <div class="section-heading compact">
+            <div><p class="section-kicker">End / Review Day</p><h2 id="daily-closeout-title">Check the day before the timesheet</h2></div>
+            <span class="status-pill" id="daily-closeout-status" data-state="neutral">No activity</span>
+          </div>
+          <div class="metric-strip tight">
+            <article><span>Completed loads</span><strong id="daily-closeout-completed">0</strong></article>
+            <article><span>Rejects</span><strong id="daily-closeout-rejects">0</strong></article>
+            <article><span>Per diem</span><strong id="daily-closeout-per-diem">No</strong></article>
+            <article><span>Hourly work</span><strong id="daily-closeout-hourly">0.00 hr</strong></article>
+            <article><span>Paid wait</span><strong id="daily-closeout-wait">0.00 hr</strong></article>
+            <article><span>Shift</span><strong id="daily-closeout-shift">Incomplete</strong></article>
+          </div>
+          <p class="daily-closeout-summary" id="daily-closeout-summary">No saved activity for this date.</p>
+          <div class="button-row compact"><button class="button secondary" id="daily-closeout-review-button" type="button">Review Workday</button></div>
+        </section>
         <section class="panel paid-time-panel" id="office-day-panel" hidden aria-labelledby="office-day-title">
           <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="office-day-title">Office Day</h2></div></div>
           <form id="office-day-form">
@@ -246,30 +247,6 @@
             <div class="button-row"><button class="button primary" type="submit">Save Office Day</button><button class="button ghost" id="cancel-office-day-button" type="button">Cancel</button></div>
           </form>
         </section>
-        <details class="panel paid-time-panel" id="paid-time-entry-panel">
-          <summary><strong>Add Additional Paid Time</strong></summary>
-          <form id="paid-time-form">
-            <div class="field-grid">
-              <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
-              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
-              <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
-              <label for="paid-time-quantity"><span id="paid-time-quantity-label">Hours</span><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly></label>
-              <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
-              <label for="paid-time-end"><span>End time</span><input id="paid-time-end" type="time" required></label>
-              <label for="paid-time-rate"><span id="paid-time-rate-label">Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
-              <label for="paid-time-dispatcher"><span>Dispatcher</span><input id="paid-time-dispatcher" type="text" list="dispatcher-options"></label>
-              <label for="paid-time-truck"><span>Truck</span><input id="paid-time-truck" type="text"></label>
-              <label for="paid-time-trailer"><span>Trailer</span><input id="paid-time-trailer" type="text"></label>
-              <label for="paid-time-related-load"><span>Related load ID</span><input id="paid-time-related-load" type="text"></label>
-              <label for="paid-time-miles"><span>Related miles</span><input id="paid-time-miles" type="number" min="0" step="0.1"></label>
-              <label for="paid-time-location"><span>Location</span><input id="paid-time-location" type="text"></label>
-              <label class="full-width" for="paid-time-notes"><span>Notes</span><textarea id="paid-time-notes"></textarea></label>
-            </div>
-            <div class="calculated-strip"><article><span>Duration</span><strong id="paid-time-duration">Not enough time data</strong></article><article><span>Estimated pay</span><strong id="paid-time-pay">$0.00</strong></article></div>
-            <p class="validation-summary" id="paid-time-error" role="alert"></p>
-            <div class="button-row"><button class="button primary" type="submit">Save Paid Time</button><button class="button secondary" type="button" id="download-paid-time-button">Paid Time CSV</button><button class="button ghost" type="button" id="save-paid-time-draft-button">Save Draft</button><button class="button ghost" type="button" id="cancel-paid-time-button">Cancel</button></div>
-          </form>
-        </details>
       </section>
 
       <section class="app-view" id="new-load-view" data-view="new-load" aria-labelledby="entry-title">
@@ -379,11 +356,15 @@
                   <span>Loading end time</span>
                   <input id="loaded-time" type="time">
                 </label>
-                <details class="optional-section full-width" id="load-add-more">
-                  <summary><strong>Add More</strong></summary>
-                  <div class="toggle-grid compact">
-                    <label class="toggle-field" for="has-deadhead"><input id="has-deadhead" type="checkbox"><span>Were there deadhead miles?</span></label>
-                    <label class="toggle-field" for="has-paid-wait"><input id="has-paid-wait" type="checkbox"><span>Was there paid wait time?</span></label>
+                <section class="load-extra-questions full-width" id="load-add-more" aria-labelledby="load-extra-title">
+                  <div class="load-extra-heading">
+                    <div><p class="section-kicker">Quick questions</p><h4 id="load-extra-title">Anything extra on this load?</h4></div>
+                    <span>Tap Yes only when it applies</span>
+                  </div>
+                  <div class="toggle-grid compact extra-question-grid">
+                    <label class="toggle-field" for="has-deadhead"><input id="has-deadhead" type="checkbox"><span>Deadhead?</span><strong>No / Yes</strong></label>
+                    <label class="toggle-field" for="has-paid-wait"><input id="has-paid-wait" type="checkbox"><span>Paid wait?</span><strong>No / Yes</strong></label>
+                    <label class="toggle-field" for="has-other-paid-time"><input id="has-other-paid-time" type="checkbox"><span>Breakdown, wash, training, or other paid time?</span><strong>No / Yes</strong></label>
                   </div>
                   <div class="field-grid" id="deadhead-fields" hidden>
                 <label for="deadhead-start-time">
@@ -408,7 +389,7 @@
                     <label for="paid-pickup-wait-minutes"><span>Paid loading wait minutes</span><input id="paid-pickup-wait-minutes" type="number" inputmode="numeric" min="0" step="1"></label>
                     <label for="paid-dropoff-wait-minutes"><span>Paid offloading wait minutes</span><input id="paid-dropoff-wait-minutes" type="number" inputmode="numeric" min="0" step="1"></label>
                   </div>
-                </details>
+                </section>
                 <label for="loaded-miles">
                   <span>Loaded miles</span>
                   <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
@@ -1056,7 +1037,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.20.1</strong>
+                <span>Application version</span><strong id="settings-app-version">1.21.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1131,6 +1112,41 @@
     </section>
   </main>
 
+  <section class="paid-time-modal" id="paid-time-entry-panel" role="dialog" aria-modal="true" aria-labelledby="paid-time-title" hidden>
+    <div class="paid-time-modal-card">
+      <div class="section-heading compact paid-time-modal-heading">
+        <div><p class="section-kicker">Additional pay</p><h2 id="paid-time-title">Add Paid Time</h2></div>
+        <button class="button ghost slim" type="button" id="close-paid-time-button" aria-label="Close paid time form">Close</button>
+      </div>
+      <p class="helper-text paid-time-intro">Use this for deadhead, truck wash, breakdown, training, vacation, or other paid work.</p>
+      <form id="paid-time-form">
+        <div class="field-grid paid-time-essential-grid">
+          <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
+          <label for="paid-time-category"><span>What are you being paid for?</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
+          <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
+          <label for="paid-time-end"><span>End time</span><input id="paid-time-end" type="time" required></label>
+          <label for="paid-time-location"><span>Location</span><input id="paid-time-location" type="text" placeholder="Optional"></label>
+          <label for="paid-time-rate"><span id="paid-time-rate-label">Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
+        </div>
+        <div class="calculated-strip paid-time-calculation"><article><span id="paid-time-quantity-label">Hours</span><strong id="paid-time-duration">Not enough time data</strong><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly hidden></article><article><span>Estimated pay</span><strong id="paid-time-pay">$0.00</strong></article></div>
+        <details class="optional-section paid-time-more">
+          <summary><strong>More details</strong> <span>Optional</span></summary>
+          <div class="field-grid">
+            <label for="paid-time-custom-category" id="paid-time-custom-field" hidden><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
+            <label for="paid-time-dispatcher"><span>Dispatcher</span><input id="paid-time-dispatcher" type="text" list="dispatcher-options"></label>
+            <label for="paid-time-truck"><span>Truck</span><input id="paid-time-truck" type="text"></label>
+            <label for="paid-time-trailer"><span>Trailer</span><input id="paid-time-trailer" type="text"></label>
+            <label for="paid-time-related-load"><span>Related load ID</span><input id="paid-time-related-load" type="text"></label>
+            <label for="paid-time-miles"><span>Related miles</span><input id="paid-time-miles" type="number" min="0" step="0.1"></label>
+            <label class="full-width" for="paid-time-notes"><span>Notes</span><textarea id="paid-time-notes"></textarea></label>
+          </div>
+        </details>
+        <p class="validation-summary" id="paid-time-error" role="alert"></p>
+        <div class="button-row paid-time-actions"><button class="button primary" type="submit">Save Paid Time</button><button class="button ghost" type="button" id="save-paid-time-draft-button">Save Draft</button><button class="button ghost" type="button" id="cancel-paid-time-button">Cancel</button><button class="button secondary" type="button" id="download-paid-time-button">Paid Time CSV</button></div>
+      </form>
+    </div>
+  </section>
+
   <script>
     (function () {
       var cachePrefix = 'personal-oilfield-load-tracker-';
@@ -1184,10 +1200,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.20.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.21.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.20.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.21.0&updated=' + Date.now());
           });
       }
 
@@ -1223,14 +1239,14 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.20.1"></script>
-  <script src="script.js?v=1.20.1"></script>
-  <script src="export-cleanup.js?v=1.20.1"></script>
-  <script src="professional-export.js?v=1.20.1"></script>
-  <script src="complete-workbook-export.js?v=1.20.1"></script>
-  <script src="export-integration.js?v=1.20.1"></script>
-  <script src="timesheet.js?v=1.20.1"></script>
-  <script src="daily-closeout.js?v=1.20.1"></script>
-  <script src="paycheck-reconciliation.js?v=1.20.1"></script>
+  <script src="vendor/exceljs.min.js?v=1.21.0"></script>
+  <script src="script.js?v=1.21.0"></script>
+  <script src="export-cleanup.js?v=1.21.0"></script>
+  <script src="professional-export.js?v=1.21.0"></script>
+  <script src="complete-workbook-export.js?v=1.21.0"></script>
+  <script src="export-integration.js?v=1.21.0"></script>
+  <script src="timesheet.js?v=1.21.0"></script>
+  <script src="daily-closeout.js?v=1.21.0"></script>
+  <script src="paycheck-reconciliation.js?v=1.21.0"></script>
 </body>
 </html>

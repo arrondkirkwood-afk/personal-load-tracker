@@ -27,3 +27,47 @@
   .reconciliation-grid { grid-template-columns: 1fr; }
   .report-shortcuts .button { flex-basis: 100%; }
 }
+
+body.modal-open { overflow: hidden; }
+
+.paid-time-modal[hidden] { display: none; }
+.paid-time-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: calc(18px + var(--safe-top)) calc(14px + var(--safe-right)) calc(18px + var(--safe-bottom)) calc(14px + var(--safe-left));
+  background: rgba(8, 25, 30, .68);
+  backdrop-filter: blur(3px);
+}
+.paid-time-modal-card {
+  width: min(100%, 760px);
+  max-height: 94svh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+}
+.paid-time-modal-heading { position: sticky; top: -18px; z-index: 2; margin: -18px -18px 10px; padding: 16px 18px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.paid-time-intro { margin: 0 0 14px; }
+.paid-time-essential-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.paid-time-calculation { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+.paid-time-more { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-soft); }
+.paid-time-more > summary { display: flex; justify-content: space-between; gap: 10px; min-height: 44px; align-items: center; cursor: pointer; }
+.paid-time-more > summary span { color: var(--muted); font-size: .78rem; }
+.paid-time-more[open] > summary { margin-bottom: 12px; }
+.paid-time-actions { position: sticky; bottom: -18px; margin: 14px -18px -18px; padding: 12px 18px calc(12px + var(--safe-bottom)); border-top: 1px solid var(--line); background: rgba(255,255,255,.97); }
+
+@media (max-width: 600px) {
+  .paid-time-modal { align-items: end; padding: var(--safe-top) 0 0; }
+  .paid-time-modal-card { width: 100%; max-height: calc(100svh - var(--safe-top)); border-radius: 16px 16px 0 0; padding: 16px; }
+  .paid-time-modal-heading { top: -16px; margin: -16px -16px 10px; padding: 14px 16px 10px; }
+  .paid-time-essential-grid { grid-template-columns: 1fr; }
+  .paid-time-actions { grid-template-columns: repeat(2,minmax(0,1fr)); bottom: -16px; margin: 14px -16px -16px; padding: 10px 16px calc(10px + var(--safe-bottom)); }
+  .paid-time-actions .button { min-height: 48px; }
+  .paid-time-actions .button.primary { grid-column: 1 / -1; }
+}

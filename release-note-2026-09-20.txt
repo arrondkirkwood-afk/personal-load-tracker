@@ -1,0 +1,9 @@
+Oilfield Load & Workday Tracker v1.21.0
+
+- Simplified Today around the current workday, today's total, recent loads, and end-of-day review.
+- Moved detailed pay-period and monthly analysis out of the everyday dashboard flow; it remains available under Earnings and reports.
+- Replaced the buried Add More area with visible deadhead, paid-wait, and other-paid-time questions.
+- Deadhead and paid-wait fields now appear immediately when their question is selected.
+- Other paid time opens in a phone-friendly sheet without leaving the load form.
+- Kept advanced paid-time fields under More details while preserving every saved field and export.
+- Updated the application and offline cache to v1.21.0.

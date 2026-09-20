@@ -6,7 +6,9 @@ Oilfield Load Tracker is a separate phone-friendly app for keeping your own crud
 
 - Saves personal load entries in browser storage.
 - Syncs signed-in records through Firebase Authentication and Cloud Firestore after a confirmed local-data migration.
-- Shows a dashboard with selected-date, company pay-period, month, and all-time load counts.
+- Keeps the Today dashboard focused on the current workday, today's pay, recent loads, and end-of-day review; deeper totals remain under Earnings and reports.
+- Uses visible quick questions for deadhead and paid wait, revealing only the fields that apply.
+- Opens paid time in a phone-friendly sheet from anywhere in the app, with optional details kept out of the way.
 - Saves a driver/equipment profile for future new loads.
 - Calculates water barrels, oil barrels, crude weight per barrel, load weight, and estimated gross truck weight.
 - Calculates completed-load pay from the loaded miles pay table only.
@@ -22,16 +24,13 @@ Oilfield Load Tracker is a separate phone-friendly app for keeping your own crud
 
 ## Workflow
 
-1. Pick the selected date in Today's Daily Summary.
-2. Fill out Add / Edit Load Entry in order:
-   - Load Details
-   - Loading/Unloading Time
-   - Paid Time
-   - Notes
-3. Review the Summary Load Calculation below the form.
-4. Tap Save Load, or Save Load & Start Next Load to clear load-specific fields and automatically prepare the next load number.
-5. Review Saved Loads for Selected Date and Daily Earnings Review.
-6. Use Settings and Backup at the bottom for CSV exports, JSON backup, import, updates, and printable reports.
+1. Pick the selected work date on Today and start the workday when needed.
+2. Tap New Load and enter the load and delivery details.
+3. Answer the deadhead and paid-wait quick questions; only the applicable fields open.
+4. Review the load calculation below the form.
+5. Tap Save Load, or Save Load & Start Next Load to clear load-specific fields and automatically prepare the next load number.
+6. Use Paid Time for deadhead, truck wash, breakdown, training, vacation, or other hourly work.
+7. Review recent loads, then use End / Review Day before preparing the timesheet.
 
 ## Pay And Earnings
 
@@ -132,7 +131,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version: `1.20.1`, cache name `personal-oilfield-load-tracker-v1.20.1`.
+Current app version and cache version: `1.21.0`, cache name `personal-oilfield-load-tracker-v1.21.0`.
 
 The Reports view includes a Timesheet Generator for the company 1st-15th and 16th-month-end pay periods. It reads existing loads, workday summaries, paid wait, deadhead, and paid-time records; offers report-only corrections in a preview; and downloads a clean US-letter PDF without modifying source records. The employee name and number default to Arrond Kirkwood and 0135 and can be changed under More.
 
