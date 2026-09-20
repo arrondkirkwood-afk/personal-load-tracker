@@ -1,4 +1,4 @@
-const APP_VERSION = "1.20.0";
+const APP_VERSION = "1.20.1";
 const DATA_SCHEMA_VERSION = 2;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -8422,8 +8422,14 @@ paidTimeControls.form?.addEventListener('input', renderPaidTimeCalculation);
 paidTimeControls.category?.addEventListener('change', () => { updatePaidTimeCategoryControls(); renderPaidTimeCalculation(); });
 document.getElementById('show-paid-time-button')?.addEventListener('click', () => {
   if (paidTimeControls.date && !paidTimeControls.date.value) paidTimeControls.date.value = daily.date.value;
-  if (paidTimeControls.rate && !paidTimeControls.rate.value) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Truck Wash'));
-  if (paidTimeControls.panel) paidTimeControls.panel.open = true;
+  if (paidTimeControls.rate && !paidTimeControls.rate.value) paidTimeControls.rate.value = String(getPaidTimeDefaultRate(paidTimeControls.category?.value || 'Deadhead'));
+  if (paidTimeControls.panel) {
+    paidTimeControls.panel.open = true;
+    requestAnimationFrame(() => {
+      paidTimeControls.panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.setTimeout(() => paidTimeControls.category?.focus({ preventScroll: true }), 250);
+    });
+  }
 });
 document.getElementById('save-paid-time-draft-button')?.addEventListener('click', () => storeJson(PAID_TIME_DRAFT_STORAGE_KEY, readPaidTimeForm(), 'paid-time draft'));
 document.getElementById('download-paid-time-button')?.addEventListener('click', downloadPaidTimeCsv);
