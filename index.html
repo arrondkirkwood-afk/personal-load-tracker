@@ -8,16 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.20.0">
+  <link rel="manifest" href="manifest.json?v=1.20.1">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.20.0">
-  <link rel="stylesheet" href="redesign.css?v=1.20.0">
-  <link rel="stylesheet" href="records-reports-redesign.css?v=1.20.0">
-  <link rel="stylesheet" href="settings-redesign.css?v=1.20.0">
-  <link rel="stylesheet" href="workbook-builder.css?v=1.20.0">
-  <link rel="stylesheet" href="timesheet.css?v=1.20.0">
-  <link rel="stylesheet" href="app-enhancements.css?v=1.20.0">
+  <link rel="stylesheet" href="style.css?v=1.20.1">
+  <link rel="stylesheet" href="redesign.css?v=1.20.1">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.20.1">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.20.1">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.20.1">
+  <link rel="stylesheet" href="timesheet.css?v=1.20.1">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.20.1">
 </head>
 <body>
   <main class="app">
@@ -28,7 +28,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.20.0</strong></span>
+          <span>Version <strong id="app-version">1.20.1</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -67,6 +67,7 @@
           </div>
           <div class="hero-actions">
             <button class="button primary" type="button" data-view-target="new-load">New Load</button>
+            <button class="button secondary" id="show-paid-time-button" type="button" aria-controls="paid-time-entry-panel">Add Paid Time</button>
             <button class="button secondary" id="show-office-day-button" type="button">Office Day</button>
             <button class="button secondary" id="continue-draft-button" type="button" hidden>Continue Current Load</button>
           </div>
@@ -246,11 +247,11 @@
           </form>
         </section>
         <details class="panel paid-time-panel" id="paid-time-entry-panel">
-          <summary><strong>Other Paid Time</strong></summary>
+          <summary><strong>Add Additional Paid Time</strong></summary>
           <form id="paid-time-form">
             <div class="field-grid">
               <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
-              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Truck Wash</option><option>Breakdown</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
+              <label for="paid-time-category"><span>Paid-time type</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
               <label for="paid-time-custom-category"><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
               <label for="paid-time-quantity"><span id="paid-time-quantity-label">Hours</span><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly></label>
               <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
@@ -1055,7 +1056,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.20.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.20.1</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1183,10 +1184,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.20.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.20.1&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.20.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.20.1&updated=' + Date.now());
           });
       }
 
@@ -1222,14 +1223,14 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.20.0"></script>
-  <script src="script.js?v=1.20.0"></script>
-  <script src="export-cleanup.js?v=1.20.0"></script>
-  <script src="professional-export.js?v=1.20.0"></script>
-  <script src="complete-workbook-export.js?v=1.20.0"></script>
-  <script src="export-integration.js?v=1.20.0"></script>
-  <script src="timesheet.js?v=1.20.0"></script>
-  <script src="daily-closeout.js?v=1.20.0"></script>
-  <script src="paycheck-reconciliation.js?v=1.20.0"></script>
+  <script src="vendor/exceljs.min.js?v=1.20.1"></script>
+  <script src="script.js?v=1.20.1"></script>
+  <script src="export-cleanup.js?v=1.20.1"></script>
+  <script src="professional-export.js?v=1.20.1"></script>
+  <script src="complete-workbook-export.js?v=1.20.1"></script>
+  <script src="export-integration.js?v=1.20.1"></script>
+  <script src="timesheet.js?v=1.20.1"></script>
+  <script src="daily-closeout.js?v=1.20.1"></script>
+  <script src="paycheck-reconciliation.js?v=1.20.1"></script>
 </body>
 </html>
