@@ -248,14 +248,14 @@ function assertWaitMinutes(name, overrides, expected) {
 }
 
 assertWaitMinutes(
-  'stop timestamps never create paid wait',
+  'automatic wait subtracts the first hour at each stop',
   {
     arrivedPickupTime: '10:00',
     loadedTime: '11:30',
     arrivedDropoffTime: '14:00',
     completedTime: '14:45'
   },
-  { pickup: 0, dropoff: 0, total: 0 }
+  { pickup: 30, dropoff: 0, total: 30 }
 );
 
 assertWaitMinutes(
@@ -266,7 +266,8 @@ assertWaitMinutes(
     arrivedDropoffTime: '15:00',
     completedTime: '17:15',
     paidPickupWaitMinutes: 15,
-    paidDropoffWaitMinutes: 75
+    paidDropoffWaitMinutes: 75,
+    waitCalculationMode: 'manual'
   },
   { pickup: 15, dropoff: 75, total: 90 }
 );
@@ -281,6 +282,29 @@ assertWaitMinutes(
   },
   { pickup: 0, dropoff: 0, total: 0 }
 );
+
+const paidDeadhead = derived({ loadedMiles: 10, deadheadStartTime: '06:00', deadheadEndTime: '07:00', deadheadPaid: true });
+assert.strictEqual(paidDeadhead.deadheadPay, 24, 'load-level deadhead time is included once when marked paid');
+assert.strictEqual(paidDeadhead.estimatedEntryPay, paidDeadhead.estimatedPay + 24, 'deadhead pay is included in the load estimate');
+
+const reroutePay = context.calculateDerived(loadValues({ loadedMiles: 10, reRoutedMiles: 5 }), {
+  paidMiles: 15,
+  includeReroutedMilesInPay: true,
+  rejectPay: 20,
+  waitPayRate: 24,
+  deadheadHourlyRate: 24,
+  loadedMilesPayScale: [{ min: 1, max: 10, rate: 100 }, { min: 11, max: 20, rate: 200 }]
+});
+assert.strictEqual(reroutePay.estimatedPay, 200, 'rerouted miles can be included in the configured mileage-pay lookup');
+
+const migratedHistorical = context.normalizeSavedLoad({
+  id: 'historical-pay', loadDate: '2026-01-01', loadStatus: 'Completed Load', loadedMiles: 10,
+  estimatedPay: 123.45, waitPay: 12.34, estimatedEntryPay: 135.79,
+  paidPickupWaitMinutes: 30, paidDropoffWaitMinutes: 0
+});
+assert.strictEqual(migratedHistorical.estimatedPay, 123.45, 'legacy base pay is preserved during migration');
+assert.strictEqual(migratedHistorical.estimatedEntryPay, 135.79, 'legacy total pay is preserved during migration');
+assert.ok(migratedHistorical.paySnapshot.migratedHistoricalValues, 'legacy records receive a historical-value snapshot marker');
 
 assert.strictEqual(derived({
   arrivedPickupTime: '06:00',
@@ -390,9 +414,9 @@ setField('settings-reject-rate', '25');
 setField('settings-wait-rate', '30');
 context.savePaySettingsFromControls();
 dailySummary = context.getDailyEarningsSummary('2026-07-12');
-assert.strictEqual(dailySummary.trainerPay, 55, 'trainer pay can be edited through settings');
-assert.strictEqual(dailySummary.perDiemPay, 52, 'per diem can be edited through settings');
-assert.strictEqual(dailySummary.sleeperBerthPay, 65, 'sleeper pay can be edited through settings');
+assert.strictEqual(dailySummary.trainerPay, 50, 'rate changes preserve historical trainer pay');
+assert.strictEqual(dailySummary.perDiemPay, 50, 'rate changes preserve historical per diem');
+assert.strictEqual(dailySummary.sleeperBerthPay, 60, 'rate changes preserve historical sleeper pay');
 
 const nextWorkflow = createStartupSmokeContext({});
 Object.entries({
@@ -745,7 +769,7 @@ const goalRange = context.summarizeDailyGoalResults([
 ]);
 assert.deepStrictEqual([goalRange.daysGoalMet, goalRange.daysBelowGoal, goalRange.daysInsufficientData], [2, 1, 1], 'pay-period and monthly goal counts aggregate correctly');
 assert.deepStrictEqual([goalRange.fairGoalDays, goalRange.excellentGoalDays, goalRange.belowFairGoalDays], [2, 2, 1], 'Fair and Excellent goal counts aggregate independently');
-assert.ok(html.includes('Fair Day Goal') && html.includes('Excellent Day Goal'), 'editable Fair and Excellent goal settings are displayed');
+assert.ok(html.includes('Personal daily target') && html.includes('Personal stretch target'), 'editable personal target settings are displayed');
 assert.ok(script.includes("'Fair Day Goal'") && script.includes("'Excellent Goal status'") && script.includes("'Excellent Goal difference'"), 'daily and analysis CSV output contains goal information');
 
 assert.strictEqual(context.getDutyTimeStatus({ exactDutyMinutes: 719 }), 'Normal Range', 'shift shorter than 12 hours is normal range');
@@ -833,7 +857,7 @@ let officeSummary = context.getDailyEarningsSummary('2026-09-08');
 assert.strictEqual(officeSummary.perDiemPay, context.getPayRate('perDiemPay'), 'Office Day receives automatic per diem once');
 assert.strictEqual(officeSummary.totalEstimatedDailyEarnings, 192 + context.getPayRate('perDiemPay'), 'Office pay and per diem are combined once');
 assert.strictEqual(officeSummary.exactDutyMinutes, 480, 'office-only duty time uses arrival and departure');
-assert.strictEqual(officeSummary.effectiveHourlyEarnings, (192 + context.getPayRate('perDiemPay')) / 8, 'office-only effective hourly earnings use office duty hours');
+assert.strictEqual(officeSummary.effectiveHourlyEarnings, 192 / 8, 'office-only hourly earnings use taxable pay and office duty hours');
 assert.strictEqual(officeSummary.workdayStatus, 'Office Day', 'office-only workday status is Office Day');
 assert.strictEqual(officeSummary.excellentGoalStatus, 'Not applicable — Office Day', 'office-only day is excluded from completed-load goals');
 assert.strictEqual(context.getDailyDispatchOutcome(officeSummary).dispatchOutcome, 'Office Day', 'office-only dispatch outcome is Office Day');
@@ -912,7 +936,7 @@ assert.ok(script.includes("const META_STORAGE_KEY = 'personalOilfieldLoadTracker
 assert.ok(script.includes("const SETTINGS_STORAGE_KEY = 'personalOilfieldLoadTracker.settings'"), 'settings storage key is preserved');
 assert.ok(script.includes("const FAVORITE_ROUTES_STORAGE_KEY = 'personalOilfieldLoadTracker.favoriteRoutes'"), 'favorite routes storage key is preserved');
 assert.ok(script.includes("const DRAFT_STORAGE_KEY = 'personalOilfieldLoadTracker.currentDraft'"), 'draft storage key is preserved');
-assert.ok(script.includes('const DATA_SCHEMA_VERSION = 2'), 'data schema version remains 2');
+assert.ok(script.includes('const DATA_SCHEMA_VERSION = 3'), 'data schema version is updated for historical pay snapshots');
 assert.ok(script.includes("cloudDocument('paidTime'"), 'Office Day continues to use the existing Firebase paid-time path');
 assert.ok(script.includes('pendingDeletes'), 'metadata stores pending cloud deletions');
 assert.ok(!script.includes('restoreLocalSafetySnapshot'), 'normal sign-out cannot call the old startup rollback helper');
@@ -921,7 +945,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.21.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.22.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -930,7 +954,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.21.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.22.0', 'app version is updated');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -1066,7 +1090,7 @@ assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMi
 assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: 840 }).dispatchOutcome, '14-Hour Review', 'goal met at exactly 14 hours is a 14-Hour Review');
 assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, exactDutyMinutes: 839 }).dispatchOutcome, 'Below Earnings Goal', 'below goal under 14 hours is Below Earnings Goal');
 assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, totalEstimatedDailyEarnings: 1000, exactDutyMinutes: 600 }).dispatchOutcome, 'Below Earnings Goal', 'paid time and add-ons cannot make a below-goal dispatch outcome productive');
-assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, exactDutyMinutes: 840 }).dispatchOutcome, 'Poor Dispatch Outcome — Review', 'below goal at exactly 14 hours is a poor dispatch outcome review');
+assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, completedLoadPay: 260, exactDutyMinutes: 840 }).dispatchOutcome, 'Long day below personal target — review', 'below target at exactly 14 hours uses a factual review label');
 assert.strictEqual(context.getDailyDispatchOutcome({ ...outcomeBase, exactDutyMinutes: null }).dispatchOutcome, 'Insufficient Time Data', 'missing exact workday times are not estimated for the dispatch outcome');
 
 const dispatcherRows = context.buildDispatcherPerformanceRows([

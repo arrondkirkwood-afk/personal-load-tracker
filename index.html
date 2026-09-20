@@ -8,16 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.21.0">
+  <link rel="manifest" href="manifest.json?v=1.22.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.21.0">
-  <link rel="stylesheet" href="redesign.css?v=1.21.0">
-  <link rel="stylesheet" href="records-reports-redesign.css?v=1.21.0">
-  <link rel="stylesheet" href="settings-redesign.css?v=1.21.0">
-  <link rel="stylesheet" href="workbook-builder.css?v=1.21.0">
-  <link rel="stylesheet" href="timesheet.css?v=1.21.0">
-  <link rel="stylesheet" href="app-enhancements.css?v=1.21.0">
+  <link rel="stylesheet" href="style.css?v=1.22.0">
+  <link rel="stylesheet" href="redesign.css?v=1.22.0">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.22.0">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.22.0">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.22.0">
+  <link rel="stylesheet" href="timesheet.css?v=1.22.0">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.22.0">
 </head>
 <body>
   <main class="app">
@@ -28,7 +28,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.21.0</strong></span>
+          <span>Version <strong id="app-version">1.22.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -92,7 +92,7 @@
                 <label for="workday-shift-start"><span>Shift start time</span><input id="workday-shift-start" type="time"></label>
               </div>
               <div class="toggle-grid compact">
-                <label class="toggle-field" for="workday-per-diem"><input id="workday-per-diem" type="checkbox"><span>Per diem</span></label>
+                <label class="toggle-field" for="workday-per-diem"><input id="workday-per-diem" type="checkbox"><span>Apply per diem manually</span></label>
                 <label class="toggle-field" for="workday-sleeper"><input id="workday-sleeper" type="checkbox"><span>Sleeper berth</span></label>
                 <label class="toggle-field" for="workday-trainer"><input id="workday-trainer" type="checkbox"><span>Trainer pay</span></label>
               </div>
@@ -367,6 +367,7 @@
                     <label class="toggle-field" for="has-other-paid-time"><input id="has-other-paid-time" type="checkbox"><span>Breakdown, wash, training, or other paid time?</span><strong>No / Yes</strong></label>
                   </div>
                   <div class="field-grid" id="deadhead-fields" hidden>
+                <label class="toggle-field" for="deadhead-paid"><input id="deadhead-paid" type="checkbox" checked><span>Include deadhead time in estimated pay?</span><strong>No / Yes</strong></label>
                 <label for="deadhead-start-time">
                   <span>Deadhead start time</span>
                   <input id="deadhead-start-time" type="time">
@@ -386,8 +387,10 @@
                 </label>
                   </div>
                   <div class="field-grid two" id="paid-wait-fields" hidden>
-                    <label for="paid-pickup-wait-minutes"><span>Paid loading wait minutes</span><input id="paid-pickup-wait-minutes" type="number" inputmode="numeric" min="0" step="1"></label>
-                    <label for="paid-dropoff-wait-minutes"><span>Paid offloading wait minutes</span><input id="paid-dropoff-wait-minutes" type="number" inputmode="numeric" min="0" step="1"></label>
+                    <label class="toggle-field full-width" for="manual-wait-override"><input id="manual-wait-override" type="checkbox"><span>Manually override payable wait?</span><strong>Auto / Manual</strong></label>
+                    <p class="helper-text full-width">Automatic wait subtracts the first 60 minutes at loading and offloading separately. Use manual only when payroll rules or approved time differ.</p>
+                    <label for="paid-pickup-wait-minutes"><span>Payable loading wait minutes</span><input id="paid-pickup-wait-minutes" type="number" inputmode="numeric" min="0" step="1" readonly></label>
+                    <label for="paid-dropoff-wait-minutes"><span>Payable offloading wait minutes</span><input id="paid-dropoff-wait-minutes" type="number" inputmode="numeric" min="0" step="1" readonly></label>
                   </div>
                 </section>
                 <label for="loaded-miles">
@@ -539,11 +542,11 @@
                 <span>D</span>
                 <h3>Paid Time</h3>
               </div>
-              <p class="helper-text">These paid-time add-ons are saved once for the selected work date. Hourly work and Vacation Time are available from Today.</p>
+              <p class="helper-text">These add-ons are saved once for the selected work date. Per diem may already apply automatically based on Settings; this switch is a manual confirmation. Hourly work and Vacation Time are available from Today.</p>
               <div class="toggle-grid">
                 <label class="toggle-field" for="per-diem-checkbox">
                   <input id="per-diem-checkbox" type="checkbox">
-                  <span>Per diem</span>
+                  <span>Apply per diem manually</span>
                   <strong id="per-diem-rate-label">$50.00</strong>
                 </label>
                 <label class="toggle-field" for="sleeper-berth-checkbox">
@@ -723,8 +726,8 @@
             <label for="report-range-mode">
               <span>Report range</span>
               <select id="report-range-mode">
+                <option value="current-pay-period" selected>Pay period containing selected date</option>
                 <option value="selected-date">Selected date</option>
-                <option value="current-pay-period">Pay period containing selected date</option>
                 <option value="previous-pay-period">Previous pay period</option>
                 <option value="current-month">Month containing selected date</option>
                 <option value="previous-month">Previous month</option>
@@ -799,16 +802,25 @@
             <div><p class="section-kicker">Payroll Verification</p><h2 id="paycheck-reconciliation-title">Paycheck reconciliation</h2></div>
             <span class="status-pill">Personal check</span>
           </div>
-          <p class="helper-text">Compares the gross earnings estimated from your saved tracker records with the gross pay shown on your paycheck. It does not change source records.</p>
+          <p class="helper-text">Compare the tracker’s work period with the paycheck date and official payroll amounts. Per diem is separate because it is commonly non-taxable; confirm its classification on the paystub.</p>
           <div class="report-controls">
             <label for="reconcile-anchor-date"><span>Pay period containing</span><input id="reconcile-anchor-date" type="date"></label>
-            <label for="reconcile-period-start"><span>Beginning date</span><input id="reconcile-period-start" type="date" readonly></label>
-            <label for="reconcile-period-end"><span>Ending date</span><input id="reconcile-period-end" type="date" readonly></label>
-            <label for="reconcile-paycheck-gross"><span>Paycheck gross pay</span><input id="reconcile-paycheck-gross" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
+            <label for="reconcile-period-start"><span>Work period start</span><input id="reconcile-period-start" type="date" readonly></label>
+            <label for="reconcile-period-end"><span>Work period end</span><input id="reconcile-period-end" type="date" readonly></label>
+            <label for="reconcile-paycheck-date"><span>Paycheck date</span><input id="reconcile-paycheck-date" type="date"></label>
+            <label for="reconcile-paycheck-gross"><span>Official gross taxable wages</span><input id="reconcile-paycheck-gross" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
+            <label for="reconcile-paycheck-per-diem"><span>Official non-taxable per diem</span><input id="reconcile-paycheck-per-diem" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
+            <label for="reconcile-adjustments"><span>Bonus, retro, or other adjustment</span><input id="reconcile-adjustments" type="number" inputmode="decimal" step="0.01" value="0"></label>
+            <label for="reconcile-tolerance"><span>Match tolerance</span><input id="reconcile-tolerance" type="number" inputmode="decimal" min="0" step="0.01" value="1.00"></label>
+            <label for="reconcile-notes"><span>Notes</span><input id="reconcile-notes" type="text" placeholder="Optional payroll note"></label>
           </div>
           <div class="reconciliation-grid">
-            <article><span>Tracker expected gross</span><strong id="reconcile-expected">$0.00</strong></article>
-            <article><span>Difference</span><strong id="reconcile-difference">Enter paycheck gross</strong></article>
+            <article><span>Tracker taxable wages</span><strong id="reconcile-expected">$0.00</strong></article>
+            <article><span>Taxable-wage difference</span><strong id="reconcile-difference">Enter official gross</strong></article>
+            <article><span>Tracker non-taxable per diem</span><strong id="reconcile-expected-per-diem">$0.00</strong></article>
+            <article><span>Per-diem difference</span><strong id="reconcile-per-diem-difference">Enter official per diem</strong></article>
+            <article><span>Tracker total compensation</span><strong id="reconcile-expected-total">$0.00</strong></article>
+            <article><span>Total difference after adjustment</span><strong id="reconcile-total-difference">Enter paystub amounts</strong></article>
             <article><span>Completed-load pay</span><strong id="reconcile-completed-pay">$0.00</strong></article>
             <article><span>Reject pay</span><strong id="reconcile-reject-pay">$0.00</strong></article>
             <article><span>Wait pay</span><strong id="reconcile-wait-pay">$0.00</strong></article>
@@ -817,7 +829,7 @@
             <article><span>Per diem</span><strong id="reconcile-per-diem-pay">$0.00</strong></article>
             <article><span>Sleeper + trainer</span><strong id="reconcile-other-addons">$0.00</strong></article>
           </div>
-          <p class="reconciliation-status" id="reconcile-status" data-state="neutral">Enter paycheck gross to compare.</p>
+          <p class="reconciliation-status" id="reconcile-status" data-state="neutral">Enter the official paystub amounts to compare.</p>
         </section>
 
         <section class="panel earnings-review" aria-labelledby="earnings-review-title">
@@ -967,8 +979,8 @@
             <div class="settings-card">
               <h3>Pay Rates</h3>
               <div class="field-grid pay-rate-grid">
-                <label for="settings-fair-day-goal"><span>Fair Day Goal</span><input id="settings-fair-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
-                <label for="settings-excellent-day-goal"><span>Excellent Day Goal</span><input id="settings-excellent-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-fair-day-goal"><span>Personal daily target</span><input id="settings-fair-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-excellent-day-goal"><span>Personal stretch target</span><input id="settings-excellent-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <input id="settings-daily-completed-load-goal" type="hidden">
                 <label for="settings-deadhead-rate"><span>Legacy deadhead hourly rate</span><input id="settings-deadhead-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-truck-wash-rate"><span>Truck-wash hourly rate</span><input id="settings-truck-wash-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
@@ -979,8 +991,10 @@
                 <label for="settings-sleeper-rate"><span>Sleeper berth rate</span><input id="settings-sleeper-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-reject-rate"><span>Reject-pay rate</span><input id="settings-reject-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
                 <label for="settings-trainer-rate"><span>Trainer-pay rate</span><input id="settings-trainer-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label class="toggle-field" for="settings-include-rerouted-miles"><input id="settings-include-rerouted-miles" type="checkbox"><span>Include rerouted miles in loaded-mile pay lookup</span><strong>No / Yes</strong></label>
+                <label class="toggle-field" for="settings-auto-per-diem"><input id="settings-auto-per-diem" type="checkbox"><span>Automatically apply per diem on workdays</span><strong>No / Yes</strong></label>
               </div>
-              <p class="helper-text">Changing goals updates displayed comparisons only. It does not change saved load pay or total estimated earnings.</p>
+              <p class="helper-text">These choices apply to new or edited records. Saved historical pay stays at the rates captured when it was recorded.</p>
               <details class="pay-table-details">
                 <summary>Loaded-mile pay table</summary>
                 <div id="loaded-mile-pay-editor" class="loaded-mile-pay-editor"></div>
@@ -1037,7 +1051,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.21.0</strong>
+                <span>Application version</span><strong id="settings-app-version">1.22.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1118,7 +1132,7 @@
         <div><p class="section-kicker">Additional pay</p><h2 id="paid-time-title">Add Paid Time</h2></div>
         <button class="button ghost slim" type="button" id="close-paid-time-button" aria-label="Close paid time form">Close</button>
       </div>
-      <p class="helper-text paid-time-intro">Use this for deadhead, truck wash, breakdown, training, vacation, or other paid work.</p>
+      <p class="helper-text paid-time-intro">Use this for standalone deadhead not already paid on a load, truck wash, breakdown, training, vacation, or other paid work.</p>
       <form id="paid-time-form">
         <div class="field-grid paid-time-essential-grid">
           <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
@@ -1200,10 +1214,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.21.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.22.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.21.0&updated=' + Date.now());
+            window.location.replace('index.html?v=1.22.0&updated=' + Date.now());
           });
       }
 
@@ -1239,14 +1253,14 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.21.0"></script>
-  <script src="script.js?v=1.21.0"></script>
-  <script src="export-cleanup.js?v=1.21.0"></script>
-  <script src="professional-export.js?v=1.21.0"></script>
-  <script src="complete-workbook-export.js?v=1.21.0"></script>
-  <script src="export-integration.js?v=1.21.0"></script>
-  <script src="timesheet.js?v=1.21.0"></script>
-  <script src="daily-closeout.js?v=1.21.0"></script>
-  <script src="paycheck-reconciliation.js?v=1.21.0"></script>
+  <script src="vendor/exceljs.min.js?v=1.22.0"></script>
+  <script src="script.js?v=1.22.0"></script>
+  <script src="export-cleanup.js?v=1.22.0"></script>
+  <script src="professional-export.js?v=1.22.0"></script>
+  <script src="complete-workbook-export.js?v=1.22.0"></script>
+  <script src="export-integration.js?v=1.22.0"></script>
+  <script src="timesheet.js?v=1.22.0"></script>
+  <script src="daily-closeout.js?v=1.22.0"></script>
+  <script src="paycheck-reconciliation.js?v=1.22.0"></script>
 </body>
 </html>

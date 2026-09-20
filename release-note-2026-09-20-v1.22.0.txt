@@ -1,0 +1,12 @@
+Oilfield Load & Workday Tracker v1.22.0
+
+- Preserves historical load and daily add-on pay with calculation snapshots.
+- Automatically calculates payable wait after a separate 60-minute grace period at each stop, with a manual override.
+- Supports load-level deadhead pay and prevents obvious duplicate related deadhead entries.
+- Adds settings for rerouted-mile pay treatment and automatic per diem.
+- Separates estimated taxable wages, non-taxable per diem, and total compensation in Reports.
+- Defaults Reports to the selected date's pay period and places detailed operating totals behind a disclosure.
+- Adds calculation and completeness alerts for missing duty time, manual wait, missing mileage rates, and paid-time overlap.
+- Expands paycheck reconciliation with paycheck date, per diem, adjustments, notes, and match tolerance.
+- Replaces judgmental dispatch wording with factual personal-target language.
+- Improves report card contrast and mobile report layout.

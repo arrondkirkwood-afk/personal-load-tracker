@@ -1,5 +1,5 @@
-const APP_VERSION = "1.21.0";
-const DATA_SCHEMA_VERSION = 2;
+const APP_VERSION = "1.22.0";
+const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const APP_CACHE_NAME = `${APP_CACHE_PREFIX}v${APP_VERSION}`;
@@ -494,6 +494,8 @@ const paySettingsControls = {
   sleeperRate: document.getElementById('settings-sleeper-rate'),
   rejectRate: document.getElementById('settings-reject-rate'),
   trainerRate: document.getElementById('settings-trainer-rate'),
+  includeReroutedMiles: document.getElementById('settings-include-rerouted-miles'),
+  autoPerDiem: document.getElementById('settings-auto-per-diem'),
   loadedMilesEditor: document.getElementById('loaded-mile-pay-editor'),
   saveButton: document.getElementById('save-pay-settings-button'),
   status: document.getElementById('pay-settings-status'),
@@ -3338,6 +3340,7 @@ function normalizeDailyAddOns(rawAddOns) {
       perDiem: Boolean(addOn.perDiem ?? addOn.perDiemApplied),
       sleeperBerth: Boolean(addOn.sleeperBerth ?? addOn.sleeperBerthApplied),
       trainerPay: Boolean(addOn.trainerPay ?? addOn.trainerPayApplied),
+      rateSnapshot: isPlainObject(addOn.rateSnapshot) ? { ...addOn.rateSnapshot } : null,
       shiftStartTime: String(addOn.shiftStartTime || ''),
       shiftEndTime: String(addOn.shiftEndTime || ''),
       notes: addOn.notes || addOn.dailyNotes || addOn.dailyEarningsNotes || '',
@@ -3442,7 +3445,9 @@ function getDefaultSettings() {
     dailyCompletedLoadPayGoal: DEFAULT_DAILY_COMPLETED_LOAD_PAY_GOAL,
     fairDayGoal: DEFAULT_FAIR_DAY_GOAL,
     excellentDayGoal: DEFAULT_EXCELLENT_DAY_GOAL,
-    keepRouteForNextLoad: true
+    keepRouteForNextLoad: true,
+    includeReroutedMilesInPay: false,
+    autoPerDiemOnWorkdays: true
   };
 }
 
@@ -3505,7 +3510,9 @@ function normalizeAppSettings(rawSettings) {
     fairDayGoal: fairGoal,
     excellentDayGoal: excellentGoal,
     dailyCompletedLoadPayGoal: excellentGoal,
-    keepRouteForNextLoad: raw.keepRouteForNextLoad !== false
+    keepRouteForNextLoad: raw.keepRouteForNextLoad !== false,
+    includeReroutedMilesInPay: raw.includeReroutedMilesInPay === true,
+    autoPerDiemOnWorkdays: raw.autoPerDiemOnWorkdays !== false
   };
 }
 
@@ -3777,7 +3784,11 @@ function readValue(id) {
 }
 
 function getFormValues() {
-  return Object.fromEntries(fieldIds.map((id) => [toKey(id), readValue(id)]));
+  return {
+    ...Object.fromEntries(fieldIds.map((id) => [toKey(id), readValue(id)])),
+    waitCalculationMode: document.getElementById('manual-wait-override')?.checked ? 'manual' : 'automatic',
+    deadheadPaid: Boolean(document.getElementById('deadhead-paid')?.checked)
+  };
 }
 
 function isFiniteNumber(value) {
@@ -4069,6 +4080,12 @@ function applyPaySettingsToControls() {
   if (paySettingsControls.trainerRate) {
     paySettingsControls.trainerRate.value = String(getPayRate('trainerPay'));
   }
+  if (paySettingsControls.includeReroutedMiles) {
+    paySettingsControls.includeReroutedMiles.checked = Boolean(appSettings.includeReroutedMilesInPay);
+  }
+  if (paySettingsControls.autoPerDiem) {
+    paySettingsControls.autoPerDiem.checked = Boolean(appSettings.autoPerDiemOnWorkdays);
+  }
 
   updateRateLabels();
   renderLoadedMilesPayEditor();
@@ -4122,7 +4139,9 @@ function savePaySettingsFromControls() {
       ,breakdownHourlyRate: paySettingsControls.breakdownRate?.value
       ,otherHourlyRate: paySettingsControls.otherHourlyRate?.value
     },
-    loadedMilesPayScale: readLoadedMilesPayEditor()
+    loadedMilesPayScale: readLoadedMilesPayEditor(),
+    includeReroutedMilesInPay: Boolean(paySettingsControls.includeReroutedMiles?.checked),
+    autoPerDiemOnWorkdays: Boolean(paySettingsControls.autoPerDiem?.checked)
   });
   const previousSettings = appSettings;
 
@@ -4141,7 +4160,7 @@ function savePaySettingsFromControls() {
     markLocalChangesPending('Pay rates saved locally. Sign in to sync them to Firebase.');
   }
   syncSettingsToCloud();
-  setStatusMessage(paySettingsControls.status, 'Pay rates saved.');
+  setStatusMessage(paySettingsControls.status, 'Pay settings saved. Existing historical pay was preserved.');
 }
 
 function renderSettingsUi() {
@@ -4321,12 +4340,16 @@ function calculatePaidWaitMinutes(timeOnLocationMinutes) {
     : 0;
 }
 
-function calculateStopWaitBreakdown(values) {
-  // Stop timestamps describe operations only. Paid wait is always entered manually.
+function calculateStopWaitBreakdown(values, waitRate = getPayRate('waitPayRate')) {
   const pickupStopDurationMinutes = durationBetween(values.arrivedPickupTime, values.loadedTime);
   const unloadStopDurationMinutes = durationBetween(values.arrivedDropoffTime, values.completedTime);
-  const paidPickupWaitMinutes = Math.max(0, numberOrNull(values.paidPickupWaitMinutes) ?? 0);
-  const paidDropoffWaitMinutes = Math.max(0, numberOrNull(values.paidDropoffWaitMinutes) ?? 0);
+  const manualWait = values.waitCalculationMode === 'manual' || values.waitCalculationMode === 'legacy-manual';
+  const paidPickupWaitMinutes = manualWait
+    ? Math.max(0, numberOrNull(values.paidPickupWaitMinutes) ?? 0)
+    : calculatePaidWaitMinutes(pickupStopDurationMinutes);
+  const paidDropoffWaitMinutes = manualWait
+    ? Math.max(0, numberOrNull(values.paidDropoffWaitMinutes) ?? 0)
+    : calculatePaidWaitMinutes(unloadStopDurationMinutes);
   const totalPaidWaitMinutes = paidPickupWaitMinutes + paidDropoffWaitMinutes;
 
   return {
@@ -4335,13 +4358,13 @@ function calculateStopWaitBreakdown(values) {
     paidPickupWaitMinutes,
     paidDropoffWaitMinutes,
     totalPaidWaitMinutes,
-    waitPay: calculateWaitPay(totalPaidWaitMinutes)
+    waitPay: calculateWaitPay(totalPaidWaitMinutes, waitRate)
   };
 }
 
-function calculateWaitPay(totalPaidWaitMinutes) {
+function calculateWaitPay(totalPaidWaitMinutes, rate = getPayRate('waitPayRate')) {
   return isFiniteNumber(totalPaidWaitMinutes)
-    ? totalPaidWaitMinutes / 60 * getPayRate('waitPayRate')
+    ? totalPaidWaitMinutes / 60 * rate
     : 0;
 }
 
@@ -4360,13 +4383,13 @@ function timelineEndMinutes(startTime, endTime) {
   return end;
 }
 
-function getLoadedMilesPay(loadedMiles) {
+function getLoadedMilesPay(loadedMiles, scale = getActiveLoadedMilesPayScale()) {
   if (!isFiniteNumber(loadedMiles) || loadedMiles <= 0) {
     return { rate: 0, rangeLabel: '0 miles' };
   }
 
   const milesForRate = Math.ceil(loadedMiles);
-  const match = getActiveLoadedMilesPayScale().find((range) => (
+  const match = scale.find((range) => (
     milesForRate >= range.min && milesForRate <= range.max
   ));
 
@@ -4395,7 +4418,21 @@ function getOffloadStatus(difference) {
   return 'Matches gross barrels exactly';
 }
 
-function calculateDerived(values) {
+function createLoadPaySnapshot(values = {}) {
+  return {
+    capturedAt: new Date().toISOString(),
+    schemaVersion: DATA_SCHEMA_VERSION,
+    rejectPay: getPayRate('rejectPay'),
+    waitPayRate: getPayRate('waitPayRate'),
+    deadheadHourlyRate: getPayRate('deadheadHourlyRate'),
+    waitGraceMinutes: WAIT_GRACE_MINUTES,
+    includeReroutedMilesInPay: Boolean(appSettings.includeReroutedMilesInPay),
+    loadedMilesPayScale: getActiveLoadedMilesPayScale().map((range) => ({ ...range })),
+    paidMiles: valueOrZero(values.loadedMiles) + (appSettings.includeReroutedMilesInPay ? valueOrZero(values.reRoutedMiles) : 0)
+  };
+}
+
+function calculateDerived(values, paySnapshot = null) {
   const grossBarrels = valueOrZero(values.grossBarrels);
   const bswPercentage = valueOrZero(values.bswPercentage);
   const shouldCalculateLoad = isCompleted(values) || grossBarrels > 0;
@@ -4424,12 +4461,17 @@ function calculateDerived(values) {
   const regularMiles = valueOrZero(values.loadedMiles);
   const reRoutedMiles = valueOrZero(values.reRoutedMiles);
   const totalMilesIncludingReRoute = regularMiles + reRoutedMiles;
-  const payMatch = getLoadedMilesPay(values.loadedMiles);
-  const estimatedPay = isReject(values) ? getPayRate('rejectPay') : payMatch.rate;
-  const stopWait = calculateStopWaitBreakdown(values);
-  const estimatedEntryPay = estimatedPay + stopWait.waitPay;
+  const snapshot = paySnapshot || createLoadPaySnapshot(values);
+  const paidMiles = valueOrZero(snapshot.paidMiles) || (regularMiles + (snapshot.includeReroutedMilesInPay ? reRoutedMiles : 0));
+  const payMatch = getLoadedMilesPay(paidMiles, normalizeLoadedMilesPayScale(snapshot.loadedMilesPayScale));
+  const estimatedPay = isReject(values) ? normalizePayRate(snapshot.rejectPay, getPayRate('rejectPay')) : payMatch.rate;
+  const stopWait = calculateStopWaitBreakdown(values, normalizePayRate(snapshot.waitPayRate, getPayRate('waitPayRate')));
   const deadheadTravelMinutes = durationBetween(values.deadheadStartTime, values.deadheadEndTime)
     ?? numberOrNull(values.deadheadTravelMinutes);
+  const deadheadPay = values.deadheadPaid && isFiniteNumber(deadheadTravelMinutes)
+    ? deadheadTravelMinutes / 60 * normalizePayRate(snapshot.deadheadHourlyRate, getPayRate('deadheadHourlyRate'))
+    : 0;
+  const estimatedEntryPay = estimatedPay + stopWait.waitPay + deadheadPay;
 
   return {
     waterBarrels,
@@ -4446,6 +4488,7 @@ function calculateDerived(values) {
     regularMiles,
     reRoutedMiles,
     totalMilesIncludingReRoute,
+    paidMiles,
     matchedPayRange: isReject(values) ? 'Reject pay' : payMatch.rangeLabel,
     loadedMilesPayRate: isReject(values) ? 0 : payMatch.rate,
     estimatedPay,
@@ -4459,6 +4502,7 @@ function calculateDerived(values) {
     paidDropoffWaitMinutes: stopWait.paidDropoffWaitMinutes,
     totalPaidWaitMinutes: stopWait.totalPaidWaitMinutes,
     waitPay: stopWait.waitPay,
+    deadheadPay,
     cycleTimeMinutes: durationBetween(values.arrivedPickupTime, values.completedTime),
     firstPickupMinutes: parseTimeToMinutes(values.arrivedPickupTime),
     completedTimelineMinutes: timelineEndMinutes(values.arrivedPickupTime, values.completedTime)
@@ -4504,6 +4548,8 @@ function normalizeSavedLoad(load) {
     deadheadStartTime: rawLoad.deadheadStartTime || rawLoad.deadheadStart || '',
     deadheadEndTime: rawLoad.deadheadEndTime || rawLoad.deadheadEnd || '',
     deadheadMiles: numberOrNull(rawLoad.deadheadMiles) ?? 0,
+    deadheadPaid: Boolean(rawLoad.deadheadPaid),
+    waitCalculationMode: rawLoad.waitCalculationMode || 'legacy-manual',
     paidPickupWaitMinutes: numberOrNull(rawLoad.paidPickupWaitMinutes) ?? 0,
     paidDropoffWaitMinutes: numberOrNull(rawLoad.paidDropoffWaitMinutes) ?? 0,
     notes: rawLoad.notes || '',
@@ -4517,7 +4563,32 @@ function normalizeSavedLoad(load) {
     jotformConfirmationNumber: rawLoad.jotformConfirmationNumber || ''
   };
 
-  return { ...normalized, ...calculateDerived(normalized), dataSchemaVersion: DATA_SCHEMA_VERSION };
+  const existingSnapshot = isPlainObject(rawLoad.paySnapshot) ? rawLoad.paySnapshot : null;
+  const shouldRecalculatePay = rawLoad._recalculatePay === true;
+  const paySnapshot = shouldRecalculatePay ? createLoadPaySnapshot(normalized) : existingSnapshot;
+  const derived = calculateDerived(normalized, paySnapshot);
+
+  // Version 2 records already contain their historical calculated dollars. Preserve
+  // those values instead of silently applying today's settings during migration.
+  if (!shouldRecalculatePay && (!existingSnapshot || existingSnapshot.migratedHistoricalValues)) {
+    ['estimatedPay', 'loadedMilesPayRate', 'waitPay', 'estimatedEntryPay', 'deadheadPay'].forEach((key) => {
+      const historicalValue = numberOrNull(rawLoad[key]);
+      if (historicalValue !== null) derived[key] = historicalValue;
+    });
+  }
+
+  delete normalized._recalculatePay;
+  return { ...normalized, ...derived, paySnapshot: paySnapshot || {
+    capturedAt: rawLoad.savedAt || new Date().toISOString(),
+    schemaVersion: DATA_SCHEMA_VERSION,
+    migratedHistoricalValues: true,
+    rejectPay: isReject(normalized) ? derived.estimatedPay : getPayRate('rejectPay'),
+    waitPayRate: derived.totalPaidWaitMinutes > 0 ? derived.waitPay / (derived.totalPaidWaitMinutes / 60) : getPayRate('waitPayRate'),
+    deadheadHourlyRate: derived.deadheadPay > 0 && derived.deadheadTravelMinutes > 0 ? derived.deadheadPay / (derived.deadheadTravelMinutes / 60) : getPayRate('deadheadHourlyRate'),
+    includeReroutedMilesInPay: false,
+    paidMiles: valueOrZero(normalized.loadedMiles),
+    loadedMilesPayScale: getActiveLoadedMilesPayScale().map((range) => ({ ...range }))
+  }, dataSchemaVersion: DATA_SCHEMA_VERSION };
 }
 
 function storeLoads() {
@@ -4541,6 +4612,7 @@ function getDailyAddOn(date) {
     perDiem: Boolean(addOn.perDiem),
     sleeperBerth: Boolean(addOn.sleeperBerth),
     trainerPay: Boolean(addOn.trainerPay),
+    rateSnapshot: isPlainObject(addOn.rateSnapshot) ? { ...addOn.rateSnapshot } : null,
     shiftStartTime: addOn.shiftStartTime || '',
     shiftEndTime: addOn.shiftEndTime || '',
     notes: addOn.notes || addOn.dailyNotes || '',
@@ -4555,14 +4627,25 @@ function saveDailyAddOnFromControls() {
     return;
   }
 
+  const currentAddOn = getDailyAddOn(date);
+  const nextFlags = {
+    perDiem: addOns.perDiem.checked,
+    sleeperBerth: addOns.sleeperBerth.checked,
+    trainerPay: addOns.trainerPay.checked
+  };
+  const paySelectionChanged = ['perDiem', 'sleeperBerth', 'trainerPay'].some((key) => currentAddOn[key] !== nextFlags[key]);
   const addOn = {
-    ...getDailyAddOn(date),
+    ...currentAddOn,
     date,
     workDate: date,
     defaultDispatcher: getDailyAddOn(date).defaultDispatcher,
-    perDiem: addOns.perDiem.checked,
-    sleeperBerth: addOns.sleeperBerth.checked,
-    trainerPay: addOns.trainerPay.checked,
+    ...nextFlags,
+    rateSnapshot: paySelectionChanged ? {
+      capturedAt: new Date().toISOString(),
+      perDiemPay: getPayRate('perDiemPay'),
+      sleeperBerthPay: getPayRate('sleeperBerthPay'),
+      trainerPay: getPayRate('trainerPay')
+    } : currentAddOn.rateSnapshot,
     shiftStartTime: addOns.shiftStartTime?.value || '',
     shiftEndTime: addOns.shiftEndTime?.value || '',
     notes: addOns.notes.value.trim(),
@@ -4606,6 +4689,12 @@ function applyDailyAddOnsToControls() {
 function saveWorkdayControls(mode) {
   const date = daily.date.value || todayLocal();
   const current = getDailyAddOn(date);
+  const nextFlags = {
+    perDiem: Boolean(workdayControls.perDiem?.checked),
+    sleeperBerth: Boolean(workdayControls.sleeper?.checked),
+    trainerPay: Boolean(workdayControls.trainer?.checked)
+  };
+  const paySelectionChanged = ['perDiem', 'sleeperBerth', 'trainerPay'].some((key) => current[key] !== nextFlags[key]);
   const next = {
     ...current, date, workDate: date,
     defaultDispatcher: String(workdayControls.defaultDispatcher?.value || current.defaultDispatcher || '').trim(),
@@ -4613,9 +4702,13 @@ function saveWorkdayControls(mode) {
     shiftEndTime: mode === 'end' ? (workdayControls.shiftEnd?.value || '') : current.shiftEndTime,
     dailyNotes: mode === 'end' ? String(workdayControls.notes?.value || '').trim() : current.dailyNotes,
     notes: mode === 'end' ? String(workdayControls.notes?.value || '').trim() : current.notes,
-    perDiem: Boolean(workdayControls.perDiem?.checked),
-    sleeperBerth: Boolean(workdayControls.sleeper?.checked),
-    trainerPay: Boolean(workdayControls.trainer?.checked),
+    ...nextFlags,
+    rateSnapshot: paySelectionChanged ? {
+      capturedAt: new Date().toISOString(),
+      perDiemPay: getPayRate('perDiemPay'),
+      sleeperBerthPay: getPayRate('sleeperBerthPay'),
+      trainerPay: getPayRate('trainerPay')
+    } : current.rateSnapshot,
     updatedAt: new Date().toISOString()
   };
   cancelPendingDelete('dailyAddOns', date);
@@ -4863,12 +4956,19 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const totalEstimatedEntryPay = sum(records, 'estimatedEntryPay');
   const totalLoadedMiles = sum(records, 'loadedMiles');
   const totalReRoutedMiles = sum(records, 'reRoutedMiles');
-  const sleeperBerthPay = addOn.sleeperBerth ? getPayRate('sleeperBerthPay') : 0;
-  const trainerPay = addOn.trainerPay ? getPayRate('trainerPay') : 0;
+  const priorSummary = typeof dailyEarningsRecords === 'object' ? dailyEarningsRecords?.[date] : null;
+  const rateSnapshot = addOn.rateSnapshot || {};
+  const sleeperRate = normalizePayRate(rateSnapshot.sleeperBerthPay, addOn.sleeperBerth && numberOrNull(priorSummary?.sleeperBerthPay) !== null ? priorSummary.sleeperBerthPay : getPayRate('sleeperBerthPay'));
+  const trainerRate = normalizePayRate(rateSnapshot.trainerPay, addOn.trainerPay && numberOrNull(priorSummary?.trainerPay) !== null ? priorSummary.trainerPay : getPayRate('trainerPay'));
+  const perDiemRate = normalizePayRate(rateSnapshot.perDiemPay, numberOrNull(priorSummary?.perDiemPay) > 0 ? priorSummary.perDiemPay : getPayRate('perDiemPay'));
+  const sleeperBerthPay = addOn.sleeperBerth ? sleeperRate : 0;
+  const trainerPay = addOn.trainerPay ? trainerRate : 0;
   const paidTime = paidTimeRecords.filter((item) => item.workDate === date);
   const paidByCategory = (category) => sum(paidTime.filter((item) => item.category === category), 'estimatedPay');
   const paidMinutesByCategory = (category) => sum(paidTime.filter((item) => item.category === category), 'durationMinutes');
-  const deadheadPay = paidByCategory('Deadhead');
+  const standaloneDeadheadPay = paidByCategory('Deadhead');
+  const loadDeadheadPay = sum(records, 'deadheadPay');
+  const deadheadPay = standaloneDeadheadPay + loadDeadheadPay;
   const legacyDeadheadMinutes = paidMinutesByCategory('Deadhead');
   const truckWashPay = paidByCategory('Truck Wash');
   const breakdownPay = paidByCategory('Breakdown');
@@ -4882,13 +4982,16 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const breakdownMinutes = paidMinutesByCategory('Breakdown');
   const officeTimeMinutes = paidMinutesByCategory('Office Time');
   const isOfficeOnlyDay = officeTimeMinutes > 0 && records.length === 0;
-  const automaticPerDiem = records.length > 0 || officeTimeMinutes > 0;
+  const automaticPerDiemRule = typeof priorSummary?.automaticPerDiem === 'boolean'
+    ? priorSummary.automaticPerDiem
+    : appSettings.autoPerDiemOnWorkdays;
+  const automaticPerDiem = automaticPerDiemRule && (records.length > 0 || officeTimeMinutes > 0);
   const perDiemApplied = automaticPerDiem || addOn.perDiem;
-  const perDiemPay = perDiemApplied ? getPayRate('perDiemPay') : 0;
+  const perDiemPay = perDiemApplied ? perDiemRate : 0;
   const trainingTimeMinutes = paidMinutesByCategory('Training Time');
   const otherHourlyMinutes = paidMinutesByCategory('Other Hourly Work');
   const totalHourlyAdditionalMinutes = legacyDeadheadMinutes + truckWashMinutes + breakdownMinutes + officeTimeMinutes + trainingTimeMinutes + otherHourlyMinutes;
-  const hourlyAdditionalPay = deadheadPay + truckWashPay + breakdownPay + officeTimePay + trainingTimePay + otherHourlyPay;
+  const hourlyAdditionalPay = standaloneDeadheadPay + truckWashPay + breakdownPay + officeTimePay + trainingTimePay + otherHourlyPay;
   const paidTimeOverlap = getPaidTimeOverlapReview(records, paidTime);
   const exactDutyMinutes = isOfficeOnlyDay ? officeTimeMinutes : durationBetween(addOn.shiftStartTime, addOn.shiftEndTime);
   const timeline = normalizeDailyTimeline(records);
@@ -4939,7 +5042,7 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     deadheadMiles,
     legacyDeadheadMinutes,
     truckWashMinutes, breakdownMinutes, officeTimeMinutes, trainingTimeMinutes, otherHourlyMinutes, totalHourlyAdditionalMinutes,
-    deadheadPay, truckWashPay, breakdownPay, officeTimePay, trainingTimePay, otherHourlyPay, vacationPay, hourlyAdditionalPay,
+    deadheadPay, loadDeadheadPay, standaloneDeadheadPay, truckWashPay, breakdownPay, officeTimePay, trainingTimePay, otherHourlyPay, vacationPay, hourlyAdditionalPay,
     otherPaidTimePay: hourlyAdditionalPay - officeTimePay,
     isOfficeOnlyDay,
     workdayStatus: isOfficeOnlyDay ? 'Office Day' : getWorkdayStatus(addOn),
@@ -4960,8 +5063,10 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
     classifiedDutyMinutes: classificationUsable ? classifiedDutyMinutes : null,
     unclassifiedNonLoadDutyMinutes: classificationUsable ? exactDutyMinutes - classifiedDutyMinutes : null,
     activeLoadUtilization: utilizationUsable ? activeLoadCycleMinutes / exactDutyMinutes * 100 : null,
+    taxableEstimatedEarnings: totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + sleeperBerthPay + trainerPay,
+    nonTaxableEstimatedEarnings: perDiemPay,
     totalEstimatedDailyEarnings: totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + perDiemPay + sleeperBerthPay + trainerPay,
-    effectiveHourlyEarnings: usableDutyMinutes > 0 ? (totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + perDiemPay + sleeperBerthPay + trainerPay) / (usableDutyMinutes / 60) : null,
+    effectiveHourlyEarnings: usableDutyMinutes > 0 ? (totalEstimatedEntryPay + hourlyAdditionalPay + vacationPay + sleeperBerthPay + trainerPay) / (usableDutyMinutes / 60) : null,
     effectiveHourlyBasis: exactDutyMinutes > 0 ? 'exact' : (estimatedTrackedSpanMinutes > 0 ? 'estimated' : 'missing'),
     completedLoadPayPerExactDutyHour: exactDutyMinutes > 0 ? completedLoadPay / (exactDutyMinutes / 60) : null,
     averageLoadPayPerCompletedLoad: completedRecords.length > 0 ? completedLoadPay / completedRecords.length : 0,
@@ -5936,6 +6041,12 @@ function buildLoadRecord(values) {
   const existingLoad = editingLoadId
     ? savedLoads.find((load) => load.id === editingLoadId)
     : null;
+  const payImpactKeys = [
+    'loadStatus', 'loadedMiles', 'reRoutedMiles', 'deadheadStartTime', 'deadheadEndTime',
+    'deadheadPaid', 'waitCalculationMode', 'paidPickupWaitMinutes', 'paidDropoffWaitMinutes',
+    'arrivedPickupTime', 'loadedTime', 'arrivedDropoffTime', 'completedTime'
+  ];
+  const payInputsChanged = !existingLoad || payImpactKeys.some((key) => String(existingLoad[key] ?? '') !== String(values[key] ?? ''));
 
   return normalizeSavedLoad({
     ...existingLoad,
@@ -5943,7 +6054,9 @@ function buildLoadRecord(values) {
     savedAt: existingLoad?.savedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...values,
-    dispatcher: normalizeDispatcherName(values.dispatcher)
+    dispatcher: normalizeDispatcherName(values.dispatcher),
+    paySnapshot: payInputsChanged ? createLoadPaySnapshot(values) : existingLoad.paySnapshot,
+    _recalculatePay: payInputsChanged
   });
 }
 
@@ -6121,6 +6234,10 @@ function loadEntryForEdit(loadId) {
       field.value = load[key] === null || load[key] === undefined ? '' : load[key];
     }
   });
+  const manualWait = document.getElementById('manual-wait-override');
+  const deadheadPaid = document.getElementById('deadhead-paid');
+  if (manualWait) manualWait.checked = load.waitCalculationMode === 'manual' || load.waitCalculationMode === 'legacy-manual';
+  if (deadheadPaid) deadheadPaid.checked = Boolean(load.deadheadPaid);
 
   updateAddMoreVisibility(true);
 
@@ -6473,7 +6590,11 @@ function updateAddMoreVisibility(forceFromValues = false) {
   const deadheadToggle = document.getElementById('has-deadhead');
   const waitToggle = document.getElementById('has-paid-wait');
   const hasDeadhead = Number(fields.deadheadMiles?.value || 0) > 0 || Boolean(fields.deadheadStartTime?.value || fields.deadheadEndTime?.value);
-  const hasWait = Number(fields.paidPickupWaitMinutes?.value || 0) > 0 || Number(fields.paidDropoffWaitMinutes?.value || 0) > 0;
+  const automaticWait = calculateStopWaitBreakdown({
+    ...getFormValues(),
+    waitCalculationMode: 'automatic'
+  });
+  const hasWait = Number(fields.paidPickupWaitMinutes?.value || 0) > 0 || Number(fields.paidDropoffWaitMinutes?.value || 0) > 0 || automaticWait.totalPaidWaitMinutes > 0;
   if (forceFromValues) {
     if (deadheadToggle) deadheadToggle.checked = hasDeadhead;
     if (waitToggle) waitToggle.checked = hasWait;
@@ -6484,6 +6605,13 @@ function updateAddMoreVisibility(forceFromValues = false) {
   const waitFields = document.getElementById('paid-wait-fields');
   if (deadheadFields) deadheadFields.hidden = !showDeadhead;
   if (waitFields) waitFields.hidden = !showWait;
+  const manualWait = Boolean(document.getElementById('manual-wait-override')?.checked);
+  if (fields.paidPickupWaitMinutes) fields.paidPickupWaitMinutes.readOnly = !manualWait;
+  if (fields.paidDropoffWaitMinutes) fields.paidDropoffWaitMinutes.readOnly = !manualWait;
+  if (showWait && !manualWait) {
+    fields.paidPickupWaitMinutes.value = String(automaticWait.paidPickupWaitMinutes);
+    fields.paidDropoffWaitMinutes.value = String(automaticWait.paidDropoffWaitMinutes);
+  }
 }
 
 function toCsvValue(value) {
@@ -7283,6 +7411,17 @@ function summarizeReportRange(startDate, endDate) {
   const summaries = [...dates].map((date) => getDailyEarningsSummary(date));
   const completedRecords = records.filter(isCompleted);
   const rejectRecords = records.filter(isReject);
+  const taxableEstimatedEarnings = summaries.reduce((total, day) => total + (numberOrNull(day.taxableEstimatedEarnings) ?? (valueOrZero(day.totalEstimatedDailyEarnings) - valueOrZero(day.perDiemPay))), 0);
+  const perDiemPay = sum(summaries, 'perDiemPay');
+  const reviewAlerts = [];
+  const missingDutyDays = summaries.filter((day) => day.loadRecordCount > 0 && day.dutyTimeSource === 'missing').length;
+  const manualWaitLoads = records.filter((load) => load.waitCalculationMode === 'manual' || load.waitCalculationMode === 'legacy-manual').length;
+  const missingRateLoads = records.filter((load) => !isReject(load) && load.matchedPayRange === NO_RATE_FOUND_LABEL).length;
+  const overlapDays = summaries.filter((day) => valueOrZero(day.paidTimeOverlapMinutes) > 0).length;
+  if (missingDutyDays) reviewAlerts.push(`${missingDutyDays} workday${missingDutyDays === 1 ? '' : 's'} missing exact start/end time`);
+  if (manualWaitLoads) reviewAlerts.push(`${manualWaitLoads} load${manualWaitLoads === 1 ? '' : 's'} use manual/legacy wait minutes`);
+  if (missingRateLoads) reviewAlerts.push(`${missingRateLoads} load${missingRateLoads === 1 ? '' : 's'} have no loaded-mile pay rate`);
+  if (overlapDays) reviewAlerts.push(`${overlapDays} day${overlapDays === 1 ? '' : 's'} contain overlapping paid-time entries`);
 
   return {
     start: startDate,
@@ -7301,11 +7440,20 @@ function summarizeReportRange(startDate, endDate) {
     totalPaidDropoffWaitMinutes: sum(records, 'paidDropoffWaitMinutes'),
     totalPaidWaitMinutes: sum(records, 'totalPaidWaitMinutes'),
     totalWaitPay: sum(records, 'waitPay'),
+    workdayCount: summaries.length,
+    completedLoadPay: sum(summaries, 'completedLoadPay'),
+    hourlyAdditionalPay: sum(summaries, 'hourlyAdditionalPay'),
+    vacationPay: sum(summaries, 'vacationPay'),
+    deadheadPay: sum(summaries, 'deadheadPay'),
     trainerPay: sum(summaries, 'trainerPay'),
-    perDiemPay: sum(summaries, 'perDiemPay'),
+    perDiemPay,
     sleeperBerthPay: sum(summaries, 'sleeperBerthPay'),
     rejectPay: sum(rejectRecords, 'estimatedPay'),
-    totalEstimatedEarnings: sum(summaries, 'totalEstimatedDailyEarnings')
+    taxableEstimatedEarnings,
+    nonTaxableEstimatedEarnings: perDiemPay,
+    totalEstimatedEarnings: taxableEstimatedEarnings + perDiemPay,
+    averagePerWorkday: summaries.length ? (taxableEstimatedEarnings + perDiemPay) / summaries.length : 0,
+    reviewAlerts
   };
 }
 
@@ -7417,13 +7565,13 @@ function getDailyDispatchOutcome(day) {
   const comparison = metGoal ? `${formatMoney(difference)} above` : `${formatMoney(difference)} below`;
   const duration = formatDuration(day.exactDutyMinutes);
   let dispatchOutcome = 'Below Earnings Goal';
-  if (day.exactDutyMinutes >= 840) dispatchOutcome = metGoal ? '14-Hour Review' : 'Poor Dispatch Outcome — Review';
+  if (day.exactDutyMinutes >= 840) dispatchOutcome = metGoal ? '14-Hour Review' : 'Long day below personal target — review';
   else if (metGoal && day.exactDutyMinutes >= 720) dispatchOutcome = 'Productive but Extended';
   else if (metGoal) dispatchOutcome = 'Productive';
   return {
     dispatchOutcome,
     dutyTimeCategory: day.exactDutyMinutes >= 840 ? '14 hours or longer' : (day.exactDutyMinutes >= 720 ? '12 to under 14 hours' : 'Under 12 hours'),
-    dispatchOutcomeExplanation: `Completed-load pay was ${comparison} the ${formatMoney(fairGoal)} Fair Goal, and the exact workday lasted ${duration}.`
+    dispatchOutcomeExplanation: `Completed-load pay was ${comparison} the ${formatMoney(fairGoal)} personal daily target, and the exact workday lasted ${duration}.`
   };
 }
 
@@ -7498,8 +7646,8 @@ function summarizeAnalysisRecords(records, startDate = '', endDate = '') {
   const dayTotals = summarizeDayRows(days, 'All days');
   const exactDays = days.filter((day) => day.dutyTimeSource === 'exact');
   const estimatedDays = days.filter((day) => day.dutyTimeSource === 'estimated');
-  const exactEarnings = sum(exactDays, 'totalEstimatedDailyEarnings');
-  const estimatedEarnings = sum(estimatedDays, 'totalEstimatedDailyEarnings');
+  const exactEarnings = sum(exactDays, 'taxableEstimatedEarnings');
+  const estimatedEarnings = sum(estimatedDays, 'taxableEstimatedEarnings');
   const utilizationDays = days.filter((day) => day.dutyTimeSource === 'exact'
     && day.timelineStatus === 'valid'
     && isFiniteNumber(day.activeLoadCycleMinutes)
@@ -7660,8 +7808,8 @@ function getPerformanceInsights(result) {
   if (isFiniteNumber(result.averageCompletedLoadEarningsPerEligibleWorkday)) {
     insights.push(`You averaged ${formatMoney(result.averageCompletedLoadEarningsPerEligibleWorkday)} in completed-load earnings per eligible workday.`);
   }
-  insights.push(`You met the ${formatMoney(getFairDayGoal())} Fair Goal on ${result.fairGoalDays} of ${result.eligibleDispatchedWorkdays} eligible workdays, or ${formatPercentValue(result.fairGoalPercent)}.`);
-  insights.push(`You met the ${formatMoney(getExcellentDayGoal())} Excellent Goal on ${result.excellentGoalDays} of ${result.eligibleDispatchedWorkdays} eligible workdays, or ${formatPercentValue(result.excellentGoalPercent)}.`);
+  insights.push(`You met the ${formatMoney(getFairDayGoal())} personal daily target on ${result.fairGoalDays} of ${result.eligibleDispatchedWorkdays} eligible workdays, or ${formatPercentValue(result.fairGoalPercent)}.`);
+  insights.push(`You met the ${formatMoney(getExcellentDayGoal())} personal stretch target on ${result.excellentGoalDays} of ${result.eligibleDispatchedWorkdays} eligible workdays, or ${formatPercentValue(result.excellentGoalPercent)}.`);
   insights.push(`Deadhead occurred on ${result.daysWithDeadhead} of ${result.eligibleDispatchedWorkdays} eligible workdays.`);
   insights.push(`Paid wait occurred on ${result.daysWithPaidWait} of ${result.eligibleDispatchedWorkdays} eligible workdays.`);
   if (isFiniteNumber(result.averageCycleMinutes)) {
@@ -7675,10 +7823,13 @@ function getPerformanceInsights(result) {
 
 function analysisTopCards(result) {
   const selectedDay = result.days.length === 1 ? result.days[0] : null;
+  const exactHourly = selectedDay
+    ? (selectedDay.effectiveHourlyBasis === 'exact' ? selectedDay.effectiveHourlyEarnings : null)
+    : result.exactHourlyEarnings;
   return `<div class="analysis-top-cards">
-    <article><h4>Goal Achievement</h4>${reportMetric('Completed-load earnings', formatMoney(result.completedBasePay))}${reportMetric('Fair Goal days', `${result.fairGoalDays} of ${result.eligibleDispatchedWorkdays}`)}${reportMetric('Fair Goal percentage', formatPercentValue(result.fairGoalPercent))}${reportMetric('Excellent Goal days', `${result.excellentGoalDays} of ${result.eligibleDispatchedWorkdays}`)}${reportMetric('Excellent Goal percentage', formatPercentValue(result.excellentGoalPercent))}</article>
+    <article><h4>Personal targets</h4>${reportMetric('Completed-load earnings', formatMoney(result.completedBasePay))}${reportMetric('Daily target days', `${result.fairGoalDays} of ${result.eligibleDispatchedWorkdays}`)}${reportMetric('Daily target percentage', formatPercentValue(result.fairGoalPercent))}${reportMetric('Stretch target days', `${result.excellentGoalDays} of ${result.eligibleDispatchedWorkdays}`)}${reportMetric('Stretch target percentage', formatPercentValue(result.excellentGoalPercent))}</article>
     <article><h4>Workload and Time</h4>${reportMetric('Eligible dispatched workdays', result.eligibleDispatchedWorkdays)}${reportMetric('Completed loads', result.completedLoads)}${reportMetric('Rejected loads', result.rejects)}${reportMetric('Paid wait days', `${result.daysWithPaidWait} · ${formatPercentValue(result.paidWaitDayPercent)}`)}${reportMetric('Deadhead days', `${result.daysWithDeadhead} · ${formatPercentValue(result.deadheadDayPercent)}`)}</article>
-    <article><h4>Productivity</h4>${reportMetric('Avg completed-load earnings/workday', formatMaybeMoney(result.averageCompletedLoadEarningsPerEligibleWorkday))}${reportMetric('Avg loads/eligible workday', formatMaybeNumber(result.averageCompletedLoadsPerWorkday))}${reportMetric('Effective hourly earnings', formatMaybeMoney(selectedDay ? selectedDay.effectiveHourlyEarnings : result.effectiveHourlyEarnings))}${reportMetric('Average load cycle', formatMaybeDuration(result.averageCycleMinutes))}${reportMetric('Total earnings', formatMoney(result.totalEarnings))}</article>
+    <article><h4>Productivity</h4>${reportMetric('Avg completed-load earnings/workday', formatMaybeMoney(result.averageCompletedLoadEarningsPerEligibleWorkday))}${reportMetric('Avg loads/eligible workday', formatMaybeNumber(result.averageCompletedLoadsPerWorkday))}${reportMetric('Taxable earnings per exact duty hour', formatMaybeMoney(exactHourly))}${reportMetric('Average load cycle', formatMaybeDuration(result.averageCycleMinutes))}${reportMetric('Total compensation', formatMoney(result.totalEarnings))}</article>
   </div>`;
 }
 
@@ -7709,27 +7860,34 @@ function renderReportSummary() {
   }
 
   const report = summarizeReportRange(range.start, range.end);
+  const formatReportDate = (value) => {
+    const date = parseLocalDate(value);
+    return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-';
+  };
+  const alertMarkup = report.reviewAlerts.length
+    ? `<ul>${report.reviewAlerts.map((alert) => `<li>${escapeHtml(alert)}</li>`).join('')}</ul>`
+    : '<p>No calculation or completeness alerts in this range.</p>';
   reportControls.summaryGrid.innerHTML = [
-    reportMetric('Report start', report.start || '-'),
-    reportMetric('Report end', report.end || '-'),
-    reportMetric('Total loads', String(report.totalAssignmentCount)),
-    reportMetric('Completed loads', String(report.completedLoadCount)),
-    reportMetric('Rejects', String(report.rejectCount)),
-    reportMetric('Gross barrels', formatBarrels(report.totalGrossBarrels)),
-    reportMetric('Offloaded barrels', formatBarrels(report.totalBarrelsOffloaded)),
-    reportMetric('Loaded miles', formatMiles(report.totalLoadedMiles)),
-    reportMetric('Rerouted miles', formatMiles(report.totalReRoutedMiles)),
-    reportMetric('Deadhead time', formatDuration(report.totalDeadheadMinutes)),
-    reportMetric('Deadhead miles', formatMiles(report.totalDeadheadMiles)),
-    reportMetric('Loading wait time', formatDuration(report.totalPaidPickupWaitMinutes)),
-    reportMetric('Offloading wait time', formatDuration(report.totalPaidDropoffWaitMinutes)),
-    reportMetric('Total paid wait', formatDuration(report.totalPaidWaitMinutes)),
-    reportMetric('Wait-time earnings', formatMoney(report.totalWaitPay)),
-    reportMetric('Trainer pay', formatMoney(report.trainerPay)),
-    reportMetric('Per diem', formatMoney(report.perDiemPay)),
-    reportMetric('Sleeper pay', formatMoney(report.sleeperBerthPay)),
-    reportMetric('Reject pay', formatMoney(report.rejectPay)),
-    reportMetric('Estimated total earnings', formatMoney(report.totalEstimatedEarnings), true)
+    `<div class="report-summary-heading"><div><p class="section-kicker">${escapeHtml(`${formatReportDate(report.start)} – ${formatReportDate(report.end)}`)}</p><h3>Pay overview</h3></div><span>${report.workdayCount} workday${report.workdayCount === 1 ? '' : 's'}</span></div>`,
+    reportMetric('Estimated taxable wages', formatMoney(report.taxableEstimatedEarnings)),
+    reportMetric('Estimated non-taxable per diem', formatMoney(report.nonTaxableEstimatedEarnings)),
+    reportMetric('Estimated total compensation', formatMoney(report.totalEstimatedEarnings), true),
+    reportMetric('Average per recorded workday', formatMoney(report.averagePerWorkday)),
+    reportMetric('Completed / rejected', `${report.completedLoadCount} / ${report.rejectCount}`),
+    reportMetric('Loaded / rerouted miles', `${report.totalLoadedMiles.toFixed(1)} / ${report.totalReRoutedMiles.toFixed(1)} mi`),
+    `<details class="report-breakdown"><summary><strong>Pay breakdown and operating totals</strong></summary><div class="review-grid">${[
+      reportMetric('Completed-load pay', formatMoney(report.completedLoadPay)),
+      reportMetric('Reject pay', formatMoney(report.rejectPay)),
+      reportMetric('Wait pay', formatMoney(report.totalWaitPay)),
+      reportMetric('Deadhead pay', formatMoney(report.deadheadPay)),
+      reportMetric('Other hourly pay', formatMoney(report.hourlyAdditionalPay)),
+      reportMetric('Vacation pay', formatMoney(report.vacationPay)),
+      reportMetric('Sleeper + trainer', formatMoney(report.sleeperBerthPay + report.trainerPay)),
+      reportMetric('Paid wait time', formatDuration(report.totalPaidWaitMinutes)),
+      reportMetric('Deadhead time / miles', `${formatDuration(report.totalDeadheadMinutes)} / ${formatMiles(report.totalDeadheadMiles)}`),
+      reportMetric('Gross / offloaded barrels', `${formatBarrels(report.totalGrossBarrels)} / ${formatBarrels(report.totalBarrelsOffloaded)}`)
+    ].join('')}</div></details>`,
+    `<section class="report-alerts" aria-label="Items to review"><h3>Items to review</h3>${alertMarkup}</section>`
   ].join('');
   renderDispatchAnalysis(range.start, range.end);
 }
@@ -8342,6 +8500,14 @@ function savePaidTime(event) {
     if (paidTimeControls.error) { paidTimeControls.error.textContent = isVacation ? 'Enter a work date for Vacation Time.' : 'Enter a date, category, valid start and end times, and a nonnegative rate.'; paidTimeControls.error.className = 'validation-summary show'; }
     return;
   }
+  const relatedLoad = record.relatedLoadId ? savedLoads.find((load) => String(load.id) === String(record.relatedLoadId)) : null;
+  if (record.category === 'Deadhead' && relatedLoad?.deadheadPaid) {
+    if (paidTimeControls.error) {
+      paidTimeControls.error.textContent = 'This load already includes deadhead pay. Turn it off on the load or leave this as standalone paid time.';
+      paidTimeControls.error.className = 'validation-summary show';
+    }
+    return;
+  }
   const duplicate = paidTimeRecords.find((item) => item.id !== editingPaidTimeId
     && item.workDate === record.workDate && item.category === record.category
     && item.startTime === record.startTime && item.endTime === record.endTime
@@ -8442,6 +8608,11 @@ document.getElementById('show-office-day-button')?.addEventListener('click', () 
 document.getElementById('cancel-office-day-button')?.addEventListener('click', () => { if (officeDayControls.panel) officeDayControls.panel.hidden = true; });
 document.getElementById('has-deadhead')?.addEventListener('change', () => updateAddMoreVisibility());
 document.getElementById('has-paid-wait')?.addEventListener('change', () => updateAddMoreVisibility());
+document.getElementById('manual-wait-override')?.addEventListener('change', () => { updateAddMoreVisibility(); renderSummary(); });
+document.getElementById('has-deadhead')?.addEventListener('change', (event) => {
+  const paid = document.getElementById('deadhead-paid');
+  if (paid && event.target.checked) paid.checked = true;
+});
 document.getElementById('has-other-paid-time')?.addEventListener('change', (event) => {
   if (event.target.checked) openPaidTimeForm({ date: fields.loadDate?.value, category: 'Breakdown' });
 });

@@ -112,7 +112,7 @@
   background: #eaf3f2;
 }
 #reports-view #report-summary-grid {
-  grid-template-columns: repeat(4,minmax(0,1fr));
+  grid-template-columns: repeat(3,minmax(0,1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -121,6 +121,36 @@
   border: 0;
   background: #f3f8f8;
 }
+#reports-view #report-summary-grid .result-row.total-row {
+  background: linear-gradient(135deg,#123f3b,#1f625a);
+  color: #fff;
+}
+#reports-view #report-summary-grid .result-row.total-row span,
+#reports-view #report-summary-grid .result-row.total-row strong { color: #fff; }
+#reports-view .report-summary-heading,
+#reports-view .report-breakdown,
+#reports-view .report-alerts { grid-column: 1 / -1; }
+#reports-view .report-summary-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 2px 2px;
+}
+#reports-view .report-summary-heading h3 { margin: 2px 0 0; }
+#reports-view .report-summary-heading > span { color: #53666b; font-weight: 700; }
+#reports-view .report-breakdown,
+#reports-view .report-alerts {
+  border: 1px solid #dce5e8;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+}
+#reports-view .report-breakdown summary { cursor: pointer; }
+#reports-view .report-breakdown .review-grid { margin-top: 12px; grid-template-columns: repeat(3,minmax(0,1fr)); }
+#reports-view .report-alerts h3 { margin: 0 0 8px; }
+#reports-view .report-alerts p,
+#reports-view .report-alerts ul { margin: 0; color: #53666b; }
 
 #reports-view .dispatch-analysis {
   margin-top: 12px;
@@ -262,6 +292,8 @@
   #reports-view .earnings-review .review-grid {
     grid-template-columns: repeat(2,minmax(0,1fr));
   }
+  #reports-view .report-breakdown .review-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #reports-view .report-summary-heading { align-items: start; flex-direction: column; }
   #reports-view .dispatch-analysis > summary {
     min-height: 58px;
     padding: 14px;
@@ -284,6 +316,7 @@
     grid-template-columns: 1fr;
   }
   #reports-view .performance-kpi-grid { grid-template-columns:1fr; }
+  #reports-view .report-breakdown .review-grid { grid-template-columns:1fr; }
   #reports-view .performance-dashboard { padding:12px; }
   #reports-view .dashboard-chart-row { grid-template-columns:58px minmax(80px,1fr) 56px; gap:6px; font-size:.72rem; }
 }
