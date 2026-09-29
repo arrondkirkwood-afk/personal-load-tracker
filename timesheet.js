@@ -22,7 +22,16 @@
   function inRange(date, range) { return date && date >= range.start && date <= range.end; }
   function clean(value) { return String(value ?? '').trim(); }
   function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-  function hours(minutes) { return minutes > 0 ? (minutes / 60).toFixed(2) : ''; }
+  function halfHour(value) { return Math.floor((value + 1e-9) * 2) / 2; }
+  function formatHours(value) { return String(value); }
+  function hours(minutes) { return minutes > 0 ? formatHours(halfHour(minutes / 60)) : ''; }
+  function correctedHours(value) {
+    const entered = clean(value).replace('½', '.5');
+    if (!entered) return '';
+    const mixed = entered.match(/^(\d+)\s+1\/2$/);
+    const parsed = mixed ? Number(mixed[1]) + .5 : Number(entered);
+    return Number.isFinite(parsed) && parsed >= 0 ? formatHours(halfHour(parsed)) : null;
+  }
   function shortDate(value) { const [y, m, d] = dateParts(value); return y && m && d ? `${m}/${d}/${String(y).slice(-2)}` : clean(value); }
   function selectedDate() { return document.getElementById('daily-date')?.value || dateKey(new Date()); }
   function identity() {
@@ -148,7 +157,7 @@
     if (header) header.innerHTML = COLUMN_LABELS.map((label) => `<th>${escapeHtml(label)}</th>`).join('');
     const footer = table.querySelector?.('tfoot tr');
     if (footer) {
-      footer.innerHTML = '<th colspan="2">Totals</th><th id="timesheet-loads-total">0</th><th id="timesheet-rejects-total">0</th><th colspan="3">Hourly time total</th><th id="timesheet-hours-total">0.00</th>';
+      footer.innerHTML = '<th colspan="2">Totals</th><th id="timesheet-loads-total">0</th><th id="timesheet-rejects-total">0</th><th colspan="3">Hourly time total</th><th id="timesheet-hours-total">0</th>';
     }
   }
   function pageTotals(rows) {
@@ -165,7 +174,7 @@
     if (!body) return;
     updatePreviewHeadings(body);
     body.innerHTML = previewRows.length
-      ? previewRows.map((row, rowIndex) => `<tr class="${row.warnings.length ? 'has-warning' : ''}">${COLUMNS.map((key, columnIndex) => `<td contenteditable="true" data-label="${escapeHtml(COLUMN_LABELS[columnIndex])}" data-row="${rowIndex}" data-field="${key}">${escapeHtml(row[key] || '')}</td>`).join('')}</tr>`).join('')
+      ? previewRows.map((row, rowIndex) => `<tr class="${row.warnings.length ? 'has-warning' : ''}">${COLUMNS.map((key, columnIndex) => `<td contenteditable="true" ${key === 'hours' ? 'inputmode="decimal" ' : ''}data-label="${escapeHtml(COLUMN_LABELS[columnIndex])}" data-row="${rowIndex}" data-field="${key}">${escapeHtml(row[key] || '')}</td>`).join('')}</tr>`).join('')
       : '<tr><td colspan="8">No saved records in this pay period.</td></tr>';
     const warningRows = previewRows.filter((row) => row.warnings.length);
     document.getElementById('timesheet-warning-summary').textContent = warningRows.length
@@ -177,7 +186,7 @@
     const hoursCell = document.getElementById('timesheet-hours-total');
     if (loadsCell) loadsCell.textContent = String(totals.loads);
     if (rejectsCell) rejectsCell.textContent = String(totals.rejects);
-    if (hoursCell) hoursCell.textContent = totals.hourlyHours.toFixed(2);
+    if (hoursCell) hoursCell.textContent = formatHours(totals.hourlyHours);
     document.getElementById('timesheet-preview').hidden = false;
   }
   function buildPreview() {
@@ -187,7 +196,7 @@
     renderPreview();
     const totals = pageTotals(previewRows);
     document.getElementById('timesheet-status').textContent =
-      `${previewRows.length} row${previewRows.length === 1 ? '' : 's'} prepared: ${totals.loads} load${totals.loads === 1 ? '' : 's'}, ${totals.rejects} reject${totals.rejects === 1 ? '' : 's'}, ${totals.hourlyHours.toFixed(2)} hourly hour${totals.hourlyHours === 1 ? '' : 's'}. Source records were not changed.`;
+      `${previewRows.length} row${previewRows.length === 1 ? '' : 's'} prepared: ${totals.loads} load${totals.loads === 1 ? '' : 's'}, ${totals.rejects} reject${totals.rejects === 1 ? '' : 's'}, ${formatHours(totals.hourlyHours)} hourly hour${totals.hourlyHours === 1 ? '' : 's'}. Source records were not changed.`;
   }
 
   function pdfEscape(text) { return clean(text).replace(/[^\x20-\x7e]/g, '-').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
@@ -208,12 +217,12 @@
       COLUMNS.forEach((key, i) => { out += pdfText(cellX + 3, y, fit(row[key], COLUMN_WIDTHS[i] - 6, 6.5), 6.5); cellX += COLUMN_WIDTHS[i]; });
     });
     const page = pageTotals(rows);
-    out += pdfText(left, tableBottom - 18, `Hourly entries on this page: ${page.hourlyHours.toFixed(2)}`, 8, true);
+    out += pdfText(left, tableBottom - 18, `Hourly entries on this page: ${formatHours(page.hourlyHours)}`, 8, true);
     if (pageNumber === pageCount) {
       out += pdfText(left, tableBottom - 36, `Total Loads: ${grandTotals.loads}`, 8, true);
       out += pdfText(150, tableBottom - 36, `Total Rejects: ${grandTotals.rejects}`, 8, true);
       out += pdfText(290, tableBottom - 36, `Per Diem Days: ${grandTotals.perDiemDays}`, 8, true);
-      out += pdfText(left, tableBottom - 54, `Hourly Hours: ${grandTotals.hourlyHours.toFixed(2)}`, 8, true);
+      out += pdfText(left, tableBottom - 54, `Hourly Hours: ${formatHours(grandTotals.hourlyHours)}`, 8, true);
       out += pdfText(150, tableBottom - 54, `Vacation Days: ${grandTotals.vacationDays}`, 8, true);
     }
     out += pdfText(502, 22, `Page ${pageNumber} of ${pageCount}`, 7);
@@ -266,11 +275,23 @@
     document.getElementById('reset-timesheet-preview-button')?.addEventListener('click', buildPreview);
     document.getElementById('download-timesheet-button')?.addEventListener('click', downloadPdf);
     document.getElementById('save-timesheet-settings-button')?.addEventListener('click', saveIdentity);
-    document.getElementById('timesheet-preview-body')?.addEventListener('change', (event) => {
+    document.getElementById('timesheet-preview-body')?.addEventListener('blur', (event) => {
       const cell = event.target.closest?.('[data-row][data-field]'); if (!cell) return;
-      const row = previewRows[number(cell.dataset.row)]; row[cell.dataset.field] = cell.textContent.trim(); row.warnings = rowWarnings(row); renderPreview();
-    });
+      const row = previewRows[Number(cell.dataset.row)]; if (!row) return;
+      const field = cell.dataset.field;
+      const value = field === 'hours' ? correctedHours(cell.textContent) : cell.textContent.trim();
+      if (value === null) {
+        cell.textContent = row.hours;
+        document.getElementById('timesheet-status').textContent = 'Enter hours as a nonnegative number, such as 2 or 2.5.';
+        return;
+      }
+      row[field] = value;
+      if (field === 'hours' && value && !row.hourly) { row.hourly = true; row.requiresClockTimes = false; }
+      row.warnings = rowWarnings(row);
+      renderPreview();
+      document.getElementById('timesheet-status').textContent = 'Timesheet correction applied to this preview and its PDF. Reset Preview restores the saved records.';
+    }, true);
   }
-  globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals };
+  globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals, correctedHours };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 }());
