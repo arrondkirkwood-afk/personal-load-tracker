@@ -3,9 +3,9 @@
 
   const DEFAULT_NAME = 'Arrond Kirkwood';
   const DEFAULT_NUMBER = '0135';
-  const COLUMNS = ['date', 'job', 'loads', 'rejects', 'perDiem', 'timeIn', 'timeOut', 'hours'];
-  const COLUMN_LABELS = ['Date', 'Work Description', 'Loads', 'Rejects', 'Per Diem', 'Time In', 'Time Out', 'Hours'];
-  const COLUMN_WIDTHS = [52, 220, 45, 45, 52, 48, 48, 56];
+  const COLUMNS = ['date', 'ticket', 'job', 'loads', 'rejects', 'perDiem', 'timeIn', 'timeOut', 'hours'];
+  const COLUMN_LABELS = ['Date', 'Ticket #', 'Work Description', 'Loads', 'Rejects', 'Per Diem', 'Time In', 'Time Out', 'Hours'];
+  const COLUMN_WIDTHS = [48, 68, 180, 38, 38, 48, 48, 48, 50];
   let previewRows = [];
   let previewRange = null;
 
@@ -51,7 +51,7 @@
     return warnings;
   }
   function makeRow(values) {
-    const row = { loads: '', rejects: '', perDiem: '', timeIn: '', timeOut: '', hours: '', ...values };
+    const row = { ticket: '', loads: '', rejects: '', perDiem: '', timeIn: '', timeOut: '', hours: '', ...values };
     row.warnings = rowWarnings(row);
     return row;
   }
@@ -109,10 +109,11 @@
         const paidWait = number(load.paidPickupWaitMinutes) + number(load.paidDropoffWaitMinutes);
         if (paidWait > 0) rows.push(makeRow({
           kind: 'wait', hourly: true, requiresClockTimes: false, workDate: date, sourceId: load.id, date: shortDate(date),
-          job: 'Paid Wait Time', hours: hours(paidWait)
+          ticket: clean(load.ticketNumber), job: 'Paid Wait Time', hours: hours(paidWait)
         }));
         if (number(load.deadheadMiles) > 0 || number(load.deadheadTravelMinutes) > 0) rows.push(makeRow({
           kind: 'deadhead', hourly: number(load.deadheadTravelMinutes) > 0, workDate: date, sourceId: load.id, date: shortDate(date),
+          ticket: clean(load.ticketNumber),
           job: `Deadhead${number(load.deadheadMiles) ? ` - ${number(load.deadheadMiles).toFixed(1)} mi` : ''}`,
           timeIn: clean(load.deadheadStartTime), timeOut: clean(load.deadheadEndTime), hours: hours(number(load.deadheadTravelMinutes))
         }));
@@ -157,7 +158,7 @@
     if (header) header.innerHTML = COLUMN_LABELS.map((label) => `<th>${escapeHtml(label)}</th>`).join('');
     const footer = table.querySelector?.('tfoot tr');
     if (footer) {
-      footer.innerHTML = '<th colspan="2">Totals</th><th id="timesheet-loads-total">0</th><th id="timesheet-rejects-total">0</th><th colspan="3">Hourly time total</th><th id="timesheet-hours-total">0</th>';
+      footer.innerHTML = '<th colspan="3">Totals</th><th id="timesheet-loads-total">0</th><th id="timesheet-rejects-total">0</th><th colspan="3">Hourly time total</th><th id="timesheet-hours-total">0</th>';
     }
   }
   function pageTotals(rows) {
@@ -175,7 +176,7 @@
     updatePreviewHeadings(body);
     body.innerHTML = previewRows.length
       ? previewRows.map((row, rowIndex) => `<tr class="${row.warnings.length ? 'has-warning' : ''}">${COLUMNS.map((key, columnIndex) => `<td contenteditable="true" ${key === 'hours' ? 'inputmode="decimal" ' : ''}data-label="${escapeHtml(COLUMN_LABELS[columnIndex])}" data-row="${rowIndex}" data-field="${key}">${escapeHtml(row[key] || '')}</td>`).join('')}</tr>`).join('')
-      : '<tr><td colspan="8">No saved records in this pay period.</td></tr>';
+      : '<tr><td colspan="9">No saved records in this pay period.</td></tr>';
     const warningRows = previewRows.filter((row) => row.warnings.length);
     document.getElementById('timesheet-warning-summary').textContent = warningRows.length
       ? `${warningRows.length} row${warningRows.length === 1 ? '' : 's'} need review: ${warningRows.map((row) => `${row.date || 'undated'} missing ${row.warnings.join(', ')}`).join('; ')}.`
