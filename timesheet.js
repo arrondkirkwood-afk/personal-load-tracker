@@ -188,6 +188,22 @@
     if (loadsCell) loadsCell.textContent = String(totals.loads);
     if (rejectsCell) rejectsCell.textContent = String(totals.rejects);
     if (hoursCell) hoursCell.textContent = formatHours(totals.hourlyHours);
+
+    const summary = document.getElementById('timesheet-preview-summary');
+    if (summary) {
+      const period = previewRange?.start && previewRange?.end
+        ? `${shortDate(previewRange.start)} – ${shortDate(previewRange.end)}`
+        : 'Selected pay period';
+      summary.innerHTML = [
+        ['Pay period', period],
+        ['Payroll rows', String(previewRows.length)],
+        ['Loads', String(totals.loads)],
+        ['Rejects', String(totals.rejects)],
+        ['Per diem days', String(totals.perDiemDays)],
+        ['Hourly time', formatHours(totals.hourlyHours)]
+      ].map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join('');
+    }
+
     document.getElementById('timesheet-preview').hidden = false;
   }
   function buildPreview() {
@@ -197,7 +213,7 @@
     renderPreview();
     const totals = pageTotals(previewRows);
     document.getElementById('timesheet-status').textContent =
-      `${previewRows.length} row${previewRows.length === 1 ? '' : 's'} prepared: ${totals.loads} load${totals.loads === 1 ? '' : 's'}, ${totals.rejects} reject${totals.rejects === 1 ? '' : 's'}, ${formatHours(totals.hourlyHours)} hourly hour${totals.hourlyHours === 1 ? '' : 's'}. Source records were not changed.`;
+      `Timesheet ready for ${shortDate(previewRange.start)} – ${shortDate(previewRange.end)}. Review the summary, then scan only the rows that need correction. Saved source records were not changed.`;
   }
 
   function pdfEscape(text) { return clean(text).replace(/[^\x20-\x7e]/g, '-').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
