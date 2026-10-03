@@ -432,6 +432,7 @@ Object.entries({
   'loaded-miles': '15',
   'notes': 'Clear this note'
 }).forEach(([id, value]) => { nextWorkflow.context.document.getElementById(id).value = value; });
+nextWorkflow.context.confirm = () => false;
 nextWorkflow.context.saveAndStartNextLoad();
 assert.strictEqual(nextWorkflow.context.document.getElementById('load-date').value, '2026-07-14', 'Save Load & Start Next Load preserves the work date');
 assert.strictEqual(nextWorkflow.context.document.getElementById('load-number').value, '2', 'Save Load & Start Next Load increments the load number');
