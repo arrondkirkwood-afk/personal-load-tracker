@@ -1,4 +1,4 @@
-const APP_VERSION = "1.22.2";
+const APP_VERSION = "1.23.0";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -3936,6 +3936,11 @@ function activateView(viewName) {
     button.classList.toggle('active', button.dataset.viewTarget === nextView);
   });
 
+  if (nextView === 'new-load' && !editingLoadId) {
+    const date = fields.loadDate?.value || daily.date?.value || todayLocal();
+    globalThis.setTimeout?.(() => ensureWorkdayStartPrompt(date), 0);
+  }
+
   if (nextView === 'records') {
     renderSavedLoads();
   }
@@ -6098,12 +6103,105 @@ function saveLoad(event) {
   queueLoadCommit('save');
 }
 
+function normalizeWorkdayClockValue(value) {
+  const text = String(value || '').trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : '';
+}
+
+function currentLocalClockValue() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function saveWorkdayClockValue(dateValue, fieldName, value) {
+  const date = normalizeDateKey(dateValue) || todayLocal();
+  const clockValue = normalizeWorkdayClockValue(value);
+  if (!clockValue || !['shiftStartTime', 'shiftEndTime'].includes(fieldName)) return false;
+
+  const current = getDailyAddOn(date);
+  dailyAddOns[date] = {
+    ...current,
+    date,
+    workDate: date,
+    [fieldName]: clockValue,
+    updatedAt: new Date().toISOString()
+  };
+  cancelPendingDelete('dailyAddOns', date);
+  storeAddOns();
+  updateDailyEarningsRecord(date);
+  if (!isCloudSignedIn()) markLocalChangesPending('Workday time saved locally. Sign in to sync it to Firebase.');
+  syncCurrentDateToCloud(date);
+  applyDailyAddOnsToControls();
+  updateDailySummary();
+  return true;
+}
+
+function ensureWorkdayStartPrompt(dateValue) {
+  const date = normalizeDateKey(dateValue) || todayLocal();
+  const current = getDailyAddOn(date);
+  if (current.shiftStartTime) return true;
+
+  const suggested = currentLocalClockValue();
+  const response = globalThis.prompt?.(
+    'Start workday time is missing for this date. Enter the time you started work (HH:MM).',
+    suggested
+  );
+
+  if (response === null || response === undefined) return false;
+  const value = normalizeWorkdayClockValue(response);
+  if (!value) {
+    globalThis.alert?.('Enter a valid time such as 06:30.');
+    return false;
+  }
+
+  saveWorkdayClockValue(date, 'shiftStartTime', value);
+  return true;
+}
+
+function promptForWorkdayEnd(dateValue) {
+  const date = normalizeDateKey(dateValue) || todayLocal();
+  const current = getDailyAddOn(date);
+  const suggested = current.shiftEndTime || currentLocalClockValue();
+  const response = globalThis.prompt?.(
+    'End workday time. Enter the time you finished work (HH:MM).',
+    suggested
+  );
+
+  if (response === null || response === undefined) return false;
+  const value = normalizeWorkdayClockValue(response);
+  if (!value) {
+    globalThis.alert?.('Enter a valid time such as 18:45.');
+    return false;
+  }
+
+  return saveWorkdayClockValue(date, 'shiftEndTime', value);
+}
+
 function saveAndStartNextLoad() {
   if (isSaving) {
     return;
   }
 
-  queueLoadCommit('next');
+  const values = getFormValues();
+  if (!validate(values)) {
+    renderSummary();
+    return;
+  }
+
+  const date = values.loadDate || daily.date.value || todayLocal();
+  const endWorkday = globalThis.confirm?.(
+    'Is this your last load of the workday?\\n\\nOK = Save this load and end the workday\\nCancel = Save this load and start the next load'
+  ) || false;
+
+  if (!endWorkday) {
+    ensureWorkdayStartPrompt(date);
+    queueLoadCommit('next');
+    return;
+  }
+
+  if (!ensureWorkdayStartPrompt(date)) return;
+  if (!promptForWorkdayEnd(date)) return;
+  queueLoadCommit('save');
 }
 
 function commitLoadRecord(record, options = {}) {
