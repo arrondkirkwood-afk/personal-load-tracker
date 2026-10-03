@@ -1,4 +1,4 @@
-const APP_VERSION = "1.22.2";
+const APP_VERSION = "1.23.0";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
