@@ -915,7 +915,7 @@ assert.ok(!html.match(/>[^<]*Assignments?[^<]*</i), 'user-facing interface uses 
 });
 assert.ok(html.includes('Start and End Workday'), 'daily workday controls use the requested name');
 assert.ok(html.includes('saved once for the selected work date—not once per load'), 'workday timing explains its once-per-date behavior');
-assert.ok(html.includes('Save Load &amp; Start Next Load'), 'next-load action uses the requested wording');
+assert.ok(html.includes('Save Load &amp; Choose Next Step'), 'next-load action reflects the new end-day or next-load choice');
 assert.ok(!html.includes('Daily Shift Times'), 'old Daily Shift Times wording is removed');
 assert.ok(!html.includes('<h3>Load Basics</h3>') && !html.includes('<h3>Load Measurements</h3>'), 'old load basics and measurements headings are removed');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
