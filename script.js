@@ -1,4 +1,4 @@
-const APP_VERSION = "1.23.0";
+const APP_VERSION = "1.23.1";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -4304,6 +4304,10 @@ function restoreDraftIfAvailable() {
   }
 
   applyDraft(draft);
+  if (!editingLoadId && fields.emptyTruckWeight.value === '') {
+    fields.emptyTruckWeight.value = '29500';
+    renderSummary();
+  }
 }
 
 function warnBeforeLeavingUnsaved(event) {
