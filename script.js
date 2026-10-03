@@ -6105,7 +6105,7 @@ function saveLoad(event) {
 
 function normalizeWorkdayClockValue(value) {
   const text = String(value || '').trim();
-  return /^([01]\\d|2[0-3]):[0-5]\\d$/.test(text) ? text : '';
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : '';
 }
 
 function currentLocalClockValue() {
