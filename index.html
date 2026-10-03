@@ -8,16 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.22.2">
+  <link rel="manifest" href="manifest.json?v=1.23.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.22.2">
-  <link rel="stylesheet" href="redesign.css?v=1.22.2">
-  <link rel="stylesheet" href="records-reports-redesign.css?v=1.22.2">
-  <link rel="stylesheet" href="settings-redesign.css?v=1.22.2">
-  <link rel="stylesheet" href="workbook-builder.css?v=1.22.2">
-  <link rel="stylesheet" href="timesheet.css?v=1.22.2">
-  <link rel="stylesheet" href="app-enhancements.css?v=1.22.2">
+  <link rel="stylesheet" href="style.css?v=1.23.0">
+  <link rel="stylesheet" href="redesign.css?v=1.23.0">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.23.0">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.23.0">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.23.0">
+  <link rel="stylesheet" href="timesheet.css?v=1.23.0">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.23.0">
 </head>
 <body>
   <main class="app">
@@ -28,7 +28,7 @@
           <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
         </div>
         <div class="header-meta">
-          <span>Version <strong id="app-version">1.22.2</strong></span>
+          <span>Version <strong id="app-version">1.23.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -623,7 +623,7 @@
 
             <div class="button-row form-actions four sticky-save-actions">
               <button class="button primary" id="save-load-button" type="submit">Save Load</button>
-              <button class="button secondary" id="save-next-button" type="button">Save Load &amp; Start Next Load</button>
+              <button class="button secondary" id="save-next-button" type="button">Save Load &amp; Choose Next Step</button>
               <button class="button ghost" id="save-draft-button" type="button">Save Draft</button>
               <button class="button danger" id="clear-form-button" type="button">Cancel</button>
             </div>
@@ -640,41 +640,24 @@
             </div>
             <span id="log-count">0 saved</span>
           </div>
-          <div class="saved-filter-bar">
+          <div class="saved-filter-bar simplified-record-filters">
             <label for="saved-search">
-              <span>Search</span>
-              <input id="saved-search" type="search" placeholder="Ticket, Jotform, load, route, driver">
+              <span>Find a load</span>
+              <input id="saved-search" type="search" placeholder="Search ticket, load #, route, dispatcher, truck">
             </label>
             <label for="saved-filter-scope">
-              <span>Filter</span>
+              <span>Show</span>
               <select id="saved-filter-scope">
                 <option value="selected-date">Selected work date</option>
                 <option value="date">Specific date</option>
-                <option value="pay-period">Selected pay period</option>
-                <option value="month">Selected month</option>
-                <option value="pickup">Pickup location</option>
-                <option value="dropoff">Drop-off location</option>
-                <option value="ticket">Ticket or Jotform</option>
-                <option value="completed">Completed loads</option>
-                <option value="incomplete">Incomplete or rejects</option>
+                <option value="pay-period">Pay period containing selected date</option>
+                <option value="month">Month containing selected date</option>
                 <option value="all">All saved loads</option>
               </select>
             </label>
             <label for="saved-filter-date">
-              <span>Date filter</span>
+              <span>Specific date</span>
               <input id="saved-filter-date" type="date">
-            </label>
-            <label for="saved-pickup-filter">
-              <span>Pickup</span>
-              <input id="saved-pickup-filter" type="search" placeholder="Any pickup">
-            </label>
-            <label for="saved-dropoff-filter">
-              <span>Drop-off</span>
-              <input id="saved-dropoff-filter" type="search" placeholder="Any drop-off">
-            </label>
-            <label for="saved-ticket-filter">
-              <span>Ticket/Jotform</span>
-              <input id="saved-ticket-filter" type="search" placeholder="Any number">
             </label>
             <label for="saved-sort-order">
               <span>Sort</span>
@@ -685,6 +668,7 @@
                 <option value="earnings">Highest earnings</option>
               </select>
             </label>
+            <p class="helper-text full-width">Use one search box for ticket numbers, Jotform numbers, routes, locations, driver, truck, trailer, or notes.</p>
           </div>
           <section class="daily-record-panel" aria-labelledby="daily-record-title">
             <div class="section-heading compact">
@@ -720,7 +704,6 @@
           <div class="report-shortcuts" aria-label="Report tools">
             <a class="button secondary" href="#timesheet-title">Timesheet</a>
             <button class="button secondary" type="button" data-view-target="workbook">Complete Workbook</button>
-            <a class="button secondary" href="#paycheck-reconciliation-title">Paycheck Check</a>
           </div>
           <div class="report-controls">
             <label for="report-range-mode">
@@ -791,45 +774,11 @@
           <p id="timesheet-status" class="save-status" aria-live="polite"></p>
           <section id="timesheet-preview" class="timesheet-preview" hidden aria-label="Timesheet preview">
             <div id="timesheet-warning-summary" class="timesheet-warnings" role="alert"></div>
+            <div id="timesheet-preview-summary" class="metric-strip tight timesheet-preview-summary" aria-label="Timesheet summary"></div>
             <div class="timesheet-preview-scroll"><table><thead><tr><th>Date</th><th>Ticket #</th><th>Work Description</th><th>Loads</th><th>Rejects</th><th>Per Diem</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody id="timesheet-preview-body"></tbody><tfoot><tr><th colspan="8">Hourly entries total</th><th id="timesheet-hours-total">0</th></tr></tfoot></table></div>
-            <p class="helper-text">Tap a cell, make your correction, then tap outside it. The PDF uses your corrected hours. Reset Preview restores saved values; changes here do not edit your load or activity records.</p>
+            <p class="helper-text">Review the summary first. Each row is one payroll entry. Tap a cell only when you need to correct the preview; the correction affects this preview and its PDF, not your saved load records.</p>
             <div class="button-row"><button class="button primary" id="download-timesheet-button" type="button">Download PDF</button><button class="button ghost" id="reset-timesheet-preview-button" type="button">Reset Preview</button></div>
           </section>
-        </section>
-
-        <section class="panel paycheck-reconciliation" aria-labelledby="paycheck-reconciliation-title">
-          <div class="section-heading">
-            <div><p class="section-kicker">Payroll Verification</p><h2 id="paycheck-reconciliation-title">Paycheck reconciliation</h2></div>
-            <span class="status-pill">Personal check</span>
-          </div>
-          <p class="helper-text">Compare the tracker’s work period with the paycheck date and official payroll amounts. Per diem is separate because it is commonly non-taxable; confirm its classification on the paystub.</p>
-          <div class="report-controls">
-            <label for="reconcile-anchor-date"><span>Pay period containing</span><input id="reconcile-anchor-date" type="date"></label>
-            <label for="reconcile-period-start"><span>Work period start</span><input id="reconcile-period-start" type="date" readonly></label>
-            <label for="reconcile-period-end"><span>Work period end</span><input id="reconcile-period-end" type="date" readonly></label>
-            <label for="reconcile-paycheck-date"><span>Paycheck date</span><input id="reconcile-paycheck-date" type="date"></label>
-            <label for="reconcile-paycheck-gross"><span>Official gross taxable wages</span><input id="reconcile-paycheck-gross" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
-            <label for="reconcile-paycheck-per-diem"><span>Official non-taxable per diem</span><input id="reconcile-paycheck-per-diem" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
-            <label for="reconcile-adjustments"><span>Bonus, retro, or other adjustment</span><input id="reconcile-adjustments" type="number" inputmode="decimal" step="0.01" value="0"></label>
-            <label for="reconcile-tolerance"><span>Match tolerance</span><input id="reconcile-tolerance" type="number" inputmode="decimal" min="0" step="0.01" value="1.00"></label>
-            <label for="reconcile-notes"><span>Notes</span><input id="reconcile-notes" type="text" placeholder="Optional payroll note"></label>
-          </div>
-          <div class="reconciliation-grid">
-            <article><span>Tracker taxable wages</span><strong id="reconcile-expected">$0.00</strong></article>
-            <article><span>Taxable-wage difference</span><strong id="reconcile-difference">Enter official gross</strong></article>
-            <article><span>Tracker non-taxable per diem</span><strong id="reconcile-expected-per-diem">$0.00</strong></article>
-            <article><span>Per-diem difference</span><strong id="reconcile-per-diem-difference">Enter official per diem</strong></article>
-            <article><span>Tracker total compensation</span><strong id="reconcile-expected-total">$0.00</strong></article>
-            <article><span>Total difference after adjustment</span><strong id="reconcile-total-difference">Enter paystub amounts</strong></article>
-            <article><span>Completed-load pay</span><strong id="reconcile-completed-pay">$0.00</strong></article>
-            <article><span>Reject pay</span><strong id="reconcile-reject-pay">$0.00</strong></article>
-            <article><span>Wait pay</span><strong id="reconcile-wait-pay">$0.00</strong></article>
-            <article><span>Hourly/office/additional pay</span><strong id="reconcile-hourly-pay">$0.00</strong></article>
-            <article><span>Vacation pay</span><strong id="reconcile-vacation-pay">$0.00</strong></article>
-            <article><span>Per diem</span><strong id="reconcile-per-diem-pay">$0.00</strong></article>
-            <article><span>Sleeper + trainer</span><strong id="reconcile-other-addons">$0.00</strong></article>
-          </div>
-          <p class="reconciliation-status" id="reconcile-status" data-state="neutral">Enter the official paystub amounts to compare.</p>
         </section>
 
         <section class="panel earnings-review" aria-labelledby="earnings-review-title">
@@ -1051,7 +1000,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.22.2</strong>
+                <span>Application version</span><strong id="settings-app-version">1.23.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1095,10 +1044,10 @@
           <div class="button-row backup-actions">
             <button class="button ghost" id="check-updates-button" type="button">Check for Updates</button>
             <button class="button secondary" id="print-daily-report-button" type="button">Print Report</button>
-            <button class="button secondary" id="download-log-button" type="button">Load CSV</button>
-            <button class="button primary" id="download-log-excel-button" type="button">Load Excel</button>
-            <button class="button secondary" id="download-earnings-button" type="button">Earnings CSV</button>
-            <button class="button primary" id="download-earnings-excel-button" type="button">Earnings Excel</button>
+            <button class="button ghost" id="download-log-button" type="button">Raw Load CSV</button>
+            <button class="button primary" id="download-log-excel-button" type="button">Professional Load Report (Excel)</button>
+            <button class="button ghost" id="download-earnings-button" type="button">Raw Earnings CSV</button>
+            <button class="button primary" id="download-earnings-excel-button" type="button">Professional Earnings Report (Excel)</button>
             <button class="button primary" id="export-backup-button" type="button">Export Full Backup</button>
           </div>
           <div class="import-panel">
@@ -1214,10 +1163,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.22.2&updated=' + Date.now());
+            window.location.replace('index.html?v=1.23.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.22.2&updated=' + Date.now());
+            window.location.replace('index.html?v=1.23.0&updated=' + Date.now());
           });
       }
 
@@ -1253,14 +1202,13 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.22.2"></script>
-  <script src="script.js?v=1.22.2"></script>
-  <script src="export-cleanup.js?v=1.22.2"></script>
-  <script src="professional-export.js?v=1.22.2"></script>
-  <script src="complete-workbook-export.js?v=1.22.2"></script>
-  <script src="export-integration.js?v=1.22.2"></script>
-  <script src="timesheet.js?v=1.22.2"></script>
-  <script src="daily-closeout.js?v=1.22.2"></script>
-  <script src="paycheck-reconciliation.js?v=1.22.2"></script>
+  <script src="vendor/exceljs.min.js?v=1.23.0"></script>
+  <script src="script.js?v=1.23.0"></script>
+  <script src="export-cleanup.js?v=1.23.0"></script>
+  <script src="professional-export.js?v=1.23.0"></script>
+  <script src="complete-workbook-export.js?v=1.23.0"></script>
+  <script src="export-integration.js?v=1.23.0"></script>
+  <script src="timesheet.js?v=1.23.0"></script>
+  <script src="daily-closeout.js?v=1.23.0"></script>
 </body>
 </html>
