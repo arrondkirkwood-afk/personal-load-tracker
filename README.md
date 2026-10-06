@@ -131,7 +131,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version: `1.23.0`, cache name `personal-oilfield-load-tracker-v1.23.0`.
+Current app version and cache version: `1.24.0`, cache name `personal-oilfield-load-tracker-v1.24.0`.
 
 The Reports view includes a Timesheet Generator for the company 1st-15th and 16th-month-end pay periods. It reads existing loads, workday summaries, paid wait, deadhead, and paid-time records. Deadhead and paid-wait rows inherit the ticket number from their linked load, so regenerated prior pay periods include saved ticket numbers automatically. For the timesheet, each hourly entry rounds down to a whole or half hour (2:15 → 2, 2:45 → 2.5); source durations and pay calculations remain unchanged. Tap a preview cell and then outside it to apply a report-only correction before downloading the US-letter PDF. Reset Preview discards these corrections. The employee name and number default to Arrond Kirkwood and 0135 and can be changed under More.
 
@@ -170,3 +170,16 @@ GitHub is only needed when changing the app files, not for daily use.
 - The analysis begins with goal, exact-workday, and dispatcher-result cards, followed by expandable daily results, dispatcher comparisons, and automatically normalized pickup-to-drop-off route performance.
 - The Earnings view includes an automatic visual dashboard for the selected report range. It charts completed-load pay against the Fair Goal, exact workday hours against the 14-hour review threshold, and highlights long days that also missed the goal. The embedded learning guide explains how to interpret each measure.
 - The Workbook view creates one complete Excel report without requiring CSV conversion. Select a date, pay period, month, custom range, or all saved records, then download a workbook containing a visual dashboard, daily goal and hours analysis, load-cycle timing, clean source data, and a plain-English analysis guide.
+
+
+## v1.24.0 approved redesign
+
+- Four main views: Today, Loads, Timesheet, and Earnings; Settings and backup remain available from the header.
+- Direct, independent pay-period selectors for load history, timesheets, and earnings. Choosing history does not change the active workday.
+- Workday start and end use clear time-entry dialogs. Saving a new load offers another load or the end of the workday.
+- Phone timesheets show one compact card per workday, with the editable payroll table and existing company PDF available underneath.
+- Earnings include a formatted PDF preview/export and selected-range Excel and CSV exports.
+- No sample data is installed. Existing storage keys, Firebase paths, data schema, settings, load pay snapshots, rates, paid time, and the 29,500 lb default are retained.
+- The unused paycheck reconciliation module is removed.
+
+Validation: all seven existing test suites pass. An isolated DOM integration check exercised the production scripts with network access disabled, existing records retained, workday dialogs, next-load numbering, direct history, timesheet corrections, selected-range exports, and unchanged historical pay. PDF parsing and Excel export checks also passed. Native phone visual testing remains a user-device check.

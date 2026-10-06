@@ -205,6 +205,7 @@
     }
 
     document.getElementById('timesheet-preview').hidden = false;
+    globalThis.OfficialLoadTracker?.renderTimesheetCards?.(previewRows, previewRange);
   }
   function buildPreview() {
     refreshPeriod();
@@ -309,6 +310,7 @@
       document.getElementById('timesheet-status').textContent = 'Timesheet correction applied to this preview and its PDF. Reset Preview restores the saved records.';
     }, true);
   }
-  globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals, correctedHours };
+  globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals, correctedHours, buildPreview, getPreview: () => ({ rows: previewRows, range: previewRange }) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 }());
+

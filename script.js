@@ -1,4 +1,4 @@
-const APP_VERSION = "1.23.1";
+const APP_VERSION = "1.24.0";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -3936,6 +3936,8 @@ function activateView(viewName) {
     button.classList.toggle('active', button.dataset.viewTarget === nextView);
   });
 
+  globalThis.OfficialLoadTracker?.onNavigate?.(nextView);
+
   if (nextView === 'new-load' && !editingLoadId) {
     const date = fields.loadDate?.value || daily.date?.value || todayLocal();
     globalThis.setTimeout?.(() => ensureWorkdayStartPrompt(date), 0);
@@ -5517,7 +5519,7 @@ function getSavedFilterRecords() {
   }
 
   if (scope === 'pay-period') {
-    const range = getCompanyPayPeriodRange(daily.date.value);
+    const range = getCompanyPayPeriodRange(document.getElementById('saved-period-picker')?.value || daily.date.value);
     records = records.filter((load) => isDateInRange(load.loadDate, range.start, range.end));
   }
 
@@ -5563,6 +5565,7 @@ function getSavedFilterRecords() {
       load.pickupLocation,
       load.dropoffLocation,
       load.customer,
+      load.dispatcher,
       load.productType,
       load.notes
     ].some((value) => String(value || '').toLowerCase().includes(query)));
@@ -5610,6 +5613,7 @@ function renderSavedLoads(records = getSavedFilterRecords()) {
   renderUnifiedDailyRecord();
   renderPaidTimeRecords();
   renderSavedLoadCards(records);
+  globalThis.OfficialLoadTracker?.refresh?.();
 }
 
 function getRecentLoads(limit = 5) {
@@ -5655,15 +5659,10 @@ function renderSavedLoadCards(records) {
 
   savedLoadCards.innerHTML = records.map((load) => `
     <article class="load-card" data-load-id="${escapeHtml(load.id)}">
-      <div class="load-row">
-        <div class="load-cell"><span>Load</span><strong>${escapeHtml(load.loadNumber || '-')}</strong></div>
-        <div class="load-cell"><span>Date</span><strong>${escapeHtml(load.loadDate || '-')}</strong></div>
-        <div class="load-cell route-cell"><span>Route</span><strong>${escapeHtml(formatRoute(load))}</strong></div>
-        <div class="load-cell"><span>Gross</span><strong>${escapeHtml(formatBarrels(load.grossBarrels))}</strong></div>
-        <div class="load-cell"><span>Offloaded</span><strong>${escapeHtml(formatBarrels(load.barrelsOffloaded))}</strong></div>
-        <div class="load-cell"><span>Deadhead</span><strong>${escapeHtml(formatMiles(load.deadheadMiles))}</strong></div>
-        <div class="load-cell"><span>Earnings</span><strong>${escapeHtml(formatMoney(load.estimatedEntryPay))}</strong></div>
-        <div class="load-cell"><span>Status</span><strong class="status-badge ${isCompleted(load) ? 'completed' : ''}">${escapeHtml(load.loadStatus || 'Incomplete')}</strong></div>
+      <div class="load-row official-load-row">
+        <div class="official-load-number"><strong>Load #${escapeHtml(load.loadNumber || '-')}</strong><span>${escapeHtml(load.loadDate || '-')}</span></div>
+        <div class="official-load-route"><strong>${escapeHtml(formatRoute(load))}</strong><span>${escapeHtml(load.ticketNumber || 'No ticket')} · ${escapeHtml(load.customer || '')} · ${escapeHtml(load.dispatcher || 'Unknown dispatcher')}</span></div>
+        <div class="official-load-pay"><strong>${escapeHtml(formatMoney(load.estimatedEntryPay))}</strong><span>${escapeHtml(load.loadStatus || 'Incomplete')}</span></div>
         <div class="load-actions">
           <button class="small-button" type="button" data-action="open" data-id="${escapeHtml(load.id)}">Open</button>
           <button class="small-button" type="button" data-action="edit" data-id="${escapeHtml(load.id)}">Edit</button>
@@ -6085,6 +6084,11 @@ function queueLoadCommit(mode = 'save') {
     return;
   }
 
+  if (!editingLoadId && globalThis.OfficialLoadTracker && !getDailyAddOn(values.loadDate).shiftStartTime) {
+    globalThis.OfficialLoadTracker.promptStart(values.loadDate, () => queueLoadCommit(mode));
+    return;
+  }
+
   const record = buildLoadRecord(values);
   const duplicate = findLikelyDuplicate(values, editingLoadId);
   pendingCommitMode = mode;
@@ -6145,6 +6149,11 @@ function ensureWorkdayStartPrompt(dateValue) {
   const current = getDailyAddOn(date);
   if (current.shiftStartTime) return true;
 
+  if (globalThis.OfficialLoadTracker?.promptStart) {
+    globalThis.OfficialLoadTracker.promptStart(date);
+    return false;
+  }
+
   const suggested = currentLocalClockValue();
   const response = globalThis.prompt?.(
     'Start workday time is missing for this date. Enter the time you started work (HH:MM).',
@@ -6165,6 +6174,11 @@ function ensureWorkdayStartPrompt(dateValue) {
 function promptForWorkdayEnd(dateValue) {
   const date = normalizeDateKey(dateValue) || todayLocal();
   const current = getDailyAddOn(date);
+  if (globalThis.OfficialLoadTracker?.promptEnd) {
+    globalThis.OfficialLoadTracker.promptEnd(date);
+    return false;
+  }
+
   const suggested = current.shiftEndTime || currentLocalClockValue();
   const response = globalThis.prompt?.(
     'End workday time. Enter the time you finished work (HH:MM).',
@@ -6182,6 +6196,10 @@ function promptForWorkdayEnd(dateValue) {
 }
 
 function saveAndStartNextLoad() {
+  if (globalThis.OfficialLoadTracker) {
+    if (!isSaving) queueLoadCommit('next');
+    return;
+  }
   if (isSaving) {
     return;
   }
@@ -6209,6 +6227,7 @@ function saveAndStartNextLoad() {
 }
 
 function commitLoadRecord(record, options = {}) {
+  const showNextStep = !editingLoadId && Boolean(globalThis.OfficialLoadTracker?.afterSave);
   hideDuplicateWarning();
   isSaving = true;
   setSaveButtonsBusy(true);
@@ -6233,7 +6252,7 @@ function commitLoadRecord(record, options = {}) {
   updateDailySummary();
   clearDraft();
 
-  if (options.startNext) {
+  if (options.startNext && !showNextStep) {
     startNextLoadFrom(record);
     showSaveMessage('Load saved. Next load is ready.');
   } else {
@@ -6243,6 +6262,8 @@ function commitLoadRecord(record, options = {}) {
 
   isSaving = false;
   setSaveButtonsBusy(false);
+  globalThis.OfficialLoadTracker?.refresh?.();
+  if (showNextStep) globalThis.OfficialLoadTracker.afterSave(record);
 }
 
 function exitEditMode() {
@@ -6399,6 +6420,10 @@ function getLoadById(loadId) {
 }
 
 function openLoadDetails(loadId, button) {
+  if (globalThis.OfficialLoadTracker?.openLoad) {
+    globalThis.OfficialLoadTracker.openLoad(loadId);
+    return;
+  }
   const card = button?.closest ? button.closest('.load-card') : null;
   const details = card?.querySelector ? card.querySelector('.load-details') : null;
 
@@ -8841,3 +8866,4 @@ authControls.downloadBeforeMigrationButton?.addEventListener('click', downloadBa
 authControls.startMigrationButton?.addEventListener('click', migrateLocalDataToFirebase);
 globalThis.addEventListener?.('beforeunload', warnBeforeLeavingUnsaved);
 initialize();
+

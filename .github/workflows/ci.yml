@@ -24,7 +24,7 @@ jobs:
           node --check script.js
           node --check timesheet.js
           node --check daily-closeout.js
-          node --check paycheck-reconciliation.js
+          node --check official-redesign.js
           node --check export-cleanup.js
           node --check professional-export.js
           node --check complete-workbook-export.js

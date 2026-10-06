@@ -915,7 +915,7 @@ assert.ok(!html.match(/>[^<]*Assignments?[^<]*</i), 'user-facing interface uses 
 });
 assert.ok(html.includes('Start and End Workday'), 'daily workday controls use the requested name');
 assert.ok(html.includes('saved once for the selected work date—not once per load'), 'workday timing explains its once-per-date behavior');
-assert.ok(html.includes('Save Load &amp; Choose Next Step'), 'next-load action reflects the new end-day or next-load choice');
+assert.ok(html.includes('Save load &amp; choose next step') && script.includes('OfficialLoadTracker.afterSave(record)'), 'saved loads lead to the explicit end-day or next-load choice');
 assert.ok(!html.includes('Daily Shift Times'), 'old Daily Shift Times wording is removed');
 assert.ok(!html.includes('<h3>Load Basics</h3>') && !html.includes('<h3>Load Measurements</h3>'), 'old load basics and measurements headings are removed');
 assert.ok(html.includes('Pay period containing selected date'), 'pay-period label is based on selected date');
@@ -946,7 +946,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.23.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.24.0'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -955,7 +955,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.23.0', 'app version is updated');
+assert.strictEqual(appVersionMatch[1], '1.24.0', 'approved redesign release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -971,19 +971,18 @@ assert.ok(html.includes(`vendor/exceljs.min.js?v=${appVersionMatch[1]}`), 'versi
 assert.ok(script.includes("setUpdateStatus('You are using the latest version.')"), 'no-update check reports the latest-version result');
 assert.ok(!script.includes("setUpdateStatus('You are using the latest version. If update does not appear, close and reopen the app.')"), 'no-update check no longer uses the old reload path');
 assert.ok(script.includes('preserveActiveViewForReload();'), 'a real service-worker update preserves the active view before reload');
-assert.ok(html.includes('data-view-target="dashboard">Today</button>')
-  && html.includes('data-view-target="new-load">Load</button>')
-  && html.includes('data-view-target="records">History</button>')
-  && html.includes('data-view-target="reports">Reports</button>')
-  && !html.includes('class="nav-item" type="button" data-view-target="workbook"')
-  && html.includes('data-view-target="settings">More</button>'), 'navigation uses five primary items with workbook grouped under Reports');
+const primaryNav = html.match(/<nav class="app-nav official-nav"[\s\S]*?<\/nav>/)[0];
+assert.strictEqual((primaryNav.match(/class="nav-item/g) || []).length, 4, 'four primary views');
+['dashboard','records','timesheet','reports'].forEach((view) => assert.ok(primaryNav.includes(`data-view-target="${view}"`), `primary navigation includes ${view}`));
+assert.ok(primaryNav.includes('Settings &amp; backup'), 'settings and backup remain available as a utility');
+assert.ok(html.includes('id="timesheet-view"'), 'timesheet is available without entering the earnings report');
 
 assert.ok(html.includes('id="download-complete-workbook-button"')
   && html.includes('Build a spreadsheet with visuals')
   && html.includes('No CSV conversion'), 'Workbook page exposes the complete Excel report builder');
 assert.ok(serviceWorker.includes("'./complete-workbook-export.js'")
   && serviceWorker.includes("'./workbook-builder.css'"), 'complete workbook files remain available offline');
-assert.ok(html.includes('id="daily-closeout-panel"') && html.includes('id="paycheck-reconciliation-title"'), 'daily closeout and paycheck reconciliation are available');
+assert.ok(html.includes('id="daily-closeout-panel"') && !html.includes('id="paycheck-reconciliation-title"') && !html.includes('src="paycheck-reconciliation.js'), 'daily closeout and earnings remain while paycheck reconciliation is removed');
 assert.ok(html.includes(`export-cleanup.js?v=${appVersionMatch[1]}`) && html.includes(`complete-workbook-export.js?v=${appVersionMatch[1]}`), 'export modules load explicitly in the page');
 assert.ok(script.includes("globalThis.addEventListener?.('pageshow', resumeCloudSync)"), 'iOS foreground resume restarts stale Firebase listeners');
 assert.ok(script.includes("globalThis.document?.addEventListener?.('visibilitychange'"), 'standalone PWA visibility resume is handled');

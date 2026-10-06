@@ -4,42 +4,44 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Oilfield Load &amp; Workday Tracker</title>
-  <meta name="theme-color" content="#12343b">
+  <meta name="theme-color" content="#15263b">
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.23.1">
+  <link rel="manifest" href="manifest.json?v=1.24.0">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.23.1">
-  <link rel="stylesheet" href="redesign.css?v=1.23.1">
-  <link rel="stylesheet" href="records-reports-redesign.css?v=1.23.1">
-  <link rel="stylesheet" href="settings-redesign.css?v=1.23.1">
-  <link rel="stylesheet" href="workbook-builder.css?v=1.23.1">
-  <link rel="stylesheet" href="timesheet.css?v=1.23.1">
-  <link rel="stylesheet" href="app-enhancements.css?v=1.23.1">
+  <link rel="stylesheet" href="style.css?v=1.24.0">
+  <link rel="stylesheet" href="redesign.css?v=1.24.0">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.24.0">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.24.0">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.24.0">
+  <link rel="stylesheet" href="timesheet.css?v=1.24.0">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.24.0">
+  <link rel="stylesheet" href="official-redesign.css?v=1.24.0">
 </head>
 <body>
   <main class="app">
     <section class="tracker" aria-labelledby="app-title">
       <header class="app-header">
         <div>
-          <p class="eyebrow">Personal loads, time, pay and dispatch analysis</p>
-          <h1 id="app-title">Oilfield Load &amp; Workday Tracker</h1>
+          <p class="eyebrow">YOUR PERSONAL WORKSPACE</p>
+          <h1 id="app-title">Personal Oilfield Load Tracker</h1>
         </div>
-        <div class="header-meta">
-          <span>Version <strong id="app-version">1.23.1</strong></span>
+        <div class="header-meta"><button class="button secondary official-settings-button" type="button" data-view-target="settings">Settings</button>
+          <span>Version <strong id="app-version">1.24.0</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
       </header>
 
-      <nav class="app-nav" aria-label="Primary">
-        <button class="nav-item active" type="button" data-view-target="dashboard">Today</button>
-        <button class="nav-item" type="button" data-view-target="new-load">Load</button>
-        <button class="nav-item" type="button" data-view-target="records">History</button>
-        <button class="nav-item" type="button" data-view-target="reports">Reports</button>
-        <button class="nav-item" type="button" data-view-target="settings">More</button>
+      <nav class="app-nav official-nav" aria-label="Primary">
+        <div class="official-nav-brand"><span class="official-brand-mark" aria-hidden="true">L<span>·</span></span><div>LOAD TRACKER<small>PERSONAL OILFIELD</small></div></div>
+        <button class="nav-item active" type="button" data-view-target="dashboard"><span aria-hidden="true" class="official-nav-icon">▦</span><span>Today</span></button>
+        <button class="nav-item" type="button" data-view-target="records"><span aria-hidden="true" class="official-nav-icon">▤</span><span>Loads</span></button>
+        <button class="nav-item" type="button" data-view-target="timesheet"><span aria-hidden="true" class="official-nav-icon">▧</span><span>Timesheet</span></button>
+        <button class="nav-item" type="button" data-view-target="reports"><span aria-hidden="true" class="official-nav-icon">▥</span><span>Earnings</span></button>
+        <div class="official-nav-footer"><strong>Personal workspace</strong><p>Loads, workdays, and pay.</p><button class="button secondary" type="button" data-view-target="settings">Settings &amp; backup</button></div>
       </nav>
 
       <p class="storage-warning" id="storage-warning" role="alert" hidden></p>
@@ -54,25 +56,18 @@
 
       <section class="app-view active" id="dashboard-view" data-view="dashboard" aria-labelledby="dashboard-title">
         <div class="panel dashboard-hero">
-          <div class="hero-copy">
-            <p class="section-kicker">Today</p>
-            <h2 id="dashboard-title">What do you need to add?</h2>
-            <div class="date-inline">
-              <label for="daily-date">
-                <span>Selected work date</span>
-                <input id="daily-date" type="date">
-              </label>
-              <span class="status-pill sync-pill" id="sync-status">Connecting</span>
-            </div>
+          <div class="hero-copy"><p class="section-kicker">Your workday</p><h2 id="dashboard-title">Today</h2>
+            <div class="date-inline"><label for="daily-date"><span>Work date</span><input id="daily-date" type="date"></label><span class="status-pill sync-pill" id="sync-status">Connecting</span></div>
           </div>
-          <div class="hero-actions">
-            <button class="button primary" type="button" data-view-target="new-load">+ New Load</button>
-            <button class="button secondary" id="show-paid-time-button" type="button" aria-controls="paid-time-entry-panel">+ Paid Time</button>
-            <button class="button secondary" id="show-office-day-button" type="button">+ Office Day</button>
-            <button class="button secondary" id="continue-draft-button" type="button" hidden>Continue Current Load</button>
-          </div>
+          <div class="hero-actions"><button class="button primary" type="button" data-view-target="new-load">+ Add load</button><button class="button secondary" id="show-paid-time-button" type="button" aria-controls="paid-time-entry-panel">Paid time</button><button class="button secondary" id="show-office-day-button" type="button">Office day</button><button class="button secondary" id="continue-draft-button" type="button" hidden>Continue current load</button></div>
         </div>
-
+        <div class="official-stats" id="official-today-stats" aria-label="Workday overview"></div>
+        <div class="official-today-layout">
+          <section class="panel official-clock" aria-labelledby="official-clock-title"><div class="section-heading compact"><h2 id="official-clock-title">Workday clock</h2><span id="official-clock-status" class="status-pill">Not started</span></div><div id="official-clock-content"></div></section>
+          <section class="panel official-periods" aria-labelledby="official-periods-title"><h2 id="official-periods-title">Jump to a pay period</h2><div id="official-period-links"></div></section>
+        </div>
+        <section class="official-today-loads"><div class="section-heading compact"><h2>Loads on this workday</h2><button class="button ghost" type="button" data-view-target="records">Past loads</button></div><div id="official-today-load-list" class="saved-card-list"></div></section>
+        <details id="official-day-breakdown" class="official-day-breakdown"><summary>Day details, goals &amp; daily add-ons</summary>
         <div class="summary-layout">
           <section class="panel summary-card today-workday-card dashboard-workday" aria-labelledby="workday-card-title">
             <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="workday-card-title">Workday</h2></div><span class="status-pill" id="workday-status">Not Started</span></div>
@@ -198,6 +193,8 @@
             </div>
           </section>
         </div>
+
+        </details>
 
         <section class="panel recent-panel" aria-labelledby="recent-loads-title">
           <div class="section-heading compact">
@@ -622,8 +619,8 @@
             </div>
 
             <div class="button-row form-actions four sticky-save-actions">
-              <button class="button primary" id="save-load-button" type="submit">Save Load</button>
-              <button class="button secondary" id="save-next-button" type="button">Save Load &amp; Choose Next Step</button>
+              <button class="button primary" id="save-load-button" type="submit">Save load &amp; choose next step</button>
+              <button class="button secondary" id="save-next-button" type="button">Save &amp; continue</button>
               <button class="button ghost" id="save-draft-button" type="button">Save Draft</button>
               <button class="button danger" id="clear-form-button" type="button">Cancel</button>
             </div>
@@ -635,11 +632,12 @@
         <section class="panel saved-loads">
           <div class="section-heading">
             <div>
-              <p class="section-kicker">Records</p>
-              <h2 id="saved-loads-title">Saved loads</h2>
+              <p class="section-kicker">Load history</p>
+              <h2 id="saved-loads-title">Find your loads</h2>
             </div>
             <span id="log-count">0 saved</span>
           </div>
+          <div class="official-period-toolbar"><label for="saved-period-picker"><span>Pay period</span><select id="saved-period-picker" aria-label="Load history pay period"></select></label><button class="button secondary" type="button" data-official-action="history-timesheet">View timesheet</button></div>
           <div class="saved-filter-bar simplified-record-filters">
             <label for="saved-search">
               <span>Find a load</span>
@@ -650,7 +648,7 @@
               <select id="saved-filter-scope">
                 <option value="selected-date">Selected work date</option>
                 <option value="date">Specific date</option>
-                <option value="pay-period">Pay period containing selected date</option>
+                <option value="pay-period" selected>Selected pay period</option>
                 <option value="month">Month containing selected date</option>
                 <option value="all">All saved loads</option>
               </select>
@@ -670,13 +668,14 @@
             </label>
             <p class="helper-text full-width">Use one search box for ticket numbers, Jotform numbers, routes, locations, driver, truck, trailer, or notes.</p>
           </div>
-          <section class="daily-record-panel" aria-labelledby="daily-record-title">
+          <details class="official-record-day-details"><summary>Daily record &amp; add-ons</summary><section class="daily-record-panel" aria-labelledby="daily-record-title">
             <div class="section-heading compact">
               <div><p class="section-kicker">Selected Date</p><h3 id="daily-record-title">Complete daily record</h3></div>
               <strong id="daily-record-total">$0.00</strong>
             </div>
             <div id="daily-record-content"></div>
           </section>
+          </details>
           <div id="saved-load-cards" class="saved-card-list">
             <article class="empty-card">No saved loads match the current filter.</article>
           </div>
@@ -692,19 +691,49 @@
         </section>
       </section>
 
+      <section class="app-view" id="timesheet-view" data-view="timesheet" aria-labelledby="timesheet-title">
+        <section class="panel timesheet-generator" aria-labelledby="timesheet-title">
+          <div class="section-heading">
+            <div><p class="section-kicker">Company form</p><h2 id="timesheet-title">Driver timesheet</h2></div>
+            <span class="status-pill">Payroll preview</span>
+          </div>
+          <p class="helper-text">Deadhead and paid-wait rows show the ticket number from their linked load, including past loads. Timesheet hours round down to whole or half hours (2 hr 15 min → 2; 2 hr 45 min → 2.5). Tap a cell to correct it before downloading.</p>
+          <div class="official-period-toolbar"><label for="timesheet-period-picker"><span>Pay period</span><select id="timesheet-period-picker" aria-label="Timesheet pay period"></select></label></div>
+          <details class="official-period-dates"><summary>Pay period dates</summary><div class="report-controls">
+            <label for="timesheet-anchor-date"><span>Pay period containing</span><input id="timesheet-anchor-date" type="date"></label>
+            <label for="timesheet-period-start"><span>Beginning date</span><input id="timesheet-period-start" type="date" readonly></label>
+            <label for="timesheet-period-end"><span>Ending date</span><input id="timesheet-period-end" type="date" readonly></label>
+          </div>
+          </details>
+          <div class="button-row"><button class="button primary" id="preview-timesheet-button" type="button">Preview Timesheet</button></div>
+          <p id="timesheet-status" class="save-status" aria-live="polite"></p>
+          <section id="timesheet-preview" class="timesheet-preview" hidden aria-label="Timesheet preview">
+            <div id="timesheet-warning-summary" class="timesheet-warnings" role="alert"></div>
+            <div id="timesheet-preview-summary" class="metric-strip tight timesheet-preview-summary" aria-label="Timesheet summary"></div>
+            <section id="official-timesheet-days" aria-label="Daily timesheet cards"></section>
+            <details class="official-payroll-table" open><summary>Full payroll table / edit preview</summary><div class="timesheet-preview-scroll"><table><thead><tr><th>Date</th><th>Ticket #</th><th>Work Description</th><th>Loads</th><th>Rejects</th><th>Per Diem</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody id="timesheet-preview-body"></tbody><tfoot><tr><th colspan="8">Hourly entries total</th><th id="timesheet-hours-total">0</th></tr></tfoot></table></div></details>
+            <p class="helper-text">Review the summary first. Each row is one payroll entry. Tap a cell only when you need to correct the preview; the correction affects this preview and its PDF, not your saved load records.</p>
+            <div class="button-row"><button class="button primary" id="download-timesheet-button" type="button">Download PDF</button><button class="button ghost" id="reset-timesheet-preview-button" type="button">Reset Preview</button></div>
+          </section>
+        </section>
+
+      </section>
+
       <section class="app-view" id="reports-view" data-view="reports" aria-labelledby="reports-title">
         <section class="panel reports-panel">
           <div class="section-heading">
             <div>
-              <p class="section-kicker">Reports</p>
-              <h2 id="reports-title">Totals and exports</h2>
+              <p class="section-kicker">Earnings</p>
+              <h2 id="reports-title">Know what you earned</h2>
             </div>
             <span id="earnings-date-label" class="status-pill">-</span>
           </div>
           <div class="report-shortcuts" aria-label="Report tools">
-            <a class="button secondary" href="#timesheet-title">Timesheet</a>
+            <button class="button secondary" type="button" data-view-target="timesheet">Timesheet</button>
             <button class="button secondary" type="button" data-view-target="workbook">Complete Workbook</button>
           </div>
+          <div class="official-period-toolbar"><label for="earnings-period-picker"><span>Pay period</span><select id="earnings-period-picker" aria-label="Earnings pay period"></select></label><button class="button secondary" type="button" data-official-action="report-preview">Preview report</button></div>
+          <details class="official-period-dates"><summary>Custom dates &amp; more ranges</summary>
           <div class="report-controls">
             <label for="report-range-mode">
               <span>Report range</span>
@@ -727,7 +756,13 @@
               <input id="report-end-date" type="date">
             </label>
           </div>
+          </details>
           <div id="report-summary-grid" class="review-grid report-summary-grid"></div>
+          <section class="official-export-panel" aria-labelledby="official-export-title"><h3 id="official-export-title">Export this earnings report</h3><div class="official-export-grid">
+            <article><span class="official-file-type">PDF</span><h4>Clean report</h4><p>Named, dated, and itemized. Ready to save or print.</p><button class="button primary" type="button" data-official-action="earnings-pdf">Download PDF</button></article>
+            <article><span class="official-file-type">XLSX</span><h4>Styled spreadsheet</h4><p>Formatted headings, currency columns, and totals.</p><button class="button secondary" type="button" data-official-action="earnings-xlsx">Download Excel</button></article>
+            <article><span class="official-file-type">CSV</span><h4>Portable data</h4><p>Labeled columns for the selected report dates.</p><button class="button secondary" type="button" data-official-action="earnings-csv">Download CSV</button></article>
+          </div><p id="official-export-status" class="save-status" role="status"></p></section>
           <details class="dispatch-analysis" id="dispatch-analysis-section">
             <summary><strong>Dispatch and Earnings Analysis</strong></summary>
             <details class="analysis-guide">
@@ -757,28 +792,6 @@
             <div id="duty-time-review-content"></div>
             <p class="report-disclosure permanent-disclosure">This personal tracker does not distinguish every driving, on-duty, off-duty, sleeper, exception, or ELD status. Official ELD and company records control legal compliance determinations. A review threshold is not a finding of a legal violation.</p>
           </details>
-        </section>
-
-        <section class="panel timesheet-generator" aria-labelledby="timesheet-title">
-          <div class="section-heading">
-            <div><p class="section-kicker">Company form</p><h2 id="timesheet-title">Timesheet Generator</h2></div>
-            <span class="status-pill">Report-only</span>
-          </div>
-          <p class="helper-text">Deadhead and paid-wait rows show the ticket number from their linked load, including past loads. Timesheet hours round down to whole or half hours (2 hr 15 min → 2; 2 hr 45 min → 2.5). Tap a cell to correct it before downloading.</p>
-          <div class="report-controls">
-            <label for="timesheet-anchor-date"><span>Pay period containing</span><input id="timesheet-anchor-date" type="date"></label>
-            <label for="timesheet-period-start"><span>Beginning date</span><input id="timesheet-period-start" type="date" readonly></label>
-            <label for="timesheet-period-end"><span>Ending date</span><input id="timesheet-period-end" type="date" readonly></label>
-          </div>
-          <div class="button-row"><button class="button primary" id="preview-timesheet-button" type="button">Preview Timesheet</button></div>
-          <p id="timesheet-status" class="save-status" aria-live="polite"></p>
-          <section id="timesheet-preview" class="timesheet-preview" hidden aria-label="Timesheet preview">
-            <div id="timesheet-warning-summary" class="timesheet-warnings" role="alert"></div>
-            <div id="timesheet-preview-summary" class="metric-strip tight timesheet-preview-summary" aria-label="Timesheet summary"></div>
-            <div class="timesheet-preview-scroll"><table><thead><tr><th>Date</th><th>Ticket #</th><th>Work Description</th><th>Loads</th><th>Rejects</th><th>Per Diem</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody id="timesheet-preview-body"></tbody><tfoot><tr><th colspan="8">Hourly entries total</th><th id="timesheet-hours-total">0</th></tr></tfoot></table></div>
-            <p class="helper-text">Review the summary first. Each row is one payroll entry. Tap a cell only when you need to correct the preview; the correction affects this preview and its PDF, not your saved load records.</p>
-            <div class="button-row"><button class="button primary" id="download-timesheet-button" type="button">Download PDF</button><button class="button ghost" id="reset-timesheet-preview-button" type="button">Reset Preview</button></div>
-          </section>
         </section>
 
         <section class="panel earnings-review" aria-labelledby="earnings-review-title">
@@ -1000,7 +1013,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.23.1</strong>
+                <span>Application version</span><strong id="settings-app-version">1.24.0</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1163,10 +1176,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.23.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.24.0&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.23.1&updated=' + Date.now());
+            window.location.replace('index.html?v=1.24.0&updated=' + Date.now());
           });
       }
 
@@ -1202,13 +1215,16 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.23.1"></script>
-  <script src="script.js?v=1.23.1"></script>
-  <script src="export-cleanup.js?v=1.23.1"></script>
-  <script src="professional-export.js?v=1.23.1"></script>
-  <script src="complete-workbook-export.js?v=1.23.1"></script>
-  <script src="export-integration.js?v=1.23.1"></script>
-  <script src="timesheet.js?v=1.23.1"></script>
-  <script src="daily-closeout.js?v=1.23.1"></script>
+  <script src="vendor/exceljs.min.js?v=1.24.0"></script>
+  <script src="script.js?v=1.24.0"></script>
+  <script src="export-cleanup.js?v=1.24.0"></script>
+  <script src="professional-export.js?v=1.24.0"></script>
+  <script src="complete-workbook-export.js?v=1.24.0"></script>
+  <script src="export-integration.js?v=1.24.0"></script>
+  <script src="timesheet.js?v=1.24.0"></script>
+  <script src="daily-closeout.js?v=1.24.0"></script>
+  <script src="official-redesign.js?v=1.24.0"></script>
+  <dialog id="official-modal" aria-labelledby="official-modal-title"></dialog>
 </body>
 </html>
+
