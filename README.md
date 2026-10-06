@@ -131,7 +131,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version: `1.24.0`, cache name `personal-oilfield-load-tracker-v1.24.0`.
+Current app version and cache version: `1.24.1`, cache name `personal-oilfield-load-tracker-v1.24.1`.
 
 The Reports view includes a Timesheet Generator for the company 1st-15th and 16th-month-end pay periods. It reads existing loads, workday summaries, paid wait, deadhead, and paid-time records. Deadhead and paid-wait rows inherit the ticket number from their linked load, so regenerated prior pay periods include saved ticket numbers automatically. For the timesheet, each hourly entry rounds down to a whole or half hour (2:15 → 2, 2:45 → 2.5); source durations and pay calculations remain unchanged. Tap a preview cell and then outside it to apply a report-only correction before downloading the US-letter PDF. Reset Preview discards these corrections. The employee name and number default to Arrond Kirkwood and 0135 and can be changed under More.
 
@@ -183,3 +183,15 @@ GitHub is only needed when changing the app files, not for daily use.
 - The unused paycheck reconciliation module is removed.
 
 Validation: all seven existing test suites pass. An isolated DOM integration check exercised the production scripts with network access disabled, existing records retained, workday dialogs, next-load numbering, direct history, timesheet corrections, selected-range exports, and unchanged historical pay. PDF parsing and Excel export checks also passed. Native phone visual testing remains a user-device check.
+
+## v1.24.1 workflow and mobile fixes
+
+Save & continue now saves the current load and opens the next numbered load form directly. The ordinary save button retains the end-workday or another-load choice. Missing start-time prompts, validation, and duplicate confirmation preserve the selected save mode.
+
+Review Workday now expands the containing day-details section. Mobile CSS prevents the Settings button from overlapping the title, removes legacy duplicate tab labels, keeps work-date inputs at 16px, improves tap targets, and respects landscape safe areas.
+
+Saved and edited loads now leave a clean, numbered next-load form ready, preventing a later Add load action from reusing a saved ticket.
+
+Automatic per diem now uses the current setting for a day with no previous load or office activity, so merely previewing an empty day or recording a start time cannot freeze per diem off. Existing workdays retain their recorded automatic-per-diem decision.
+
+The workday/details dialog is now parsed before its controller initializes, restoring start/end prompts, the after-save choice, load details, and report previews on real page loads. Integration checks now parse the HTML only up to the production script boundary to cover this startup order.

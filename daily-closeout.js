@@ -72,6 +72,8 @@
   }
 
   function reviewWorkday() {
+    const breakdown = byId('official-day-breakdown');
+    if (breakdown) breakdown.open = true;
     const details = byId('end-workday-details');
     if (details) details.open = true;
     const end = byId('workday-shift-end');

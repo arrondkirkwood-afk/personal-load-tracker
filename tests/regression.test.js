@@ -11,6 +11,7 @@ const manifest = fs.readFileSync(path.join(appDir, 'manifest.json'), 'utf8');
 const repairHtml = fs.readFileSync(path.join(appDir, 'repair.html'), 'utf8');
 const readme = fs.readFileSync(path.join(appDir, 'README.md'), 'utf8');
 const ids = [...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
+assert.ok(html.indexOf('<dialog id="official-modal"') < html.indexOf('<script src="official-redesign.js'), 'the workday dialog is parsed before its controller initializes');
 
 class Element {
   constructor(id) {
@@ -439,6 +440,86 @@ assert.strictEqual(nextWorkflow.context.document.getElementById('load-number').v
 assert.strictEqual(nextWorkflow.context.document.getElementById('ticket-number').value, '', 'Save Load & Start Next Load clears the prior ticket');
 assert.strictEqual(nextWorkflow.context.document.getElementById('gross-barrels').value, '', 'Save Load & Start Next Load clears prior load measurements');
 assert.strictEqual(nextWorkflow.context.document.getElementById('notes').value, '', 'Save Load & Start Next Load clears prior notes');
+
+// The redesign must preserve the direct Save & continue path, including its
+// deferred workday-start prompt and duplicate confirmation.
+const redesignedNext = createStartupSmokeContext({});
+const redesignedField = (id, value) => { redesignedNext.context.document.getElementById(id).value = value; };
+let deferredStart = null;
+let nextStepPrompts = 0;
+const saveNavigation = [];
+redesignedNext.context.OfficialLoadTracker = {
+  promptStart(date, resume) { deferredStart = { date, resume }; },
+  afterSave() { nextStepPrompts += 1; },
+  onNavigate(view) { saveNavigation.push(view); },
+  refresh() {}
+};
+Object.entries({
+  'load-date': '2026-07-14', 'load-number': '1', 'ticket-number': 'CONTINUE-1',
+  'load-status': 'Completed Load', 'gross-barrels': '115', 'loaded-miles': '15',
+  'notes': 'First load note'
+}).forEach(([id, value]) => redesignedField(id, value));
+redesignedNext.context.saveAndStartNextLoad();
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 0, 'continue waits for a missing workday start before saving');
+assert.strictEqual(deferredStart.date, '2026-07-14', 'continue prompts for the load work date');
+assert.strictEqual(redesignedNext.context.document.getElementById('ticket-number').value, 'CONTINUE-1', 'start prompt preserves the unsaved form');
+redesignedNext.context.saveWorkdayClockValue(deferredStart.date, 'shiftStartTime', '05:30');
+deferredStart.resume();
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 1, 'continue saves exactly one load after the start prompt');
+assert.strictEqual(nextStepPrompts, 0, 'continue does not interrupt with the regular next-step dialog');
+assert.strictEqual(redesignedNext.context.getDailyEarningsSummary('2026-07-14').perDiemPay, 50, 'recording a start on an empty day does not disable automatic per diem for the first load');
+assert.strictEqual(saveNavigation.at(-1), 'new-load', 'continue opens the next load form');
+assert.strictEqual(redesignedNext.context.document.getElementById('load-number').value, '2', 'continue assigns the next load number');
+assert.strictEqual(redesignedNext.context.document.getElementById('ticket-number').value, '', 'continue clears the saved ticket');
+assert.strictEqual(redesignedNext.context.document.getElementById('gross-barrels').value, '', 'continue clears load measurements');
+assert.strictEqual(redesignedNext.context.document.getElementById('notes').value, '', 'continue clears the saved notes');
+redesignedNext.context.saveAndStartNextLoad();
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 1, 'an empty next-load form cannot be saved');
+redesignedField('gross-barrels', '120');
+redesignedField('ticket-number', 'CONTINUE-1');
+redesignedNext.context.saveAndStartNextLoad();
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 1, 'continue still requires confirmation for a duplicate');
+assert.strictEqual(redesignedNext.context.document.getElementById('duplicate-warning').hidden, false, 'continue displays the duplicate warning');
+vm.runInContext("commitLoadRecord(pendingDuplicateRecord, { startNext: pendingCommitMode === 'next' })", redesignedNext.context);
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 2, 'confirmed duplicate is saved once');
+assert.strictEqual(nextStepPrompts, 0, 'duplicate confirmation preserves continue mode');
+assert.strictEqual(redesignedNext.context.document.getElementById('load-number').value, '3', 'confirmed duplicate opens the next numbered form');
+redesignedField('gross-barrels', '120');
+redesignedField('ticket-number', 'CONTINUE-3');
+redesignedNext.context.saveLoad({ preventDefault() {} });
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 3, 'ordinary save continues to save once');
+assert.strictEqual(nextStepPrompts, 1, 'ordinary save retains the end-workday or another-load choice');
+assert.strictEqual(saveNavigation.at(-1), 'dashboard', 'ordinary save returns to Today for its next-step choice');
+
+const continuedRecord = redesignedNext.context.getTrackerSnapshot().data.loads.find((load) => load.ticketNumber === 'CONTINUE-3');
+redesignedNext.context.loadEntryForEdit(continuedRecord.id);
+redesignedField('notes', 'Edited historical note');
+redesignedNext.context.saveLoad({ preventDefault() {} });
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().recordCount, 3, 'editing updates an existing load rather than adding another');
+assert.strictEqual(redesignedNext.context.getTrackerSnapshot().data.loads.find((load) => load.id === continuedRecord.id).estimatedEntryPay, continuedRecord.estimatedEntryPay, 'note-only edits preserve recorded earnings');
+assert.strictEqual(redesignedNext.context.document.getElementById('ticket-number').value, '', 'an edited load leaves a clean new-entry form');
+assert.strictEqual(redesignedNext.context.document.getElementById('load-number').value, '4', 'an edited load leaves the next number ready');
+redesignedNext.context.document.getElementById('settings-auto-per-diem').checked = false;
+redesignedNext.context.savePaySettingsFromControls();
+assert.strictEqual(redesignedNext.context.getDailyEarningsSummary('2026-07-14').perDiemPay, 50, 'changing the automatic-per-diem setting preserves an existing workday’s recorded pay');
+Object.entries({ 'load-date': '2026-07-15', 'load-number': '4', 'ticket-number': 'AUTO-OFF-4', 'gross-barrels': '100' }).forEach(([id, value]) => redesignedField(id, value));
+redesignedNext.context.saveAndStartNextLoad();
+redesignedNext.context.saveWorkdayClockValue(deferredStart.date, 'shiftStartTime', '06:00');
+deferredStart.resume();
+assert.strictEqual(redesignedNext.context.getDailyEarningsSummary('2026-07-15').perDiemPay, 0, 'a new workday obeys the disabled automatic-per-diem setting');
+
+const closeoutSmoke = createStartupSmokeContext({});
+let reviewShortcut = null;
+const reviewButton = closeoutSmoke.context.document.getElementById('daily-closeout-review-button');
+reviewButton.addEventListener = (type, handler) => { if (type === 'click') reviewShortcut = handler; };
+let reviewEndFocused = false;
+closeoutSmoke.context.document.getElementById('workday-shift-end').focus = () => { reviewEndFocused = true; };
+vm.runInContext(fs.readFileSync(path.join(appDir, 'daily-closeout.js'), 'utf8'), closeoutSmoke.context);
+assert.strictEqual(typeof reviewShortcut, 'function', 'workday review button is connected');
+reviewShortcut();
+assert.strictEqual(closeoutSmoke.context.document.getElementById('official-day-breakdown').open, true, 'workday review expands the containing day details');
+assert.strictEqual(closeoutSmoke.context.document.getElementById('end-workday-details').open, true, 'workday review exposes end-time controls');
+assert.strictEqual(reviewEndFocused, true, 'workday review focuses the missing end time');
 
 context.clearForm();
 setField('load-date', '2026-07-12');
@@ -946,7 +1027,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.24.0'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.24.1'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -955,7 +1036,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.24.0', 'approved redesign release version');
+assert.strictEqual(appVersionMatch[1], '1.24.1', 'approved redesign release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');

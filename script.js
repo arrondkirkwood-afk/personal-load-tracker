@@ -1,4 +1,4 @@
-const APP_VERSION = "1.24.0";
+const APP_VERSION = "1.24.1";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -4275,7 +4275,7 @@ function applyDraft(draft) {
     saveLoadButton.textContent = 'Update Load';
     editStatus.textContent = 'Editing saved draft';
   } else {
-    saveLoadButton.textContent = 'Save Load';
+    saveLoadButton.textContent = globalThis.OfficialLoadTracker ? 'Save load & choose next step' : 'Save Load';
     editStatus.textContent = 'Draft restored';
   }
 
@@ -4993,7 +4993,12 @@ function getDailyEarningsSummary(date, recordsOverride = null) {
   const breakdownMinutes = paidMinutesByCategory('Breakdown');
   const officeTimeMinutes = paidMinutesByCategory('Office Time');
   const isOfficeOnlyDay = officeTimeMinutes > 0 && records.length === 0;
-  const automaticPerDiemRule = typeof priorSummary?.automaticPerDiem === 'boolean'
+  const priorLoadCount = numberOrNull(priorSummary?.loadRecordCount)
+    ?? ((numberOrNull(priorSummary?.completedLoadCount) || 0) + (numberOrNull(priorSummary?.rejectCount) || 0));
+  const priorEligibleWork = priorLoadCount > 0
+    || (numberOrNull(priorSummary?.officeTimeMinutes) || 0) > 0
+    || (numberOrNull(priorSummary?.officeTimePay) || 0) > 0;
+  const automaticPerDiemRule = priorEligibleWork && typeof priorSummary?.automaticPerDiem === 'boolean'
     ? priorSummary.automaticPerDiem
     : appSettings.autoPerDiemOnWorkdays;
   const automaticPerDiem = automaticPerDiemRule && (records.length > 0 || officeTimeMinutes > 0);
@@ -6227,7 +6232,7 @@ function saveAndStartNextLoad() {
 }
 
 function commitLoadRecord(record, options = {}) {
-  const showNextStep = !editingLoadId && Boolean(globalThis.OfficialLoadTracker?.afterSave);
+  const showNextStep = !editingLoadId && !options.startNext && Boolean(globalThis.OfficialLoadTracker?.afterSave);
   hideDuplicateWarning();
   isSaving = true;
   setSaveButtonsBusy(true);
@@ -6256,6 +6261,7 @@ function commitLoadRecord(record, options = {}) {
     startNextLoadFrom(record);
     showSaveMessage('Load saved. Next load is ready.');
   } else {
+    if (globalThis.OfficialLoadTracker) startNextLoadFrom(record, { navigate: false });
     showSaveMessage('Load saved successfully.');
     activateView('dashboard');
   }
@@ -6268,11 +6274,11 @@ function commitLoadRecord(record, options = {}) {
 
 function exitEditMode() {
   editingLoadId = null;
-  saveLoadButton.textContent = 'Save Load';
+  saveLoadButton.textContent = globalThis.OfficialLoadTracker ? 'Save load & choose next step' : 'Save Load';
   editStatus.textContent = 'New entry';
 }
 
-function startNextLoadFrom(previousRecord) {
+function startNextLoadFrom(previousRecord, options = {}) {
   const workDate = previousRecord.loadDate || daily.date.value || todayLocal();
   form.reset();
   clearValidation();
@@ -6316,7 +6322,7 @@ function startNextLoadFrom(previousRecord) {
   fields.notes.value = '';
   applyDailyAddOnsToControls();
   renderSummary();
-  activateView('new-load');
+  if (options.navigate !== false) activateView('new-load');
 }
 
 function clearForm() {
@@ -6447,7 +6453,7 @@ function duplicateLoadEntry(loadId) {
   clearValidation();
   clearSaveMessage();
   editingLoadId = null;
-  saveLoadButton.textContent = 'Save Load';
+  saveLoadButton.textContent = globalThis.OfficialLoadTracker ? 'Save load & choose next step' : 'Save Load';
   editStatus.textContent = `Duplicating ${load.loadNumber || load.ticketNumber || 'saved load'}`;
 
   fieldIds.forEach((id) => {
@@ -8866,4 +8872,3 @@ authControls.downloadBeforeMigrationButton?.addEventListener('click', downloadBa
 authControls.startMigrationButton?.addEventListener('click', migrateLocalDataToFirebase);
 globalThis.addEventListener?.('beforeunload', warnBeforeLeavingUnsaved);
 initialize();
-
