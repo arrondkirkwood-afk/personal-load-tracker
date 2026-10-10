@@ -1,4 +1,4 @@
-const APP_VERSION = "1.24.2";
+const APP_VERSION = "1.24.3";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -1440,6 +1440,24 @@ async function prepareFirestoreCacheGeneration() {
   const currentGeneration = Number(appMeta.cloudSync?.firestoreCacheGeneration || 0);
   if (currentGeneration >= FIRESTORE_CACHE_GENERATION || !cloudSync.sdk.clearIndexedDbPersistence) return;
 
+  const finishCachePreparation = (warning = '', cacheWasCleared = false) => {
+    appMeta = normalizeAppMeta({
+      ...appMeta,
+      cloudSync: {
+        ...(appMeta.cloudSync || {}),
+        firestoreCacheGeneration: FIRESTORE_CACHE_GENERATION,
+        firestoreCacheResetWarning: warning || null,
+        localChangesPending: cacheWasCleared
+          ? true
+          : appMeta.cloudSync?.localChangesPending === true,
+        pendingSince: cacheWasCleared
+          ? (appMeta.cloudSync?.pendingSince || new Date().toISOString())
+          : (appMeta.cloudSync?.pendingSince || null)
+      }
+    });
+    saveAppMeta();
+  };
+
   const recoveryState = cloneTrackerState(startupSafetySnapshot);
   const backupSaved = storeJson(FIRESTORE_CACHE_RECOVERY_STORAGE_KEY, {
     format: BACKUP_FORMAT,
@@ -1451,10 +1469,15 @@ async function prepareFirestoreCacheGeneration() {
     data: recoveryState
   }, 'pre-Firestore-cache-reset backup');
 
-  if (!backupSaved) throw new Error('Could not create the local recovery copy.');
+  if (!backupSaved) {
+    finishCachePreparation('Firestore cache cleanup was skipped because Safari could not store the optional recovery copy.');
+    return;
+  }
+
   const verifiedBackup = loadJson(FIRESTORE_CACHE_RECOVERY_STORAGE_KEY, null, 'pre-Firestore-cache-reset backup');
   if (!verifiedBackup || countUniqueLoads(verifiedBackup.data?.loads || []) !== countUniqueLoads(recoveryState.loads)) {
-    throw new Error('The local recovery copy could not be verified.');
+    finishCachePreparation('Firestore cache cleanup was skipped because the optional recovery copy could not be verified.');
+    return;
   }
 
   let cacheResetWarning = '';
@@ -1469,17 +1492,7 @@ async function prepareFirestoreCacheGeneration() {
     cacheResetWarning = getFriendlyErrorDetail(error, 'Firestore cache cleanup was skipped.');
   }
 
-  appMeta = normalizeAppMeta({
-    ...appMeta,
-    cloudSync: {
-      ...(appMeta.cloudSync || {}),
-      firestoreCacheGeneration: FIRESTORE_CACHE_GENERATION,
-      firestoreCacheResetWarning: cacheResetWarning || null,
-      localChangesPending: true,
-      pendingSince: appMeta.cloudSync?.pendingSince || new Date().toISOString()
-    }
-  });
-  saveAppMeta();
+  finishCachePreparation(cacheResetWarning, !cacheResetWarning);
 }
 
 function initializeFirebaseAuthInstance() {
