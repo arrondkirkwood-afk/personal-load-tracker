@@ -1027,7 +1027,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.24.1'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.24.2'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -1036,7 +1036,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.24.1', 'approved redesign release version');
+assert.strictEqual(appVersionMatch[1], '1.24.2', 'approved redesign release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
@@ -1217,4 +1217,58 @@ assert.strictEqual(JSON.parse(staleDraftSmoke.storage.get('personalOilfieldLoadT
 assert.ok(!staleDraftSmoke.storage.has('personalOilfieldLoadTracker.currentDraft'), 'previous-day draft is removed from the active form');
 assert.strictEqual(staleDraftSmoke.context.document.getElementById('ticket-number').value, '', 'previous-day ticket does not reopen in today’s form');
 
-console.log('Oilfield Load & Workday Tracker regression tests passed');
+const safariCacheRecovery = vm.runInContext(`
+  (async () => {
+    appMeta = normalizeAppMeta({
+      cloudSync: {
+        firestoreCacheGeneration: 0,
+        pendingDeletes: normalizePendingDeletes({})
+      }
+    });
+    startupSafetySnapshot = cloneTrackerState({
+      loads: savedLoads,
+      dailyAddOns,
+      dailySummaries: dailyEarningsRecords,
+      profile: driverProfile,
+      metadata: appMeta,
+      settings: appSettings,
+      favoriteRoutes,
+      paidTime: paidTimeRecords
+    });
+    cloudSync.db = {};
+    cloudSync.sdk = {
+      clearIndexedDbPersistence: async () => {
+        const error = new Error('another Safari tab owns the database');
+        error.code = 'failed-precondition';
+        throw error;
+      }
+    };
+
+    await prepareFirestoreCacheGeneration();
+    const generationAfterRejectedCleanup = appMeta.cloudSync.firestoreCacheGeneration;
+    const warningAfterRejectedCleanup = appMeta.cloudSync.firestoreCacheResetWarning;
+
+    cloudSync.user = { uid: 'regression-user', email: 'driver@example.test' };
+    cloudSync.state = createEmptyCloudState();
+    cloudSync.state.loads = savedLoads.map(normalizeSavedLoad);
+    cloudSync.state.loaded.loads = true;
+    cloudSync.state.settings = { cloudAuthoritative: true };
+    applyCloudStateToApp();
+
+    return {
+      generationAfterRejectedCleanup,
+      warningAfterRejectedCleanup,
+      generationAfterCloudMerge: appMeta.cloudSync.firestoreCacheGeneration
+    };
+  })()
+`, context);
+
+safariCacheRecovery.then((result) => {
+  assert.strictEqual(result.generationAfterRejectedCleanup, 2, 'a rejected Safari cache cleanup is recorded instead of disabling Firebase startup');
+  assert.ok(result.warningAfterRejectedCleanup.includes('failed-precondition'), 'the skipped cache cleanup keeps a useful diagnostic');
+  assert.strictEqual(result.generationAfterCloudMerge, 2, 'cloud state application preserves the completed cache generation');
+  console.log('Oilfield Load & Workday Tracker regression tests passed');
+}).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

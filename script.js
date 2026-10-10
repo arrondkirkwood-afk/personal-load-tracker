@@ -1,4 +1,4 @@
-const APP_VERSION = "1.24.1";
+const APP_VERSION = "1.24.2";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -1457,12 +1457,24 @@ async function prepareFirestoreCacheGeneration() {
     throw new Error('The local recovery copy could not be verified.');
   }
 
-  await cloudSync.sdk.clearIndexedDbPersistence(cloudSync.db);
+  let cacheResetWarning = '';
+
+  try {
+    await cloudSync.sdk.clearIndexedDbPersistence(cloudSync.db);
+  } catch (error) {
+    // Firebase documents that Firestore remains usable when this optional cache
+    // cleanup is rejected (for example, while Safari has another app tab open).
+    // Local tracker storage is the durable safety copy, so a cache-reset refusal
+    // must never prevent authentication or live cloud listeners from starting.
+    cacheResetWarning = getFriendlyErrorDetail(error, 'Firestore cache cleanup was skipped.');
+  }
+
   appMeta = normalizeAppMeta({
     ...appMeta,
     cloudSync: {
       ...(appMeta.cloudSync || {}),
       firestoreCacheGeneration: FIRESTORE_CACHE_GENERATION,
+      firestoreCacheResetWarning: cacheResetWarning || null,
       localChangesPending: true,
       pendingSince: appMeta.cloudSync?.pendingSince || new Date().toISOString()
     }
@@ -1569,10 +1581,10 @@ async function startFirebaseSync() {
   } catch (error) {
     cloudSync.enabled = false;
     cloudSync.authReady = true;
-    cloudSync.lastError = 'Firebase sync could not start.';
+    cloudSync.lastError = getFriendlyErrorDetail(error, 'Firebase sync could not start.');
     const startupMessage = String(error?.message || '').includes('timed out')
       ? 'Firebase files did not load in time. Check the device internet connection, then run the app again.'
-      : 'Cloud login could not start. Local records are still available. Check your connection, then tap Reconnect and Sign In.';
+      : `Cloud login could not start: ${cloudSync.lastError}. Local records are still available. Tap Reconnect and Sign In to retry.`;
     setAuthError(startupMessage, true);
     updateAuthUi();
   }
@@ -1924,6 +1936,7 @@ function applyCloudStateToApp() {
     ...appMeta,
     ...cloudSettings,
     cloudSync: {
+      ...(appMeta.cloudSync || {}),
       authoritative: true,
       uid: cloudSync.user.uid,
       email: cloudSync.user.email || '',
@@ -2175,7 +2188,8 @@ async function handleSignIn(event) {
     await initializeFirebaseSync();
 
     if (!cloudSync.enabled || !cloudSync.auth) {
-      setAuthError('Cloud login is still not ready. Local records are safe on this device. Check your connection, then try again.', true);
+      const detail = cloudSync.lastError || 'Firebase did not finish starting';
+      setAuthError(`Cloud login is still not ready: ${detail}. Local records are safe on this device. Try again after the app reconnects.`, true);
       signInInProgress = false;
       return;
     }
@@ -2888,6 +2902,7 @@ async function migrateLocalDataToFirebase() {
     appMeta = {
       ...appMeta,
       cloudSync: {
+        ...(appMeta.cloudSync || {}),
         authoritative: true,
         uid: cloudSync.user.uid,
         email: cloudSync.user.email || '',
