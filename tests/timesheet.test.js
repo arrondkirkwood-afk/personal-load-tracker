@@ -116,3 +116,28 @@ assert.ok(timesheetSource.includes('data-label='), 'mobile timesheet preview inc
 assert.ok(html.includes('id="settings-timesheet-name"') && html.includes('id="settings-timesheet-number"'), 'timesheet identity is editable in settings');
 assert.ok(sw.includes("'./timesheet.js'") && sw.includes("'./timesheet.css'"), 'timesheet assets are available offline');
 console.log('Timesheet Generator tests passed');
+
+// Paid-time ticket edits persist through the same blur handler used by the table.
+context.savedLoads = [];
+context.paidTimeRecords = [{ id: 'persist-ticket', workDate: '2026-10-07', category: 'Breakdown', startTime: '07:00', endTime: '13:00', durationMinutes: 360, ticketNumber: '' }];
+context.savePaidTimeTicketNumber = (id, value) => {
+  const record = context.paidTimeRecords.find(item => item.id === id);
+  if (!record) return false;
+  record.ticketNumber = value;
+  return true;
+};
+get('timesheet-anchor-date').value = '2026-10-07';
+context.document.DOMContentLoaded();
+api.buildPreview();
+const ticketCell = { dataset: { row: '0', field: 'ticket' }, textContent: '203123', closest() { return this; } };
+get('timesheet-preview-body').listeners.blur({ target: ticketCell });
+assert.strictEqual(context.paidTimeRecords[0].ticketNumber, '203123');
+api.buildPreview();
+assert.strictEqual(api.getPreview().rows[0].ticket, '203123', 'paid-time ticket survives rebuilding the preview');
+assert.strictEqual(api.getPreview().rows[0].hours, '6', 'ticket edit preserves six-hour breakdown');
+context.savePaidTimeTicketNumber = () => false;
+ticketCell.textContent = '999';
+get('timesheet-preview-body').listeners.blur({ target: ticketCell });
+assert.strictEqual(ticketCell.textContent, '203123', 'failed save restores the saved ticket');
+assert.match(get('timesheet-status').textContent, /Could not save/);
+console.log('Saved paid-time ticket regressions passed');

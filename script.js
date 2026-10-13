@@ -1,4 +1,4 @@
-const APP_VERSION = "1.24.4";
+const APP_VERSION = "1.24.5";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -468,6 +468,7 @@ const paidTimeControls = {
   custom: document.getElementById('paid-time-custom-category'), quantity: document.getElementById('paid-time-quantity'), start: document.getElementById('paid-time-start'),
   end: document.getElementById('paid-time-end'), rate: document.getElementById('paid-time-rate'),
   dispatcher: document.getElementById('paid-time-dispatcher'), truck: document.getElementById('paid-time-truck'),
+  ticket: document.getElementById('paid-time-ticket-number'),
   trailer: document.getElementById('paid-time-trailer'), relatedLoad: document.getElementById('paid-time-related-load'),
   miles: document.getElementById('paid-time-miles'), location: document.getElementById('paid-time-location'),
   notes: document.getElementById('paid-time-notes'), duration: document.getElementById('paid-time-duration'),
@@ -561,6 +562,7 @@ function normalizePaidTimeRecord(raw = {}) {
     dispatcher: String(raw.dispatcher || '').trim(),
     truckNumber: String(raw.truckNumber || ''),
     trailerNumber: String(raw.trailerNumber || ''),
+    ticketNumber: String(raw.ticketNumber || '').trim(),
     relatedLoadId: String(raw.relatedLoadId || ''),
     deadheadMiles: numberOrNull(raw.deadheadMiles),
     location: String(raw.location || ''),
@@ -8525,6 +8527,7 @@ function readPaidTimeForm() {
     customCategoryName: paidTimeControls.custom?.value, quantity: paidTimeControls.quantity?.value, startTime: paidTimeControls.start?.value,
     endTime: paidTimeControls.end?.value, hourlyRate: paidTimeControls.rate?.value,
     dispatcher: paidTimeControls.dispatcher?.value, truckNumber: paidTimeControls.truck?.value,
+    ticketNumber: paidTimeControls.ticket?.value,
     trailerNumber: paidTimeControls.trailer?.value, relatedLoadId: paidTimeControls.relatedLoad?.value,
     deadheadMiles: paidTimeControls.miles?.value, location: paidTimeControls.location?.value, notes: paidTimeControls.notes?.value
   });
@@ -8546,7 +8549,7 @@ function renderPaidTimeRecords() {
     const isVacation = item.category === 'Vacation Time';
     const timing = isVacation ? 'Full paid day' : `${item.startTime}–${item.endTime}`;
     const payBasis = isVacation ? `${formatMoney(item.estimatedPay)} per day` : `${formatDuration(item.durationMinutes)} at ${formatMoney(item.hourlyRate)}/hr · ${formatMoney(item.estimatedPay)}`;
-    return `<article class="saved-load-card"><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.workDate)} · ${escapeHtml(timing)}</span><span>${escapeHtml(payBasis)}</span><span>${escapeHtml(item.dispatcher || 'No dispatcher')} · Truck ${escapeHtml(item.truckNumber || '-')}</span><div class="button-row compact"><button type="button" class="button secondary" data-edit-paid-time="${escapeHtml(item.id)}">Edit</button><button type="button" class="button ghost" data-duplicate-paid-time="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="button ghost" data-print-paid-time="${escapeHtml(item.id)}">Print</button><button type="button" class="button danger" data-delete-paid-time="${escapeHtml(item.id)}">Delete</button></div></article>`;
+    return `<article class="saved-load-card"><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.workDate)} · ${escapeHtml(timing)}</span><span>${escapeHtml(payBasis)}</span><span>Ticket # ${escapeHtml(item.ticketNumber || 'Not entered')}</span><span>${escapeHtml(item.dispatcher || 'No dispatcher')} · Truck ${escapeHtml(item.truckNumber || '-')}</span><div class="button-row compact"><button type="button" class="button secondary" data-edit-paid-time="${escapeHtml(item.id)}">Edit</button><button type="button" class="button ghost" data-duplicate-paid-time="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="button ghost" data-print-paid-time="${escapeHtml(item.id)}">Print</button><button type="button" class="button danger" data-delete-paid-time="${escapeHtml(item.id)}">Delete</button></div></article>`;
   }).join('') : `<article class="empty-card">No paid-time records for ${escapeHtml(selectedDate)}.</article>`;
 }
 
@@ -8585,7 +8588,7 @@ function fillPaidTimeForm(record, duplicate = false) {
       paidTimeControls.category.appendChild(option);
     }
   }
-  const mapping = { date:'workDate', category:'category', custom:'customCategoryName', quantity:'quantity', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
+  const mapping = { date:'workDate', category:'category', custom:'customCategoryName', quantity:'quantity', start:'startTime', end:'endTime', rate:'hourlyRate', dispatcher:'dispatcher', truck:'truckNumber', trailer:'trailerNumber', ticket:'ticketNumber', relatedLoad:'relatedLoadId', miles:'deadheadMiles', location:'location', notes:'notes' };
   Object.entries(mapping).forEach(([control, key]) => {
     if (paidTimeControls[control]) paidTimeControls[control].value = record[key] ?? '';
   });
@@ -8595,7 +8598,7 @@ function fillPaidTimeForm(record, duplicate = false) {
 
 function printPaidTimeRecord(record) {
   const rows = [
-    ['Date', record.workDate], ['Category', record.category], ['Custom category', record.customCategoryName || '-'],
+    ['Date', record.workDate], ['Ticket number', record.ticketNumber || '-'], ['Category', record.category], ['Custom category', record.customCategoryName || '-'],
     ['Start', record.startTime || '-'], ['End', record.endTime || '-'], ['Duration', record.category === 'Vacation Time' ? 'Full paid day' : formatDuration(record.durationMinutes)],
     [record.category === 'Vacation Time' ? 'Daily rate' : 'Hourly rate', record.category === 'Vacation Time' ? formatMoney(record.hourlyRate) : `${formatMoney(record.hourlyRate)}/hr`], ['Estimated pay', formatMoney(record.estimatedPay)],
     ['Deadhead miles', isFiniteNumber(record.deadheadMiles) ? record.deadheadMiles : '-'], ['Dispatcher', record.dispatcher || '-'],
@@ -8606,9 +8609,24 @@ function printPaidTimeRecord(record) {
 }
 
 function downloadPaidTimeCsv() {
-  const headers = ['ID','Work date','Paid-time type','Quantity','Quantity unit','Rate','Amount','Start','End','Duration minutes','Dispatcher','Truck','Trailer','Related load ID','Deadhead miles','Location','Notes','Created','Updated','Daily total'];
-  const rows = paidTimeRecords.map((item) => [item.id,item.workDate,item.category,formatCsvNumber(item.quantity),item.quantityUnit,formatCsvNumber(item.hourlyRate),formatCsvNumber(item.estimatedPay),item.startTime,item.endTime,item.durationMinutes,item.dispatcher,item.truckNumber,item.trailerNumber,item.relatedLoadId,formatCsvNumber(item.deadheadMiles),item.location,item.notes,item.createdAt,item.updatedAt,formatCsvNumber(getDailyEarningsSummary(item.workDate).totalEstimatedDailyEarnings)]);
+  const headers = ['ID','Work date','Ticket number','Paid-time type','Quantity','Quantity unit','Rate','Amount','Start','End','Duration minutes','Dispatcher','Truck','Trailer','Related load ID','Deadhead miles','Location','Notes','Created','Updated','Daily total'];
+  const rows = paidTimeRecords.map((item) => [item.id,item.workDate,item.ticketNumber,item.category,formatCsvNumber(item.quantity),item.quantityUnit,formatCsvNumber(item.hourlyRate),formatCsvNumber(item.estimatedPay),item.startTime,item.endTime,item.durationMinutes,item.dispatcher,item.truckNumber,item.trailerNumber,item.relatedLoadId,formatCsvNumber(item.deadheadMiles),item.location,item.notes,item.createdAt,item.updatedAt,formatCsvNumber(getDailyEarningsSummary(item.workDate).totalEstimatedDailyEarnings)]);
   downloadCsv(`paid-time-${todayLocal()}.csv`, headers, rows);
+}
+
+function savePaidTimeTicketNumber(recordId, value) {
+  const previous = paidTimeRecords.find((item) => item.id === recordId);
+  if (!previous) return false;
+  const ticketNumber = String(value ?? '').trim();
+  if (previous.ticketNumber === ticketNumber) return true;
+  const record = { ...previous, ticketNumber, updatedAt: new Date().toISOString() };
+  const next = paidTimeRecords.map((item) => item.id === recordId ? record : item);
+  if (!storeJson(PAID_TIME_STORAGE_KEY, next, 'paid-time records')) return false;
+  paidTimeRecords = next;
+  if (!isCloudSignedIn()) markLocalChangesPending('Ticket number saved on this device. It will sync after sign-in.');
+  syncPaidTimeToCloud(record);
+  renderPaidTimeRecords();
+  return true;
 }
 
 function syncPaidTimeToCloud(record) {

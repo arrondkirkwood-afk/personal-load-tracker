@@ -136,6 +136,20 @@ vm.runInContext(`
 `, performanceApp.context);
 assert.deepStrictEqual(Array.from(performanceApp.context.syncedDates), ['2026-10-11', '2026-09-01'], 'a moved load syncs summaries for both its new and former dates');
 
+vm.runInContext(`
+  paidTimeRecords = [normalizePaidTimeRecord({ id: 'ticket-breakdown', workDate: '2026-10-07', category: 'Breakdown', startTime: '07:00', endTime: '13:00', hourlyRate: 24, notes: 'Repair shop' })];
+`, performanceApp.context);
+const ticketBefore = performanceApp.context.getTrackerSnapshot({ refresh: false }).data.paidTime[0];
+assert.strictEqual(performanceApp.context.savePaidTimeTicketNumber('ticket-breakdown', ' 203123 '), true);
+const savedTicketRecord = JSON.parse(performanceApp.storage.get('personalOilfieldLoadTracker.paidTime'))[0];
+assert.strictEqual(savedTicketRecord.ticketNumber, '203123', 'paid-time ticket persists to the source storage');
+assert.strictEqual(savedTicketRecord.durationMinutes, ticketBefore.durationMinutes, 'ticket editing preserves hours');
+assert.strictEqual(savedTicketRecord.estimatedPay, ticketBefore.estimatedPay, 'ticket editing preserves pay');
+assert.strictEqual(savedTicketRecord.notes, ticketBefore.notes, 'ticket editing preserves notes');
+const ticketReload = createStartupSmokeContext(Object.fromEntries(performanceApp.storage));
+assert.strictEqual(ticketReload.context.getTrackerSnapshot({ refresh: false }).data.paidTime[0].ticketNumber, '203123', 'ticket survives app reload');
+assert.strictEqual(performanceApp.context.savePaidTimeTicketNumber('missing-paid-time', '100'), false, 'missing records are not fabricated');
+
 const syncTimers = [];
 performanceApp.context.setTimeout = (callback) => { syncTimers.push(callback); return syncTimers.length; };
 vm.runInContext(`
@@ -1088,7 +1102,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.24.4'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.24.5'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -1097,7 +1111,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.24.4', 'approved redesign release version');
+assert.strictEqual(appVersionMatch[1], '1.24.5', 'approved redesign release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');

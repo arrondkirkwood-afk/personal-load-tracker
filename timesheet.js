@@ -129,7 +129,7 @@
         const perDiemAlreadyShown = rows.some((row) => row.workDate === item.workDate && row.perDiem === 'Yes');
         const officePerDiem = category === 'Office Time' && !perDiemAlreadyShown;
         rows.push(makeRow({
-          kind: 'activity', hourly: isHourly, workDate: item.workDate, sourceId: item.id, date: shortDate(item.workDate),
+          kind: 'activity', ticket: clean(item.ticketNumber), hourly: isHourly, workDate: item.workDate, sourceId: item.id, date: shortDate(item.workDate),
           job: activityDescription(item), loads: '', rejects: '', perDiem: officePerDiem ? 'Yes' : '',
           timeIn: isHourly ? clean(item.startTime) : '', timeOut: isHourly ? clean(item.endTime) : '',
           hours: isHourly ? hours(number(item.durationMinutes)) : ''
@@ -214,7 +214,7 @@
     renderPreview();
     const totals = pageTotals(previewRows);
     document.getElementById('timesheet-status').textContent =
-      `Timesheet ready for ${shortDate(previewRange.start)} – ${shortDate(previewRange.end)}. Review the summary, then scan only the rows that need correction. Saved source records were not changed.`;
+      `Timesheet ready for ${shortDate(previewRange.start)} – ${shortDate(previewRange.end)}. Review the summary, then scan only the rows that need correction. Ticket numbers on paid-time rows are saved to their entries; other table corrections apply to this preview.`;
   }
 
   function pdfEscape(text) { return clean(text).replace(/[^\x20-\x7e]/g, '-').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
@@ -303,11 +303,17 @@
         document.getElementById('timesheet-status').textContent = 'Enter hours as a nonnegative number, such as 2 or 2.5.';
         return;
       }
+      const savedTicket = field === 'ticket' && row.kind === 'activity';
+      if (savedTicket && (typeof savePaidTimeTicketNumber !== 'function' || !savePaidTimeTicketNumber(row.sourceId, value))) {
+        cell.textContent = row.ticket;
+        document.getElementById('timesheet-status').textContent = 'Could not save the ticket number. Open the paid-time entry and try again.';
+        return;
+      }
       row[field] = value;
       if (field === 'hours' && value && !row.hourly) { row.hourly = true; row.requiresClockTimes = false; }
       row.warnings = rowWarnings(row);
       renderPreview();
-      document.getElementById('timesheet-status').textContent = 'Timesheet correction applied to this preview and its PDF. Reset Preview restores the saved records.';
+      document.getElementById('timesheet-status').textContent = savedTicket ? 'Ticket number saved to the paid-time entry. It will remain when you rebuild the timesheet.' : 'Timesheet correction applied to this preview and its PDF. Reset Preview restores the saved records.';
     }, true);
   }
   globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals, correctedHours, buildPreview, getPreview: () => ({ rows: previewRows, range: previewRange }) };
