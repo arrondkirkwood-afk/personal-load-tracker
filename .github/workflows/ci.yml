@@ -33,6 +33,9 @@ jobs:
       - name: Run core regression tests
         run: node tests/regression.test.js
 
+      - name: Run dashboard sync regressions
+        run: node tests/dashboard-sync.test.js
+
       - name: Run redesign contract guardrails
         run: node tests/redesign-contract.test.js
 

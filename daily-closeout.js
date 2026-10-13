@@ -11,13 +11,15 @@
   function isReject(load) { return loadStatus(load) === 'reject' || loadStatus(load) === 'rejected'; }
 
   function getDayData() {
-    const snapshot = root.getTrackerSnapshot?.();
+    const snapshot = root.getTrackerSnapshot?.({ refresh: false });
     if (!snapshot?.data) return null;
     const date = selectedDate();
     const data = snapshot.data;
     const loads = (data.loads || []).filter((load) => load.loadDate === date);
     const paid = (data.paidTime || []).filter((item) => (item.workDate || item.date) === date);
-    const addOn = data.dailyAddOns?.[date] || {};
+    let addOn = data.dailyAddOns?.[date] || {};
+    const office = paid.find((item) => item.category === 'Office Time');
+    if (!loads.length && office) addOn = { ...addOn, shiftStartTime: office.startTime, shiftEndTime: office.endTime };
     const summary = data.dailySummaries?.[date] || {};
     const completed = loads.filter(isCompleted).length;
     const rejects = loads.filter(isReject).length;
@@ -85,7 +87,11 @@
     byId('daily-date')?.addEventListener('change', render);
     byId('daily-closeout-review-button')?.addEventListener('click', reviewWorkday);
     if (root.MutationObserver) {
-      const observer = new root.MutationObserver(() => root.setTimeout?.(render, 0));
+      let timer = null;
+      const observer = new root.MutationObserver(() => {
+        if (timer !== null) return;
+        timer = root.setTimeout?.(() => { timer = null; render(); }, 0);
+      });
       ['today-completed-loads', 'today-rejects', 'daily-total-earnings', 'workday-status'].forEach((id) => {
         const element = byId(id);
         if (element) observer.observe(element, { childList: true, characterData: true, subtree: true });

@@ -1,4 +1,4 @@
-const APP_VERSION = "1.24.3";
+const APP_VERSION = "1.24.4";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -988,12 +988,13 @@ function createEmptyCloudState() {
     fromCacheByListener: {},
     hasPendingWrites: false,
     fromCache: false,
-    lastSnapshotAt: null
+    lastSnapshotAt: null,
+    dataSignatures: {}
   };
 }
 
 function setElementText(element, value) {
-  if (element) {
+  if (element && element.textContent !== String(value ?? '')) {
     element.textContent = value;
   }
 }
@@ -1101,7 +1102,7 @@ function updateSyncStatusFromState() {
   }
 
   if (cloudSync.stalledWrites > 0) {
-    setSyncStatus('Offline—changes pending', 'offline');
+    setSyncStatus('Sync delayed—changes pending', 'pending');
     return;
   }
 
@@ -1121,7 +1122,7 @@ function updateSyncStatusFromState() {
   }
 
   if (cloudSync.state.fromCache) {
-    setSyncStatus('Offline', 'offline');
+    setSyncStatus('Waiting for server', 'pending');
     return;
   }
 
@@ -1737,11 +1738,23 @@ function reconcileServerAcknowledgement() {
   setAuthError('');
 }
 
+let cloudStateApplyTimer = null;
 function handleCloudSnapshotChange(name, snapshot) {
   updateCloudSnapshotMetadata(name, snapshot);
   cloudSync.lastError = '';
   reconcileServerAcknowledgement();
-  handleCloudStateChanged();
+  // Server acknowledgements change metadata without changing the user's records.
+  const signature = JSON.stringify(cloudSync.state[name], (key, value) => key === 'cloudUpdatedAt' ? undefined : value);
+  const changed = cloudSync.state.dataSignatures[name] !== signature;
+  cloudSync.state.dataSignatures[name] = signature;
+  updateAuthUi();
+  if (!changed) return;
+  // A burst from the seven listeners needs one rebuild, rather than seven.
+  if (cloudStateApplyTimer !== null) return;
+  cloudStateApplyTimer = globalThis.setTimeout(() => {
+    cloudStateApplyTimer = null;
+    handleCloudStateChanged();
+  }, 50);
 }
 
 function getFriendlyErrorDetail(error, fallback = 'Unknown error') {
@@ -5146,7 +5159,7 @@ function getWorkdayStatus(addOn) {
   return 'Not Started';
 }
 
-function updateDailyEarningsRecord(date) {
+function updateDailyEarningsRecord(date, persist = true) {
   if (!date) {
     return null;
   }
@@ -5157,11 +5170,12 @@ function updateDailyEarningsRecord(date) {
   };
 
   dailyEarningsRecords[date] = summary;
-  storeEarningsRecords();
+  if (persist) storeEarningsRecords();
   return summary;
 }
 
 function refreshAllDailyEarningsRecords() {
+  const previous = JSON.stringify(dailyEarningsRecords);
   const dates = new Set([
     ...Object.keys(dailyEarningsRecords),
     ...Object.keys(dailyAddOns),
@@ -5170,7 +5184,8 @@ function refreshAllDailyEarningsRecords() {
     daily.date.value
   ]);
 
-  dates.forEach((date) => updateDailyEarningsRecord(date));
+  dates.forEach((date) => updateDailyEarningsRecord(date, false));
+  if (JSON.stringify(dailyEarningsRecords) !== previous) storeEarningsRecords();
 }
 
 function renderSummary() {
@@ -6260,6 +6275,7 @@ function saveAndStartNextLoad() {
 }
 
 function commitLoadRecord(record, options = {}) {
+  const previousDate = editingLoadId ? getLoadById(editingLoadId)?.loadDate : null;
   const showNextStep = !editingLoadId && !options.startNext && Boolean(globalThis.OfficialLoadTracker?.afterSave);
   hideDuplicateWarning();
   isSaving = true;
@@ -6280,6 +6296,7 @@ function commitLoadRecord(record, options = {}) {
   }
   syncLoadToCloud(record);
   syncCurrentDateToCloud(record.loadDate);
+  if (previousDate && previousDate !== record.loadDate) syncCurrentDateToCloud(previousDate);
   applyDailyAddOnsToControls();
   renderSummary();
   updateDailySummary();
@@ -7085,9 +7102,11 @@ function downloadDailyEarningsSummary() {
   downloadCsv(`personal-oilfield-daily-earnings-${todayLocal()}.csv`, headers, rows);
 }
 
-function getTrackerSnapshot() {
-  refreshAllDailyEarningsRecords();
-  saveAppMeta();
+function getTrackerSnapshot(options = {}) {
+  if (options.refresh !== false) {
+    refreshAllDailyEarningsRecords();
+    saveAppMeta();
+  }
 
   return {
     format: BACKUP_FORMAT,

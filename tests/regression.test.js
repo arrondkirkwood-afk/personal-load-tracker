@@ -102,6 +102,67 @@ function createStartupSmokeContext(initialStorage) {
   return { context: smokeContext, storage: smokeStorage };
 }
 
+// Sync/UI performance regressions: representative history, measured by work counts.
+const performanceLoads = Array.from({ length: 229 }, (_, index) => ({
+  id: `performance-${index}`, loadDate: `2026-09-${String(1 + index % 28).padStart(2, '0')}`,
+  loadStatus: 'Completed Load', grossBarrels: 190, loadedMiles: 42
+}));
+const performanceApp = createStartupSmokeContext({
+  'personalOilfieldLoadTracker.loads': JSON.stringify(performanceLoads)
+});
+let performanceWrites = 0;
+const performanceStore = performanceApp.context.localStorage.setItem;
+performanceApp.context.localStorage.setItem = (key, value) => {
+  performanceWrites += 1;
+  return performanceStore(key, value);
+};
+performanceApp.context.getTrackerSnapshot({ refresh: false });
+assert.strictEqual(performanceWrites, 0, 'closeout rendering reads a snapshot without rewriting the history');
+vm.runInContext("savedLoads[0].estimatedPay += 1; savedLoads[0].estimatedEntryPay += 1; refreshAllDailyEarningsRecords();", performanceApp.context);
+assert.strictEqual(performanceWrites, 1, 'rebuilding a changed multi-day history persists summaries once');
+performanceApp.context.refreshAllDailyEarningsRecords();
+assert.strictEqual(performanceWrites, 1, 'an unchanged history rebuild does not write storage again');
+let textWrites = 0;
+const stableText = { get textContent() { return 'same'; }, set textContent(value) { textWrites += 1; } };
+performanceApp.context.setElementText(stableText, 'same');
+assert.strictEqual(textWrites, 0, 'unchanged text does not trigger mutation observers');
+
+vm.runInContext(`
+  globalThis.syncedDates = [];
+  syncLoadToCloud = () => {};
+  syncCurrentDateToCloud = date => globalThis.syncedDates.push(date);
+  editingLoadId = savedLoads[0].id;
+  commitLoadRecord({ ...savedLoads[0], loadDate: '2026-10-11' });
+`, performanceApp.context);
+assert.deepStrictEqual(Array.from(performanceApp.context.syncedDates), ['2026-10-11', '2026-09-01'], 'a moved load syncs summaries for both its new and former dates');
+
+const syncTimers = [];
+performanceApp.context.setTimeout = (callback) => { syncTimers.push(callback); return syncTimers.length; };
+vm.runInContext(`
+  globalThis.cloudApplications = 0;
+  applyCloudStateToApp = () => { globalThis.cloudApplications += 1; };
+  shouldApplyCloudState = () => true;
+  cloudSync.state.loads = [{ id: 'sync-example', updatedAt: '2026-10-12T12:00:00Z' }];
+  cloudSync.state.paidTime = [];
+  handleCloudSnapshotChange('loads', { metadata: { hasPendingWrites: true, fromCache: false } });
+  handleCloudSnapshotChange('paidTime', { metadata: { hasPendingWrites: false, fromCache: false } });
+`, performanceApp.context);
+assert.strictEqual(syncTimers.length, 1, 'listener bursts schedule one application');
+syncTimers.shift()();
+assert.strictEqual(performanceApp.context.cloudApplications, 1, 'the scheduled burst applies records once');
+vm.runInContext(`
+  cloudSync.state.loads[0].cloudUpdatedAt = '2026-10-12T12:00:01Z';
+  handleCloudSnapshotChange('loads', { metadata: { hasPendingWrites: false, fromCache: false } });
+`, performanceApp.context);
+assert.strictEqual(syncTimers.length, 0, 'server acknowledgement updates status without rebuilding unchanged records');
+vm.runInContext(`
+  cloudSync.state.loads[0].updatedAt = '2026-10-12T12:05:00Z';
+  handleCloudSnapshotChange('loads', { metadata: { hasPendingWrites: false, fromCache: false } });
+`, performanceApp.context);
+assert.strictEqual(syncTimers.length, 1, 'a real remote edit schedules another application');
+syncTimers.shift()();
+assert.strictEqual(performanceApp.context.cloudApplications, 2);
+
 const startupSmoke = createStartupSmokeContext({
   'personalOilfieldLoadTracker.settings': JSON.stringify({
     loadedMilesPayScale: [{ min: 1, max: 999, rate: 123.45 }]
@@ -1027,7 +1088,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.24.3'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.24.4'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -1036,7 +1097,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.24.3', 'approved redesign release version');
+assert.strictEqual(appVersionMatch[1], '1.24.4', 'approved redesign release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
