@@ -1,6 +1,6 @@
 const APP_VERSION = '1.24.5';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
-const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}-timesheet-wrap`;
+const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const APP_FILES = [
   './',
   './index.html',
@@ -107,3 +107,5 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+
+// Refresh precached assets for complete, wrapped timesheet descriptions (2026-10-16).
