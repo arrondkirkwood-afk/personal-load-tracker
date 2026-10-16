@@ -218,23 +218,63 @@
   }
 
   function pdfEscape(text) { return clean(text).replace(/[^\x20-\x7e]/g, '-').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
-  function fit(text, width, size) { const max = Math.max(1, Math.floor(width / (size * .54))); const value = clean(text); return value.length > max ? `${value.slice(0, Math.max(1, max - 1))}.` : value; }
+  function wrap(text, width, size = 6.5) {
+    const max = Math.max(1, Math.floor(width / size));
+    return clean(text).split(/\r?\n/).flatMap((paragraph) => {
+      const lines = [];
+      let remaining = paragraph;
+      while (remaining.length > max) {
+        const space = remaining.lastIndexOf(' ', max);
+        const end = space > 0 ? space : max;
+        lines.push(remaining.slice(0, end));
+        remaining = remaining.slice(end).trimStart();
+      }
+      lines.push(remaining);
+      return lines;
+    });
+  }
+  function layoutRows(rows) {
+    const pages = [[]];
+    let used = 0;
+    rows.forEach((row) => {
+      const cells = COLUMNS.map((key, i) => wrap(row[key], COLUMN_WIDTHS[i] - 6));
+      const count = Math.max(...cells.map((lines) => lines.length));
+      for (let offset = 0; offset < count; offset += 54) {
+        const part = cells.map((lines) => lines.slice(offset, offset + 54));
+        const height = Math.max(23, Math.max(...part.map((lines) => lines.length)) * 9 + 10);
+        if (used + height > 550) { pages.push([]); used = 0; }
+        pages[pages.length - 1].push({ row: offset ? {} : row, cells: part, height });
+        used += height;
+      }
+    });
+    return pages;
+  }
   function pdfText(x, y, text, size = 7, bold = false) { return `BT /${bold ? 'F2' : 'F1'} ${size} Tf 1 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)} Tm (${pdfEscape(text)}) Tj ET\n`; }
   function pdfLine(x1, y1, x2, y2, width = .5) { return `${width} w ${x1} ${y1} m ${x2} ${y2} l S\n`; }
   function buildPage(rows, pageNumber, pageCount, id, range, grandTotals) {
-    const left = 28; const right = 594; const rowHeight = 23; const tableTop = 690; const tableBottom = tableTop - rowHeight * (rows.length + 1);
+    const left = 28; const right = 594; const tableTop = 690; const tableBottom = tableTop - 23 - rows.reduce((sum, entry) => sum + entry.height, 0);
     let out = '0 G 0 g\n';
     out += pdfText(306, 757, 'EMPLOYEE WORK SCHEDULE', 14, true);
     out += pdfText(left, 738, `Employee Name: ${id.name}`, 9, true) + pdfText(405, 738, `Employee #: ${id.number}`, 9, true);
     out += pdfText(left, 722, `Beginning Date: ${shortDate(range.start)}`, 9) + pdfText(405, 722, `Ending Date: ${shortDate(range.end)}`, 9);
     let x = left; COLUMN_WIDTHS.forEach((w) => { out += pdfLine(x, tableTop, x, tableBottom); x += w; }); out += pdfLine(x, tableTop, x, tableBottom);
-    for (let i = 0; i <= rows.length + 1; i += 1) out += pdfLine(left, tableTop - i * rowHeight, right, tableTop - i * rowHeight);
-    x = left; COLUMN_LABELS.forEach((label, i) => { out += pdfText(x + 3, tableTop - 15, fit(label, COLUMN_WIDTHS[i] - 6, 6.7), 6.7, true); x += COLUMN_WIDTHS[i]; });
-    rows.forEach((row, index) => {
-      let cellX = left; const y = tableTop - rowHeight * (index + 1) - 15;
-      COLUMNS.forEach((key, i) => { out += pdfText(cellX + 3, y, fit(row[key], COLUMN_WIDTHS[i] - 6, 6.5), 6.5); cellX += COLUMN_WIDTHS[i]; });
+    out += pdfLine(left, tableTop, right, tableTop);
+    out += pdfLine(left, tableTop - 23, right, tableTop - 23);
+    x = left; COLUMN_LABELS.forEach((label, i) => {
+      wrap(label, COLUMN_WIDTHS[i] - 6, 6).forEach((line, n) => { out += pdfText(x + 3, tableTop - 9 - n * 8, line, 6, true); });
+      x += COLUMN_WIDTHS[i];
     });
-    const page = pageTotals(rows);
+    let top = tableTop - 23;
+    rows.forEach((entry) => {
+      let cellX = left;
+      entry.cells.forEach((lines, i) => {
+        lines.forEach((line, n) => { out += pdfText(cellX + 3, top - 13 - n * 9, line, 6.5); });
+        cellX += COLUMN_WIDTHS[i];
+      });
+      top -= entry.height;
+      out += pdfLine(left, top, right, top);
+    });
+    const page = pageTotals(rows.map((entry) => entry.row));
     out += pdfText(left, tableBottom - 18, `Hourly entries on this page: ${formatHours(page.hourlyHours)}`, 8, true);
     if (pageNumber === pageCount) {
       out += pdfText(left, tableBottom - 36, `Total Loads: ${grandTotals.loads}`, 8, true);
@@ -247,8 +287,7 @@
     return out;
   }
   function buildPdf(rows, id, range) {
-    const perPage = 24; const chunks = [];
-    for (let i = 0; i < Math.max(rows.length, 1); i += perPage) chunks.push(rows.slice(i, i + perPage));
+    const chunks = layoutRows(rows);
     const objects = []; const add = (body) => { objects.push(body); return objects.length; };
     const catalog = add(''); const pages = add(''); const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'); const bold = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
     const grandTotals = pageTotals(rows);
@@ -319,4 +358,5 @@
   globalThis.TimesheetGenerator = { payPeriodFor, buildTimesheetRows, buildPdf, rowWarnings, pageTotals, correctedHours, buildPreview, getPreview: () => ({ rows: previewRows, range: previewRange }) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 }());
+
 
