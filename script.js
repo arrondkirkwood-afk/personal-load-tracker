@@ -1,4 +1,4 @@
-const APP_VERSION = "1.24.5";
+const APP_VERSION = "1.24.6";
 const DATA_SCHEMA_VERSION = 3;
 const VACATION_DAILY_RATE = 270;
 const APP_CACHE_PREFIX = 'personal-oilfield-load-tracker-';
@@ -3207,7 +3207,8 @@ function readJsonFromStorage(key, label) {
       return { found: false, value: null };
     }
 
-    return { found: true, value: JSON.parse(storedValue) };
+    const parsed = JSON.parse(storedValue);
+    return { found: true, value: key === STORAGE_KEY ? expandStoredLoads(parsed) : parsed };
   } catch {
     addStorageWarning(`Warning: saved ${label} could not be read from browser storage. The app recovered with any other available saved data and did not crash.`);
     return { found: false, value: null };
@@ -3232,11 +3233,53 @@ function loadJson(key, fallback, label, legacyKey = null) {
   return fallback;
 }
 
+// Share repeated historical pay tables without dropping any entered or pay data.
+// This format is only needed if Safari rejects the ordinary array for lack of space.
+function compactStoredLoads(loads) {
+  const payScales = [];
+  const references = new Map();
+  const records = loads.map((load) => {
+    const scale = load?.paySnapshot?.loadedMilesPayScale;
+    if (!Array.isArray(scale)) return load;
+    const signature = JSON.stringify(scale);
+    if (!references.has(signature)) {
+      references.set(signature, payScales.length);
+      payScales.push(scale);
+    }
+    const { loadedMilesPayScale, ...snapshot } = load.paySnapshot;
+    return { ...load, paySnapshot: snapshot, _storedPayScale: references.get(signature) };
+  });
+  return { format: 'tracker-compact-loads-v1', payScales, records };
+}
+
+function expandStoredLoads(value) {
+  if (value?.format !== 'tracker-compact-loads-v1') return value;
+  if (!Array.isArray(value.records) || !Array.isArray(value.payScales)) throw new Error('Invalid compact load log');
+  return value.records.map((record) => {
+    if (!Object.prototype.hasOwnProperty.call(record, '_storedPayScale')) return record;
+    const { _storedPayScale: reference, ...load } = record;
+    if (!Number.isInteger(reference) || !Array.isArray(value.payScales[reference])) throw new Error('Missing historical pay table');
+    return { ...load, paySnapshot: { ...load.paySnapshot, loadedMilesPayScale: value.payScales[reference] } };
+  });
+}
+
+function writeVerifiedJson(key, value) {
+  const serialized = JSON.stringify(value);
+  localStorage.setItem(key, serialized);
+  if (localStorage.getItem(key) !== serialized) throw new Error('Storage verification failed');
+}
+
 function storeJson(key, value, label) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    writeVerifiedJson(key, value);
     return true;
   } catch {
+    if (key === STORAGE_KEY && Array.isArray(value)) {
+      try {
+        writeVerifiedJson(key, compactStoredLoads(value));
+        return true;
+      } catch { /* Keep the previous log and report failure to the save handler. */ }
+    }
     addStorageWarning(`Warning: saved ${label} could not be written to browser storage. Download a CSV backup before closing the browser.`);
     renderStorageWarning();
     return false;
@@ -6283,15 +6326,24 @@ function commitLoadRecord(record, options = {}) {
   isSaving = true;
   setSaveButtonsBusy(true);
 
+  const previousLoads = savedLoads;
   if (editingLoadId) {
     savedLoads = savedLoads.map((load) => (load.id === editingLoadId ? record : load));
-    exitEditMode();
   } else {
-    savedLoads.unshift(record);
+    savedLoads = [record, ...savedLoads];
   }
 
+  if (!storeLoads()) {
+    savedLoads = previousLoads;
+    isSaving = false;
+    setSaveButtonsBusy(false);
+    validationSummary.className = 'validation-summary show';
+    validationSummary.textContent = 'Load was NOT saved. This browser could not store it. Your entry is still in the form. Export Full Backup before closing the app.';
+    showSaveMessage('Load was NOT saved. Keep this form open.');
+    return false;
+  }
+  if (editingLoadId) exitEditMode();
   daily.date.value = record.loadDate || daily.date.value;
-  storeLoads();
   refreshAllDailyEarningsRecords();
   if (!isCloudSignedIn()) {
     markLocalChangesPending('Load saved locally. Sign in to sync it to Firebase.');
@@ -6309,7 +6361,7 @@ function commitLoadRecord(record, options = {}) {
     showSaveMessage('Load saved. Next load is ready.');
   } else {
     if (globalThis.OfficialLoadTracker) startNextLoadFrom(record, { navigate: false });
-    showSaveMessage('Load saved successfully.');
+    showSaveMessage('Load saved on this device. Check sync status for cloud confirmation.');
     activateView('dashboard');
   }
 
@@ -6317,6 +6369,7 @@ function commitLoadRecord(record, options = {}) {
   setSaveButtonsBusy(false);
   globalThis.OfficialLoadTracker?.refresh?.();
   if (showNextStep) globalThis.OfficialLoadTracker.afterSave(record);
+  return true;
 }
 
 function exitEditMode() {

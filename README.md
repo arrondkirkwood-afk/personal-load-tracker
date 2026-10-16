@@ -131,7 +131,7 @@ Download a JSON backup before clearing browser data, switching browsers, replaci
 
 The app includes a versioned service worker so updated GitHub Pages files can replace older app-file caches without clearing saved load records. The update system only manages cached app files; it does not delete localStorage.
 
-Current app version and cache version: `1.24.5`, cache name `personal-oilfield-load-tracker-v1.24.5`.
+Current app version and cache version: `1.24.6`, cache name `personal-oilfield-load-tracker-v1.24.6`.
 
 The Reports view includes a Timesheet Generator for the company 1st-15th and 16th-month-end pay periods. It reads existing loads, workday summaries, paid wait, deadhead, and paid-time records. Deadhead and paid-wait rows inherit the ticket number from their linked load, so regenerated prior pay periods include saved ticket numbers automatically. For the timesheet, each hourly entry rounds down to a whole or half hour (2:15 → 2, 2:45 → 2.5); source durations and pay calculations remain unchanged. Tap a preview cell and then outside it to apply a report-only correction before downloading the US-letter PDF. Reset Preview discards these corrections. The employee name and number default to Arrond Kirkwood and 0135 and can be changed under More.
 
@@ -200,19 +200,23 @@ The workday/details dialog is now parsed before its controller initializes, rest
 
 Firebase startup now continues when Safari refuses an optional Firestore cache cleanup because another tab or Home Screen copy has the database open. The app records that the cleanup was handled, preserves the cache-generation marker after cloud merges and migrations, and shows the underlying startup error if Firebase cannot initialize. Local load records remain the recovery source throughout the repair.
 
-## v1.24.5 full-storage cloud login repair
+## v1.24.6 full-storage cloud login repair
 
 Cloud login now continues when Safari cannot create the optional pre-cache-reset recovery copy because browser storage is full. The Firestore cache cleanup is skipped, the existing local records remain unchanged, and Firebase authentication and listeners are allowed to start.
 
 
 
-## v1.24.5 responsive sync and office-day repair
+## v1.24.6 responsive sync and office-day repair
 
 Cloud listener bursts rebuild the app once; metadata-only acknowledgements update sync status without rebuilding record history. Earnings history is persisted once per changed rebuild. Closeout rendering reads the current snapshot without writing records. Dashboard regions retain their controls when markup is unchanged. Office-only dashboard and closeout clocks show the saved office arrival/departure times, and editing the clock opens the office-day entry. Moving a load updates cloud summaries for both dates. Delayed server writes are distinguished from an offline device.
 
 Validation: core regression suite, dashboard sync regressions, redesign contracts, timesheet, CSV and Excel exports. Regression fixtures contain synthetic records.
 
 
-## v1.24.5 paid-time ticket persistence
+## v1.24.6 paid-time ticket persistence
 
 Breakdown and other paid-time entries have an optional Ticket number field. Ticket edits on paid-time timesheet rows save to the original entry, local storage, and the existing cloud sync path. Rebuilding a preview reads the saved ticket. Pay, duration, and notes are preserved. Paid-time cards, printouts, and CSV exports include the ticket. Other preview corrections retain their existing preview-only behavior.
+
+
+### Safari saving fix (1.24.6)
+Failed browser writes now keep the load form and edit state intact and display an explicit failure. When ordinary storage is full, the tracker retries with lossless shared historical pay tables; exports remain standard JSON. Successful local saves are read back before the form is cleared.

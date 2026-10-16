@@ -102,6 +102,47 @@ function createStartupSmokeContext(initialStorage) {
   return { context: smokeContext, storage: smokeStorage };
 }
 
+// Safari must never report success, clear the draft, or exit editing after a failed write.
+const fullStorageApp = createStartupSmokeContext({});
+vm.runInContext(`
+  fields.ticketNumber.value = 'KEEP-TICKET';
+  editingLoadId = 'existing';
+  savedLoads = [normalizeSavedLoad({ id: 'existing', loadDate: '2026-10-14', notes: 'original' })];
+  globalThis.originalLoads = savedLoads;
+  localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+  globalThis.failedSaveResult = commitLoadRecord(normalizeSavedLoad({ ...savedLoads[0], notes: 'edited' }), { startNext: true });
+`, fullStorageApp.context);
+assert.strictEqual(fullStorageApp.context.failedSaveResult, false);
+assert.strictEqual(vm.runInContext('savedLoads === originalLoads', fullStorageApp.context), true);
+assert.strictEqual(vm.runInContext('editingLoadId', fullStorageApp.context), 'existing');
+assert.strictEqual(fullStorageApp.context.document.getElementById('ticket-number').value, 'KEEP-TICKET');
+assert.match(fullStorageApp.context.document.getElementById('validation-summary').textContent, /NOT saved/);
+assert.strictEqual(vm.runInContext('isSaving', fullStorageApp.context), false);
+
+const compactApp = createStartupSmokeContext({});
+const compactStore = compactApp.context.localStorage.setItem;
+compactApp.context.localStorage.setItem = (key, value) => {
+  if (key === 'personalOilfieldLoadTracker.loads' && value.startsWith('[')) throw new Error('QuotaExceededError');
+  return compactStore(key, value);
+};
+vm.runInContext(`
+  savedLoads = Array.from({ length: 222 }, (_, i) => normalizeSavedLoad({
+    id: 'quota-' + i, loadDate: '2026-10-14', loadStatus: COMPLETED_STATUS,
+    grossBarrels: 190, loadedMiles: 45, notes: 'Every word of the original description ' + i
+  }));
+  globalThis.beforeCompact = JSON.stringify(savedLoads);
+  globalThis.compactSaved = saveLoadsToStorage();
+`, compactApp.context);
+assert.strictEqual(compactApp.context.compactSaved, true);
+const compactValue = compactApp.storage.get('personalOilfieldLoadTracker.loads');
+assert.ok(compactValue.length < compactApp.context.beforeCompact.length * 0.8, 'shared tables free meaningful space');
+assert.strictEqual(vm.runInContext('JSON.stringify(loadJson(STORAGE_KEY, [], "loads"))', compactApp.context), compactApp.context.beforeCompact, 'compact storage restores every original field exactly');
+const compactReload = createStartupSmokeContext(Object.fromEntries(compactApp.storage));
+assert.strictEqual(compactReload.context.getTrackerSnapshot({ refresh: false }).recordCount, 222, 'loads survive app restart without cloud access');
+assert.strictEqual(compactReload.context.getTrackerSnapshot({ refresh: false }).data.loads[0].notes, 'Every word of the original description 0');
+compactApp.context.localStorage.setItem = () => {};
+assert.strictEqual(compactApp.context.storeJson('verification-test', { saved: true }, 'test'), false, 'silent storage failures are detected');
+
 // Sync/UI performance regressions: representative history, measured by work counts.
 const performanceLoads = Array.from({ length: 229 }, (_, index) => ({
   id: `performance-${index}`, loadDate: `2026-09-${String(1 + index % 28).padStart(2, '0')}`,
@@ -1102,7 +1143,7 @@ assert.ok(html.includes('viewport-fit=cover'), 'viewport includes iPhone safe-ar
 assert.ok(html.includes('Current Data Diagnostics'), 'settings diagnostics are collapsed behind a label');
 assert.ok(html.includes('More Calculations'), 'secondary measurement calculations are collapsed behind a label');
 assert.ok(script.includes('record-actions-menu'), 'secondary record actions are grouped in an actions menu');
-assert.ok(repairHtml.includes('index.html?v=1.24.5'), 'repair page opens the current version');
+assert.ok(repairHtml.includes('index.html?v=1.24.6'), 'repair page opens the current version');
 assert.ok(!repairHtml.includes('localStorage'), 'repair page does not touch saved local records');
 assert.ok(!repairHtml.includes('indexedDB'), 'repair page does not touch IndexedDB');
 assert.ok(!repairHtml.includes('firebase'), 'repair page does not touch Firebase data');
@@ -1111,7 +1152,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.24.5', 'approved redesign release version');
+assert.strictEqual(appVersionMatch[1], '1.24.6', 'approved redesign release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');
