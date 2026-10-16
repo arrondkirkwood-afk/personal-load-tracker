@@ -8,17 +8,17 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
-  <link rel="manifest" href="manifest.json?v=1.24.6">
+  <link rel="manifest" href="manifest.json?v=1.24.7">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=1.24.6">
-  <link rel="stylesheet" href="redesign.css?v=1.24.6">
-  <link rel="stylesheet" href="records-reports-redesign.css?v=1.24.6">
-  <link rel="stylesheet" href="settings-redesign.css?v=1.24.6">
-  <link rel="stylesheet" href="workbook-builder.css?v=1.24.6">
-  <link rel="stylesheet" href="timesheet.css?v=1.24.6">
-  <link rel="stylesheet" href="app-enhancements.css?v=1.24.6">
-  <link rel="stylesheet" href="official-redesign.css?v=1.24.6">
+  <link rel="stylesheet" href="style.css?v=1.24.7">
+  <link rel="stylesheet" href="redesign.css?v=1.24.7">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.24.7">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.24.7">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.24.7">
+  <link rel="stylesheet" href="timesheet.css?v=1.24.7">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.24.7">
+  <link rel="stylesheet" href="official-redesign.css?v=1.24.7">
 </head>
 <body>
   <main class="app">
@@ -29,7 +29,7 @@
           <h1 id="app-title">Personal Oilfield Load Tracker</h1>
         </div>
         <div class="header-meta"><button class="button secondary official-settings-button" type="button" data-view-target="settings">Settings</button>
-          <span>Version <strong id="app-version">1.24.6</strong></span>
+          <span>Version <strong id="app-version">1.24.7</strong></span>
           <span id="header-month-load-count">Month: 0 completed</span>
           <span id="header-pay-period-load-count">Pay period: 0 completed</span>
         </div>
@@ -843,7 +843,7 @@
             <span class="status-pill">No CSV conversion</span>
           </div>
           <div class="button-row compact"><button class="button ghost" type="button" data-view-target="reports">Back to Reports</button></div>
-          <p class="workbook-intro">Choose the period you want to study. The tracker will create one presentation-ready Excel workbook from the records already saved in this app.</p>
+          <p class="workbook-intro">Choose your date range and download the enhanced Excel report directly from saved loads. It includes recalculating earnings formulas, daily productivity comparisons, and editable Excel charts; no CSV import is required.</p>
           <div class="workbook-range-card">
             <label for="workbook-range-mode"><span>Report range</span><select id="workbook-range-mode">
               <option value="current-pay-period">Current pay period</option>
@@ -873,7 +873,7 @@
             </div>
           </section>
           <div class="workbook-download-card">
-            <button class="button primary" id="download-complete-workbook-button" type="button">Download Complete Excel Report</button>
+            <button class="button primary" id="download-complete-workbook-button" type="button">Download Enhanced Excel Report</button>
             <p id="complete-workbook-status" class="save-status" aria-live="polite"></p>
           </div>
           <details class="workbook-copy-guide">
@@ -1013,7 +1013,7 @@
             <div class="settings-card app-info-card">
               <h3>Application Information</h3>
               <div class="settings-list app-info-summary-list">
-                <span>Application version</span><strong id="settings-app-version">1.24.6</strong>
+                <span>Application version</span><strong id="settings-app-version">1.24.7</strong>
                 <span>Data version</span><strong id="settings-data-version">2</strong>
                 <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
                 <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
@@ -1179,10 +1179,10 @@
             });
           })
           .then(function () {
-            window.location.replace('index.html?v=1.24.6&updated=' + Date.now());
+            window.location.replace('index.html?v=1.24.7&updated=' + Date.now());
           })
           .catch(function () {
-            window.location.replace('index.html?v=1.24.6&updated=' + Date.now());
+            window.location.replace('index.html?v=1.24.7&updated=' + Date.now());
           });
       }
 
@@ -1218,14 +1218,15 @@
       }
     }());
   </script>
-  <script src="vendor/exceljs.min.js?v=1.24.6"></script>
-  <script src="script.js?v=1.24.6"></script>
-  <script src="export-cleanup.js?v=1.24.6"></script>
-  <script src="professional-export.js?v=1.24.6"></script>
-  <script src="complete-workbook-export.js?v=1.24.6"></script>
-  <script src="export-integration.js?v=1.24.6"></script>
-  <script src="timesheet.js?v=1.24.6"></script>
-  <script src="daily-closeout.js?v=1.24.6"></script>
-  <script src="official-redesign.js?v=1.24.6"></script>
+  <script src="vendor/exceljs.min.js?v=1.24.7"></script>
+  <script src="script.js?v=1.24.7"></script>
+  <script src="export-cleanup.js?v=1.24.7"></script>
+  <script src="professional-export.js?v=1.24.7"></script>
+  <script src="complete-workbook-export.js?v=1.24.7"></script>
+  <script src="enhanced-earnings-export.js?v=1.24.7"></script>
+  <script src="export-integration.js?v=1.24.7"></script>
+  <script src="timesheet.js?v=1.24.7"></script>
+  <script src="daily-closeout.js?v=1.24.7"></script>
+  <script src="official-redesign.js?v=1.24.7"></script>
 </body>
 </html>
