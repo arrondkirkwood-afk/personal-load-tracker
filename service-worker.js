@@ -1,4 +1,4 @@
-const APP_VERSION = '1.24.5';
+const APP_VERSION = '1.24.5-timesheet-wrap';
 const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const APP_FILES = [
