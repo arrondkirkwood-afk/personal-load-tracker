@@ -1,5 +1,9 @@
 # Oilfield Load & Workday Tracker
 
+## Private tracker update — October 18, 2026
+
+The normal GitHub Pages entry now continues to the same owner-private tracker used for current loads, off days, pay-period review, and reports. The preserved original app is version 1.24.7 and remains at [legacy.html](legacy.html) for recovery and exports. See [PRIVATE_TRACKER_UPDATE.md](PRIVATE_TRACKER_UPDATE.md) for device-backup and offline behavior. No original tracking records or Firebase data are deleted or automatically merged by this update.
+
 Oilfield Load Tracker is a separate phone-friendly app for keeping your own crude oil load records, daily totals, backups, and estimated daily earnings. It does not modify or depend on the Oilfield Load Calculator project.
 
 ## What The App Does

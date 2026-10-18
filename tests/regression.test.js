@@ -1,10 +1,11 @@
+require('./private-tracker-entry.test.js');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
 const appDir = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(appDir, 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(appDir, 'legacy.html'), 'utf8');
 const script = fs.readFileSync(path.join(appDir, 'script.js'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(appDir, 'service-worker.js'), 'utf8');
 const manifest = fs.readFileSync(path.join(appDir, 'manifest.json'), 'utf8');
@@ -1152,7 +1153,7 @@ const appVersionMatch = script.match(/const APP_VERSION = "([^"]+)"/);
 const serviceWorkerVersionMatch = serviceWorker.match(/const APP_VERSION = '([^']+)'/);
 assert.ok(appVersionMatch, 'script exposes an app version');
 assert.ok(serviceWorkerVersionMatch, 'service worker exposes an app version');
-assert.strictEqual(appVersionMatch[1], '1.24.6', 'approved redesign release version');
+assert.strictEqual(appVersionMatch[1], '1.24.7', 'preserved original app release version');
 assert.strictEqual(serviceWorkerVersionMatch[1], appVersionMatch[1], 'service-worker version matches app version');
 assert.ok(serviceWorker.includes('personal-oilfield-load-tracker-'), 'service-worker cache prefix is preserved');
 assert.ok(html.includes(`script.js?v=${appVersionMatch[1]}`), 'HTML script asset uses the app version');

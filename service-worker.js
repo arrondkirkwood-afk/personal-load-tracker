@@ -1,9 +1,12 @@
 const APP_VERSION = '1.24.7';
-const CACHE_PREFIX = 'personal-oilfield-load-tracker-';
+const CACHE_PREFIX = 'personal-oilfield-load-tracker-private-entry-';
 const CACHE_NAME = `${CACHE_PREFIX}v${APP_VERSION}`;
 const APP_FILES = [
   './',
   './index.html',
+  './legacy.html',
+  './private-tracker-entry.js',
+  './private-tracker-entry.js?v=1',
   './repair.html',
   './manifest.json',
   './manifest.json?v=1.24.7',
@@ -101,9 +104,9 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, responseCopy));
         return response;
       })
-      .catch(() => caches.match(request).then((cachedResponse) => {
+      .catch(() => caches.match(request, { cacheName: CACHE_NAME }).then((cachedResponse) => {
         if (cachedResponse) return cachedResponse;
-        if (request.mode === 'navigate') return caches.match('./index.html');
+        if (request.mode === 'navigate') return caches.match(url.pathname.endsWith('/legacy.html') ? './legacy.html' : './index.html', { cacheName: CACHE_NAME });
         return Response.error();
       }))
   );

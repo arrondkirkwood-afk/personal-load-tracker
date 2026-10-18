@@ -107,7 +107,7 @@ assert.strictEqual(get('timesheet-hours-total').textContent, '19.5', 'editing th
 assert.ok(body.innerHTML.includes('data-row="' + rowIndex + '" data-field="hours">2.5</td>'), 'the corrected half hour remains in the preview for PDF export');
 assert.strictEqual(loads[5].deadheadTravelMinutes, 135, 'preview correction does not change the source load');
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'legacy.html'), 'utf8');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
 const timesheetSource = fs.readFileSync(path.join(__dirname, '..', 'timesheet.js'), 'utf8');
 assert.ok(html.includes('id="timesheet-preview"') && timesheetSource.includes('contenteditable="true"'), 'preview supports report-only correction cells');

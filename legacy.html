@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Oilfield Load &amp; Workday Tracker</title>
+  <meta name="theme-color" content="#15263b">
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Oilfield Load &amp; Workday Tracker">
+  <link rel="manifest" href="manifest.json?v=1.24.7">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css?v=1.24.7">
+  <link rel="stylesheet" href="redesign.css?v=1.24.7">
+  <link rel="stylesheet" href="records-reports-redesign.css?v=1.24.7">
+  <link rel="stylesheet" href="settings-redesign.css?v=1.24.7">
+  <link rel="stylesheet" href="workbook-builder.css?v=1.24.7">
+  <link rel="stylesheet" href="timesheet.css?v=1.24.7">
+  <link rel="stylesheet" href="app-enhancements.css?v=1.24.7">
+  <link rel="stylesheet" href="official-redesign.css?v=1.24.7">
+</head>
+<body>
+  <main class="app">
+    <section class="tracker" aria-labelledby="app-title">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">YOUR PERSONAL WORKSPACE</p>
+          <h1 id="app-title">Personal Oilfield Load Tracker</h1>
+        </div>
+        <div class="header-meta"><button class="button secondary official-settings-button" type="button" data-view-target="settings">Settings</button>
+          <span>Version <strong id="app-version">1.24.7</strong></span>
+          <span id="header-month-load-count">Month: 0 completed</span>
+          <span id="header-pay-period-load-count">Pay period: 0 completed</span>
+        </div>
+      </header>
+
+      <nav class="app-nav official-nav" aria-label="Primary">
+        <div class="official-nav-brand"><span class="official-brand-mark" aria-hidden="true">L<span>·</span></span><div>LOAD TRACKER<small>PERSONAL OILFIELD</small></div></div>
+        <button class="nav-item active" type="button" data-view-target="dashboard"><span aria-hidden="true" class="official-nav-icon">▦</span><span>Today</span></button>
+        <button class="nav-item" type="button" data-view-target="records"><span aria-hidden="true" class="official-nav-icon">▤</span><span>Loads</span></button>
+        <button class="nav-item" type="button" data-view-target="timesheet"><span aria-hidden="true" class="official-nav-icon">▧</span><span>Timesheet</span></button>
+        <button class="nav-item" type="button" data-view-target="reports"><span aria-hidden="true" class="official-nav-icon">▥</span><span>Earnings</span></button>
+        <div class="official-nav-footer"><strong>Personal workspace</strong><p>Loads, workdays, and pay.</p><button class="button secondary" type="button" data-view-target="settings">Settings &amp; backup</button></div>
+      </nav>
+
+      <p class="storage-warning" id="storage-warning" role="alert" hidden></p>
+
+      <section class="update-banner" id="update-banner" aria-live="polite" hidden>
+        <div>
+          <strong>Update available</strong>
+          <span>A newer version of the tracker is ready.</span>
+        </div>
+        <button class="button secondary" id="update-now-button" type="button">Update Now</button>
+      </section>
+
+      <section class="app-view active" id="dashboard-view" data-view="dashboard" aria-labelledby="dashboard-title">
+        <div class="panel dashboard-hero">
+          <div class="hero-copy"><p class="section-kicker">Your workday</p><h2 id="dashboard-title">Today</h2>
+            <div class="date-inline"><label for="daily-date"><span>Work date</span><input id="daily-date" type="date"></label><span class="status-pill sync-pill" id="sync-status">Connecting</span></div>
+          </div>
+          <div class="hero-actions"><button class="button primary" type="button" data-view-target="new-load">+ Add load</button><button class="button secondary" id="show-paid-time-button" type="button" aria-controls="paid-time-entry-panel">Paid time</button><button class="button secondary" id="show-office-day-button" type="button">Office day</button><button class="button secondary" id="continue-draft-button" type="button" hidden>Continue current load</button></div>
+        </div>
+        <div class="official-stats" id="official-today-stats" aria-label="Workday overview"></div>
+        <div class="official-today-layout">
+          <section class="panel official-clock" aria-labelledby="official-clock-title"><div class="section-heading compact"><h2 id="official-clock-title">Workday clock</h2><span id="official-clock-status" class="status-pill">Not started</span></div><div id="official-clock-content"></div></section>
+          <section class="panel official-periods" aria-labelledby="official-periods-title"><h2 id="official-periods-title">Jump to a pay period</h2><div id="official-period-links"></div></section>
+        </div>
+        <section class="official-today-loads"><div class="section-heading compact"><h2>Loads on this workday</h2><button class="button ghost" type="button" data-view-target="records">Past loads</button></div><div id="official-today-load-list" class="saved-card-list"></div></section>
+        <details id="official-day-breakdown" class="official-day-breakdown"><summary>Day details, goals &amp; daily add-ons</summary>
+        <div class="summary-layout">
+          <section class="panel summary-card today-workday-card dashboard-workday" aria-labelledby="workday-card-title">
+            <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="workday-card-title">Workday</h2></div><span class="status-pill" id="workday-status">Not Started</span></div>
+            <div class="metric-strip tight">
+              <article><span>Work date</span><strong id="workday-date">-</strong></article>
+              <article><span>Default dispatcher</span><strong id="workday-dispatcher">Unknown</strong></article>
+              <article><span>Completed loads</span><strong id="workday-completed-loads">0</strong></article>
+              <article><span>Completed-load pay</span><strong id="workday-completed-pay">$0.00</strong></article>
+              <article><span>Total estimated earnings</span><strong id="workday-total-earnings">$0.00</strong></article>
+              <article><span>Exact duty time</span><strong id="workday-duty-time">Not available</strong></article>
+              <article><span>Excellent Goal</span><strong id="workday-goal-status">Not eligible</strong></article>
+            </div>
+            <details id="start-workday-details" class="workday-action">
+              <summary class="button primary">Start Workday</summary>
+              <div class="field-grid two">
+                <label for="workday-default-dispatcher"><span>Default dispatcher</span><input id="workday-default-dispatcher" type="text" list="dispatcher-options" autocomplete="off"></label>
+                <label for="workday-shift-start"><span>Shift start time</span><input id="workday-shift-start" type="time"></label>
+              </div>
+              <div class="toggle-grid compact">
+                <label class="toggle-field" for="workday-per-diem"><input id="workday-per-diem" type="checkbox"><span>Apply per diem manually</span></label>
+                <label class="toggle-field" for="workday-sleeper"><input id="workday-sleeper" type="checkbox"><span>Sleeper berth</span></label>
+                <label class="toggle-field" for="workday-trainer"><input id="workday-trainer" type="checkbox"><span>Trainer pay</span></label>
+              </div>
+              <button class="button primary" id="start-workday-button" type="button">Save Start Workday</button>
+            </details>
+            <details id="end-workday-details" class="workday-action">
+              <summary class="button secondary">End Workday</summary>
+              <div class="field-grid two">
+                <label for="workday-shift-end"><span>Shift end time</span><input id="workday-shift-end" type="time"></label>
+                <label for="workday-notes"><span>Daily notes</span><textarea id="workday-notes" rows="2"></textarea></label>
+              </div>
+              <button class="button secondary" id="end-workday-button" type="button">Save End Workday</button>
+            </details>
+            <p class="helper-text">Times are manually entered and remain editable. This tracker is not an ELD or official HOS record.</p>
+          </section>
+          <section class="panel summary-card dashboard-today-total" aria-labelledby="daily-summary-title">
+            <div class="section-heading compact">
+              <div>
+                <p class="section-kicker">Today's Total</p>
+                <h2 id="daily-summary-title">Pay and activity</h2>
+              </div>
+              <span class="status-pill"><strong id="loads-hauled-selected-date">0</strong>&nbsp;completed</span>
+            </div>
+            <div class="metric-strip">
+              <article><span>Completed loads</span><strong id="today-completed-loads">0</strong></article>
+              <article><span>Rejects</span><strong id="today-rejects">0</strong></article>
+              <article><span>Completed-load pay</span><strong id="today-completed-pay">$0.00</strong></article>
+              <article><span>Hourly additional pay</span><strong id="today-hourly-pay">$0.00</strong></article>
+              <article><span>Vacation pay</span><strong id="today-vacation-pay">$0.00</strong></article>
+              <article><span>Other paid time</span><strong id="today-other-paid-time">$0.00</strong></article>
+              <article><span>Office hours</span><strong id="today-office-hours">0 hr 0 min</strong></article>
+              <article><span>Office pay</span><strong id="today-office-pay">$0.00</strong></article>
+              <article><span>Wait pay</span><strong id="today-wait-pay">$0.00</strong></article>
+              <article><span>Daily add-ons</span><strong id="today-add-ons">$0.00</strong></article>
+              <article><span>Gross barrels</span><strong id="daily-gross-barrels">0.00 bbl</strong></article>
+              <article><span>Offloaded</span><strong id="daily-barrels-offloaded">0.00 bbl</strong></article>
+              <article><span>Total Daily Earnings</span><strong id="daily-total-earnings">$0.00</strong></article>
+              <article><span>Paid wait</span><strong id="daily-paid-wait">0 hr 0 min</strong></article>
+              <article><span>Duty time</span><strong id="today-duty-time">Not enough time data</strong></article>
+              <article><span>Effective hourly earnings</span><strong id="today-effective-hourly">Not available</strong></article>
+            </div>
+            <article class="daily-goal-card goal-insufficient" id="daily-goal-card" aria-live="polite">
+              <h3>Completed-Load Pay Goals</h3>
+              <div><span>Completed-load pay</span><strong id="daily-goal-completed-pay">$0.00</strong></div>
+              <div><span>Fair Goal</span><strong id="daily-fair-goal-status">Not eligible</strong></div>
+              <div><span>Fair difference</span><strong id="daily-fair-goal-difference">Not available</strong></div>
+              <div><span>Excellent Goal</span><strong id="daily-goal-amount">$300.00</strong></div>
+              <div><span>Excellent status</span><strong id="daily-goal-status">Not eligible</strong></div>
+              <div><span>Excellent difference</span><strong id="daily-goal-difference">Not available</strong></div>
+            </article>
+            <div class="button-row compact dashboard-report-link"><button class="button ghost" type="button" data-view-target="reports">View pay period and earnings details</button></div>
+          </section>
+
+          <section class="panel summary-card dashboard-period-detail" aria-labelledby="pay-period-summary-title">
+            <div class="section-heading compact">
+              <div>
+                <p class="section-kicker">Pay Period Containing Selected Date</p>
+                <h2 id="pay-period-summary-title">Selected-date pay period</h2>
+              </div>
+              <span class="status-pill"><strong id="loads-hauled-pay-period">0</strong>&nbsp;completed</span>
+            </div>
+            <div class="period-range">
+              <label for="pay-period-start">
+                <span>Start</span>
+                <input id="pay-period-start" type="date" readonly aria-readonly="true">
+              </label>
+              <label for="pay-period-end">
+                <span>End</span>
+                <input id="pay-period-end" type="date" readonly aria-readonly="true">
+              </label>
+            </div>
+            <div class="metric-strip tight">
+              <article><span>Completed loads</span><strong id="pay-period-completed-count">0</strong></article>
+              <article><span>Rejects</span><strong id="pay-period-reject-count">0</strong></article>
+              <article><span>Total records</span><strong id="pay-period-assignment-count">0</strong></article>
+              <article><span>Total earnings</span><strong id="pay-period-total-earnings">$0.00</strong></article>
+              <article><span>Office hours</span><strong id="pay-period-office-hours">0 hr 0 min</strong></article>
+              <article><span>Office pay</span><strong id="pay-period-office-pay">$0.00</strong></article>
+              <article><span>Trainer</span><strong id="pay-period-trainer-pay">$0.00</strong></article>
+              <article><span>Per diem</span><strong id="pay-period-per-diem-pay">$0.00</strong></article>
+              <article><span>Sleeper</span><strong id="pay-period-sleeper-pay">$0.00</strong></article>
+              <article><span>Reject</span><strong id="pay-period-reject-pay">$0.00</strong></article>
+              <article><span>Wait pay</span><strong id="pay-period-wait-pay">$0.00</strong></article>
+              <article><span>Fair Goal days</span><strong id="pay-period-fair-goal-met">0</strong></article>
+              <article><span>Excellent Goal days</span><strong id="pay-period-goal-met">0</strong></article>
+              <article><span>Below Fair Goal</span><strong id="pay-period-goal-below">0</strong></article>
+              <article><span>Avg completed-load pay/workday</span><strong id="pay-period-goal-average">$0.00</strong></article>
+              <article><span>Extended duty days</span><strong id="pay-period-extended-days">0</strong></article>
+              <article><span>Days at/above 14-hour review</span><strong id="pay-period-fourteen-days">0</strong></article>
+            </div>
+          </section>
+          <section class="panel summary-card dashboard-month-detail" aria-labelledby="month-summary-title">
+            <div class="section-heading compact"><div><p class="section-kicker">Month Containing Selected Date</p><h2 id="month-summary-title">Selected-date month</h2></div></div>
+            <div class="metric-strip tight">
+              <article><span>Completed loads</span><strong id="month-completed-count">0</strong></article>
+              <article><span>Rejects</span><strong id="month-reject-count">0</strong></article>
+              <article><span>Total records</span><strong id="month-assignment-count">0</strong></article>
+              <article><span>Total estimated earnings</span><strong id="month-total-earnings">$0.00</strong></article>
+              <article><span>Fair Goal days</span><strong id="month-fair-goal-met">0</strong></article>
+              <article><span>Excellent Goal days</span><strong id="month-goal-met">0</strong></article>
+              <article><span>Below Fair Goal</span><strong id="month-goal-below">0</strong></article>
+              <article><span>Avg completed-load pay/workday</span><strong id="month-goal-average">$0.00</strong></article>
+            </div>
+          </section>
+        </div>
+
+        </details>
+
+        <section class="panel recent-panel" aria-labelledby="recent-loads-title">
+          <div class="section-heading compact">
+            <div>
+              <p class="section-kicker">Recent Loads</p>
+              <h2 id="recent-loads-title">Latest activity</h2>
+            </div>
+            <button class="button ghost slim" type="button" data-view-target="records">View Records</button>
+          </div>
+          <div id="recent-load-list" class="compact-load-list">
+            <article class="empty-card">No recent loads yet.</article>
+          </div>
+        </section>
+        <section class="panel summary-card daily-closeout-card dashboard-closeout" id="daily-closeout-panel" aria-labelledby="daily-closeout-title">
+          <div class="section-heading compact">
+            <div><p class="section-kicker">End / Review Day</p><h2 id="daily-closeout-title">Check the day before the timesheet</h2></div>
+            <span class="status-pill" id="daily-closeout-status" data-state="neutral">No activity</span>
+          </div>
+          <div class="metric-strip tight">
+            <article><span>Completed loads</span><strong id="daily-closeout-completed">0</strong></article>
+            <article><span>Rejects</span><strong id="daily-closeout-rejects">0</strong></article>
+            <article><span>Per diem</span><strong id="daily-closeout-per-diem">No</strong></article>
+            <article><span>Hourly work</span><strong id="daily-closeout-hourly">0.00 hr</strong></article>
+            <article><span>Paid wait</span><strong id="daily-closeout-wait">0.00 hr</strong></article>
+            <article><span>Shift</span><strong id="daily-closeout-shift">Incomplete</strong></article>
+          </div>
+          <p class="daily-closeout-summary" id="daily-closeout-summary">No saved activity for this date.</p>
+          <div class="button-row compact"><button class="button secondary" id="daily-closeout-review-button" type="button">Review Workday</button></div>
+        </section>
+        <section class="panel paid-time-panel" id="office-day-panel" hidden aria-labelledby="office-day-title">
+          <div class="section-heading compact"><div><p class="section-kicker">Today</p><h2 id="office-day-title">Office Day</h2></div></div>
+          <form id="office-day-form">
+            <div class="field-grid two">
+              <label for="office-day-date"><span>Work date</span><input id="office-day-date" type="date" required></label>
+              <label for="office-day-arrived"><span>Arrived at office</span><input id="office-day-arrived" type="time" required></label>
+              <label for="office-day-left"><span>Left office</span><input id="office-day-left" type="time" required></label>
+              <label for="office-day-rate"><span>Hourly rate</span><input id="office-day-rate" type="number" value="24" readonly></label>
+              <label class="full-width" for="office-day-notes"><span>Notes</span><textarea id="office-day-notes"></textarea></label>
+            </div>
+            <div class="calculated-strip">
+              <article><span>Office hours</span><strong id="office-day-hours">0 hr 0 min</strong></article>
+              <article><span>Office pay</span><strong id="office-day-pay">$0.00</strong></article>
+              <article><span>Automatic per diem</span><strong id="office-day-per-diem">$50.00</strong></article>
+              <article><span>Office-day total</span><strong id="office-day-total">$50.00</strong></article>
+            </div>
+            <p class="validation-summary" id="office-day-error" role="alert"></p>
+            <div class="button-row"><button class="button primary" type="submit">Save Office Day</button><button class="button ghost" id="cancel-office-day-button" type="button">Cancel</button></div>
+          </form>
+        </section>
+      </section>
+
+      <section class="app-view" id="new-load-view" data-view="new-load" aria-labelledby="entry-title">
+        <section class="panel entry-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">New Load</p>
+              <h2 id="entry-title">Add or edit a load</h2>
+            </div>
+            <span id="edit-status" class="status-pill">New entry</span>
+          </div>
+
+          <form id="load-form" class="load-form" novalidate>
+            <div class="equipment-bar">
+              <div>
+                <span>Equipment</span>
+                <strong id="entry-equipment-summary">No saved profile</strong>
+              </div>
+              <details>
+                <summary>Change Equipment</summary>
+                <div class="field-grid equipment-fields">
+                  <label for="driver-name">
+                    <span>Driver name</span>
+                    <input id="driver-name" type="text" autocomplete="name">
+                  </label>
+                  <label for="truck-number">
+                    <span>Truck number</span>
+                    <input id="truck-number" type="text" autocomplete="off">
+                  </label>
+                  <label for="trailer-number">
+                    <span>Trailer number</span>
+                    <input id="trailer-number" type="text" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">
+                <span>A</span>
+                <h3>Load Details</h3>
+              </div>
+              <h4 class="form-subsection-title">Load and pickup details</h4>
+              <div class="field-grid basics-grid">
+                <label for="load-date">
+                  <span>Work date <em>required</em></span>
+                  <input id="load-date" type="date" aria-describedby="load-date-error">
+                  <small id="load-date-error" class="field-error"></small>
+                </label>
+                <label for="load-number">
+                  <span>Load number</span>
+                  <input id="load-number" type="text" autocomplete="off">
+                </label>
+                <label for="product-type">
+                  <span>Product</span>
+                  <input id="product-type" type="text" autocomplete="off" value="Crude Oil">
+                </label>
+                <label for="ticket-number">
+                  <span>Ticket number</span>
+                  <input id="ticket-number" type="text" autocomplete="off">
+                </label>
+                <label for="lease-number">
+                  <span>Lease number</span>
+                  <input id="lease-number" type="text" autocomplete="off">
+                </label>
+                <label for="customer">
+                  <span>Oil company</span>
+                  <select id="customer">
+                    <option value="">Select company</option>
+                    <option value="Shell">Shell</option>
+                    <option value="Harvest">Harvest</option>
+                    <option value="Plains">Plains</option>
+                  </select>
+                </label>
+                <label for="pickup-location">
+                  <span>Pickup location</span>
+                  <input id="pickup-location" type="text" autocomplete="off">
+                </label>
+                <label for="pickup-state">
+                  <span>Pickup state</span>
+                  <select id="pickup-state"><option value="">Unknown</option></select>
+                </label>
+                <label for="gross-barrels">
+                  <span>Gross barrels <em>required</em></span>
+                  <input id="gross-barrels" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="gross-barrels-error">
+                  <small id="gross-barrels-error" class="field-error"></small>
+                </label>
+                <label for="api-gravity">
+                  <span>API gravity</span>
+                  <input id="api-gravity" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="api-gravity-error">
+                  <small id="api-gravity-error" class="field-error"></small>
+                </label>
+                <label for="load-temperature">
+                  <span>Temperature</span>
+                  <input id="load-temperature" type="number" inputmode="decimal" step="0.1">
+                </label>
+                <label for="bsw-percentage">
+                  <span>BS&amp;W percentage</span>
+                  <input id="bsw-percentage" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-describedby="bsw-percentage-error">
+                  <small id="bsw-percentage-error" class="field-error"></small>
+                </label>
+                <label for="arrived-pickup-time">
+                  <span>Loading start time</span>
+                  <input id="arrived-pickup-time" type="time">
+                </label>
+                <label for="loaded-time">
+                  <span>Loading end time</span>
+                  <input id="loaded-time" type="time">
+                </label>
+                <section class="load-extra-questions full-width" id="load-add-more" aria-labelledby="load-extra-title">
+                  <div class="load-extra-heading">
+                    <div><p class="section-kicker">Quick questions</p><h4 id="load-extra-title">Anything extra on this load?</h4></div>
+                    <span>Tap Yes only when it applies</span>
+                  </div>
+                  <div class="toggle-grid compact extra-question-grid">
+                    <label class="toggle-field" for="has-deadhead"><input id="has-deadhead" type="checkbox"><span>Deadhead?</span><strong>No / Yes</strong></label>
+                    <label class="toggle-field" for="has-paid-wait"><input id="has-paid-wait" type="checkbox"><span>Paid wait?</span><strong>No / Yes</strong></label>
+                    <label class="toggle-field" for="has-other-paid-time"><input id="has-other-paid-time" type="checkbox"><span>Breakdown, wash, training, or other paid time?</span><strong>No / Yes</strong></label>
+                  </div>
+                  <div class="field-grid" id="deadhead-fields" hidden>
+                <label class="toggle-field" for="deadhead-paid"><input id="deadhead-paid" type="checkbox" checked><span>Include deadhead time in estimated pay?</span><strong>No / Yes</strong></label>
+                <label for="deadhead-start-time">
+                  <span>Deadhead start time</span>
+                  <input id="deadhead-start-time" type="time">
+                </label>
+                <label for="deadhead-end-time">
+                  <span>Deadhead end time</span>
+                  <input id="deadhead-end-time" type="time">
+                </label>
+                <div class="calculated-field">
+                  <span>Total deadhead travel time</span>
+                  <strong id="summary-deadhead-time">-</strong>
+                </div>
+                <label for="deadhead-miles">
+                  <span>Deadhead miles</span>
+                  <input id="deadhead-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="deadhead-miles-error">
+                  <small id="deadhead-miles-error" class="field-error"></small>
+                </label>
+                  </div>
+                  <div class="field-grid two" id="paid-wait-fields" hidden>
+                    <label class="toggle-field full-width" for="manual-wait-override"><input id="manual-wait-override" type="checkbox"><span>Manually override payable wait?</span><strong>Auto / Manual</strong></label>
+                    <p class="helper-text full-width">Automatic wait subtracts the first 60 minutes at loading and offloading separately. Use manual only when payroll rules or approved time differ.</p>
+                    <label for="paid-pickup-wait-minutes"><span>Payable loading wait minutes</span><input id="paid-pickup-wait-minutes" type="number" inputmode="numeric" min="0" step="1" readonly></label>
+                    <label for="paid-dropoff-wait-minutes"><span>Payable offloading wait minutes</span><input id="paid-dropoff-wait-minutes" type="number" inputmode="numeric" min="0" step="1" readonly></label>
+                  </div>
+                </section>
+                <label for="loaded-miles">
+                  <span>Loaded miles</span>
+                  <input id="loaded-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="loaded-miles-error">
+                  <small id="loaded-miles-error" class="field-error"></small>
+                </label>
+                <label for="dispatcher">
+                  <span>Dispatcher</span>
+                  <input id="dispatcher" type="text" list="dispatcher-options" autocomplete="off" placeholder="Optional">
+                  <datalist id="dispatcher-options"></datalist>
+                </label>
+                <label for="jotform-confirmation-number">
+                  <span>Jotform number</span>
+                  <input id="jotform-confirmation-number" type="text" autocomplete="off">
+                </label>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">
+                <span>B</span>
+                <h3>Delivery and Offloading Details</h3>
+              </div>
+              <div class="field-grid measurement-grid">
+                <label for="dropoff-location">
+                  <span>Drop-off location</span>
+                  <input id="dropoff-location" type="text" autocomplete="off">
+                </label>
+                <label for="dropoff-state">
+                  <span>Drop-off state</span>
+                  <select id="dropoff-state"><option value="">Unknown</option></select>
+                </label>
+                <label for="start-meter-reading">
+                  <span>Start meter</span>
+                  <input id="start-meter-reading" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="start-meter-reading-error">
+                  <small id="start-meter-reading-error" class="field-error"></small>
+                </label>
+                <label for="end-meter-reading">
+                  <span>End meter</span>
+                  <input id="end-meter-reading" type="number" inputmode="decimal" min="0" step="0.01" aria-describedby="end-meter-reading-error">
+                  <small id="end-meter-reading-error" class="field-error"></small>
+                </label>
+                <div class="calculated-field">
+                  <span>Total barrels offloaded</span>
+                  <strong id="meter-barrels-offloaded">-</strong>
+                </div>
+                <div class="calculated-field">
+                  <span>Metered difference</span>
+                  <strong id="meter-difference-gross">-</strong>
+                </div>
+                <label for="arrived-dropoff-time">
+                  <span>Unload start time</span>
+                  <input id="arrived-dropoff-time" type="time">
+                </label>
+                <label for="completed-time">
+                  <span>Unload end time</span>
+                  <input id="completed-time" type="time">
+                </label>
+                <label for="load-status">
+                  <span>Load status <em>required</em></span>
+                  <select id="load-status" aria-describedby="load-status-error">
+                    <option value="Completed Load">Completed Load</option>
+                    <option value="Reject">Reject</option>
+                  </select>
+                  <small id="load-status-error" class="field-error"></small>
+                </label>
+              </div>
+              <div class="calculated-strip measurement-primary-strip">
+                <article><span>Total miles</span><strong id="summary-total-miles-including-re-route">0.0 mi</strong></article>
+                <article><span>Estimated load weight</span><strong id="summary-total-weight">-</strong></article>
+                <article><span>Estimated gross truck weight</span><strong id="summary-gross-truck-weight">-</strong></article>
+              </div>
+              <details class="more-calculations">
+                <summary>More Calculations</summary>
+                <div class="calculated-strip measurement-secondary-strip">
+                  <article><span>Start reading</span><strong id="summary-start-meter-reading">-</strong></article>
+                  <article><span>End reading</span><strong id="summary-end-meter-reading">-</strong></article>
+                  <article><span>Offload status</span><strong id="meter-offload-status">-</strong></article>
+                  <article><span>Gross hauled</span><strong id="summary-gross-barrels-hauled">-</strong></article>
+                  <article><span>Regular miles</span><strong id="summary-regular-miles">0.0 mi</strong></article>
+                  <article><span>Re-routed miles</span><strong id="summary-re-routed-miles">0.0 mi</strong></article>
+                </div>
+                <div class="result-grid compact-results">
+                  <div class="result-row"><span>Water barrels</span><strong id="summary-water-barrels">-</strong></div>
+                  <div class="result-row"><span>Oil barrels</span><strong id="summary-oil-barrels">-</strong></div>
+                  <div class="result-row"><span>Crude weight per barrel</span><strong id="summary-crude-weight">-</strong></div>
+                  <div class="result-row"><span>Estimated oil weight</span><strong id="summary-oil-weight">-</strong></div>
+                  <div class="result-row"><span>Estimated water weight</span><strong id="summary-water-weight">-</strong></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">
+                <span>C</span>
+                <h3>Weight Details</h3>
+              </div>
+              <div class="field-grid three">
+                <label for="empty-truck-weight">
+                  <span>Truck and trailer empty weight</span>
+                  <input id="empty-truck-weight" value="29500" type="number" inputmode="decimal" min="0" step="1" aria-describedby="empty-truck-weight-error">
+                  <small id="empty-truck-weight-error" class="field-error"></small>
+                </label>
+                <label for="load-weight">
+                  <span>Load weight</span>
+                  <input id="load-weight" type="number" inputmode="decimal" min="0" step="1" aria-describedby="load-weight-error">
+                  <small id="load-weight-error" class="field-error"></small>
+                </label>
+                <div class="calculated-field">
+                  <span>Gross truck weight</span>
+                  <strong id="review-gross-truck-weight">-</strong>
+                </div>
+              </div>
+              <details class="optional-section daily-shift-details">
+                <summary><strong>Start and End Workday</strong></summary>
+                <p class="helper-text">Optional and saved once for the selected work date—not once per load.</p>
+                <div class="field-grid two">
+                  <label for="shift-start-time"><span>Start workday</span><input id="shift-start-time" type="time"></label>
+                  <label for="shift-end-time"><span>End workday</span><input id="shift-end-time" type="time"></label>
+                </div>
+              </details>
+              <h4 class="form-subsection-title">Load timing and wait</h4>
+              <div class="stop-grid">
+                <article class="stop-card">
+                  <h4>Loading</h4>
+                  <div class="stop-results">
+                    <span>Time on location: <strong id="summary-pickup-time">-</strong></span>
+                    <span>Paid wait time: <strong id="summary-paid-pickup-wait">0 hr 0 min</strong></span>
+                  </div>
+                </article>
+                <article class="stop-card">
+                  <h4>Offloading</h4>
+                  <div class="stop-results">
+                    <span>Time on location: <strong id="summary-dropoff-time">-</strong></span>
+                    <span>Paid wait time: <strong id="summary-paid-dropoff-wait">0 hr 0 min</strong></span>
+                  </div>
+                </article>
+              </div>
+              <div class="calculated-strip time-strip">
+                <article><span>Total paid wait</span><strong id="summary-paid-wait">0 hr 0 min</strong></article>
+                <article><span>Wait pay</span><strong id="summary-wait-pay">$0.00</strong></article>
+                <article><span>Total cycle time</span><strong id="summary-cycle-time">-</strong></article>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">
+                <span>D</span>
+                <h3>Paid Time</h3>
+              </div>
+              <p class="helper-text">These add-ons are saved once for the selected work date. Per diem may already apply automatically based on Settings; this switch is a manual confirmation. Hourly work and Vacation Time are available from Today.</p>
+              <div class="toggle-grid">
+                <label class="toggle-field" for="per-diem-checkbox">
+                  <input id="per-diem-checkbox" type="checkbox">
+                  <span>Apply per diem manually</span>
+                  <strong id="per-diem-rate-label">$50.00</strong>
+                </label>
+                <label class="toggle-field" for="sleeper-berth-checkbox">
+                  <input id="sleeper-berth-checkbox" type="checkbox">
+                  <span>Sleeper berth</span>
+                  <strong id="sleeper-rate-label">$60.00</strong>
+                </label>
+                <label class="toggle-field" for="trainer-pay-checkbox">
+                  <input id="trainer-pay-checkbox" type="checkbox">
+                  <span>Trainer pay</span>
+                  <strong id="trainer-rate-label">$50.00</strong>
+                </label>
+                <div class="toggle-field read-only">
+                  <span>Reject pay</span>
+                  <strong id="reject-rate-label">$20.00</strong>
+                </div>
+              </div>
+            </div>
+
+            <details class="form-section optional-section">
+              <summary>
+                <span>Optional</span>
+                <strong>Notes</strong>
+              </summary>
+              <div class="field-grid optional-grid">
+                <label for="bol-number">
+                  <span>BOL number</span>
+                  <input id="bol-number" type="text" autocomplete="off">
+                </label>
+                <label for="re-routed-miles">
+                  <span>Rerouted miles</span>
+                  <input id="re-routed-miles" type="number" inputmode="decimal" min="0" step="0.1" aria-describedby="re-routed-miles-error">
+                  <small id="re-routed-miles-error" class="field-error"></small>
+                </label>
+                <label class="full-width" for="notes">
+                  <span>Load notes</span>
+                  <textarea id="notes" rows="3" placeholder="Optional load notes"></textarea>
+                </label>
+                <label class="full-width" for="daily-earnings-notes">
+                  <span>Daily earnings notes</span>
+                  <textarea id="daily-earnings-notes" rows="2" placeholder="Optional daily pay notes"></textarea>
+                </label>
+              </div>
+            </details>
+
+            <div class="calculation-panel" aria-labelledby="calculation-title">
+              <div class="form-section-title review-title">
+                <span>E</span>
+                <h3 id="calculation-title">Review and Save</h3>
+              </div>
+              <div id="load-review-summary" class="review-grid compact-review-summary"></div>
+              <ul id="load-review-warnings" class="review-warning-list"></ul>
+              <div class="review-summary-grid">
+                <article><span>Route</span><strong id="review-route-preview">Pickup -> Drop-off</strong></article>
+                <article><span>Pay range</span><strong id="pay-range">0 miles</strong></article>
+                <article><span>Base or reject pay</span><strong id="pay-estimated">$0.00</strong></article>
+                <article><span>Total estimated load pay</span><strong id="pay-entry-total">$0.00</strong></article>
+                <article><span>Load weight</span><strong id="review-total-weight">-</strong></article>
+              </div>
+              <p class="pay-disclaimer">Wait pay and estimated earnings are for personal verification only and may not match official payroll.</p>
+            </div>
+
+            <p class="validation-summary" id="validation-summary" role="alert"></p>
+            <p class="save-status" id="draft-status" aria-live="polite"></p>
+            <p class="save-status" id="save-status" aria-live="polite"></p>
+
+            <div class="duplicate-warning" id="duplicate-warning" role="dialog" aria-live="assertive" hidden>
+              <p>This looks like a duplicate saved load. Review the matching ticket, BOL, or load number before saving.</p>
+              <div class="button-row compact">
+                <button class="button secondary" id="save-anyway-button" type="button">Save Anyway</button>
+                <button class="button ghost" id="cancel-duplicate-button" type="button">Cancel</button>
+              </div>
+            </div>
+
+            <div class="button-row form-actions four sticky-save-actions">
+              <button class="button primary" id="save-load-button" type="submit">Save load &amp; choose next step</button>
+              <button class="button secondary" id="save-next-button" type="button">Save &amp; continue</button>
+              <button class="button ghost" id="save-draft-button" type="button">Save Draft</button>
+              <button class="button danger" id="clear-form-button" type="button">Cancel</button>
+            </div>
+          </form>
+        </section>
+      </section>
+
+      <section class="app-view" id="records-view" data-view="records" aria-labelledby="saved-loads-title">
+        <section class="panel saved-loads">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Load history</p>
+              <h2 id="saved-loads-title">Find your loads</h2>
+            </div>
+            <span id="log-count">0 saved</span>
+          </div>
+          <div class="official-period-toolbar"><label for="saved-period-picker"><span>Pay period</span><select id="saved-period-picker" aria-label="Load history pay period"></select></label><button class="button secondary" type="button" data-official-action="history-timesheet">View timesheet</button></div>
+          <div class="saved-filter-bar simplified-record-filters">
+            <label for="saved-search">
+              <span>Find a load</span>
+              <input id="saved-search" type="search" placeholder="Search ticket, load #, route, dispatcher, truck">
+            </label>
+            <label for="saved-filter-scope">
+              <span>Show</span>
+              <select id="saved-filter-scope">
+                <option value="selected-date">Selected work date</option>
+                <option value="date">Specific date</option>
+                <option value="pay-period" selected>Selected pay period</option>
+                <option value="month">Month containing selected date</option>
+                <option value="all">All saved loads</option>
+              </select>
+            </label>
+            <label for="saved-filter-date">
+              <span>Specific date</span>
+              <input id="saved-filter-date" type="date">
+            </label>
+            <label for="saved-sort-order">
+              <span>Sort</span>
+              <select id="saved-sort-order">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="load-number">Load number</option>
+                <option value="earnings">Highest earnings</option>
+              </select>
+            </label>
+            <p class="helper-text full-width">Use one search box for ticket numbers, Jotform numbers, routes, locations, driver, truck, trailer, or notes.</p>
+          </div>
+          <details class="official-record-day-details"><summary>Daily record &amp; add-ons</summary><section class="daily-record-panel" aria-labelledby="daily-record-title">
+            <div class="section-heading compact">
+              <div><p class="section-kicker">Selected Date</p><h3 id="daily-record-title">Complete daily record</h3></div>
+              <strong id="daily-record-total">$0.00</strong>
+            </div>
+            <div id="daily-record-content"></div>
+          </section>
+          </details>
+          <div id="saved-load-cards" class="saved-card-list">
+            <article class="empty-card">No saved loads match the current filter.</article>
+          </div>
+          <div class="section-heading paid-time-records-heading">
+            <div>
+              <p class="section-kicker">Paid time</p>
+              <h3>Paid-time records</h3>
+            </div>
+          </div>
+          <div id="paid-time-records" class="saved-card-list">
+            <article class="empty-card">No paid-time records yet.</article>
+          </div>
+        </section>
+      </section>
+
+      <section class="app-view" id="timesheet-view" data-view="timesheet" aria-labelledby="timesheet-title">
+        <section class="panel timesheet-generator" aria-labelledby="timesheet-title">
+          <div class="section-heading">
+            <div><p class="section-kicker">Company form</p><h2 id="timesheet-title">Driver timesheet</h2></div>
+            <span class="status-pill">Payroll preview</span>
+          </div>
+          <p class="helper-text">Deadhead and paid-wait rows show the ticket number from their linked load, including past loads. Timesheet hours round down to whole or half hours (2 hr 15 min → 2; 2 hr 45 min → 2.5). Tap a cell to correct it before downloading.</p>
+          <div class="official-period-toolbar"><label for="timesheet-period-picker"><span>Pay period</span><select id="timesheet-period-picker" aria-label="Timesheet pay period"></select></label></div>
+          <details class="official-period-dates"><summary>Pay period dates</summary><div class="report-controls">
+            <label for="timesheet-anchor-date"><span>Pay period containing</span><input id="timesheet-anchor-date" type="date"></label>
+            <label for="timesheet-period-start"><span>Beginning date</span><input id="timesheet-period-start" type="date" readonly></label>
+            <label for="timesheet-period-end"><span>Ending date</span><input id="timesheet-period-end" type="date" readonly></label>
+          </div>
+          </details>
+          <div class="button-row"><button class="button primary" id="preview-timesheet-button" type="button">Preview Timesheet</button></div>
+          <p id="timesheet-status" class="save-status" aria-live="polite"></p>
+          <section id="timesheet-preview" class="timesheet-preview" hidden aria-label="Timesheet preview">
+            <div id="timesheet-warning-summary" class="timesheet-warnings" role="alert"></div>
+            <div id="timesheet-preview-summary" class="metric-strip tight timesheet-preview-summary" aria-label="Timesheet summary"></div>
+            <section id="official-timesheet-days" aria-label="Daily timesheet cards"></section>
+            <details class="official-payroll-table" open><summary>Full payroll table / edit preview</summary><div class="timesheet-preview-scroll"><table><thead><tr><th>Date</th><th>Ticket #</th><th>Work Description</th><th>Loads</th><th>Rejects</th><th>Per Diem</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody id="timesheet-preview-body"></tbody><tfoot><tr><th colspan="8">Hourly entries total</th><th id="timesheet-hours-total">0</th></tr></tfoot></table></div></details>
+            <p class="helper-text">Review the summary first. Each row is one payroll entry. Tap a cell only when you need to correct the preview; the correction affects this preview and its PDF, not your saved load records.</p>
+            <div class="button-row"><button class="button primary" id="download-timesheet-button" type="button">Download PDF</button><button class="button ghost" id="reset-timesheet-preview-button" type="button">Reset Preview</button></div>
+          </section>
+        </section>
+
+      </section>
+
+      <section class="app-view" id="reports-view" data-view="reports" aria-labelledby="reports-title">
+        <section class="panel reports-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Earnings</p>
+              <h2 id="reports-title">Know what you earned</h2>
+            </div>
+            <span id="earnings-date-label" class="status-pill">-</span>
+          </div>
+          <div class="report-shortcuts" aria-label="Report tools">
+            <button class="button secondary" type="button" data-view-target="timesheet">Timesheet</button>
+            <button class="button secondary" type="button" data-view-target="workbook">Complete Workbook</button>
+          </div>
+          <div class="official-period-toolbar"><label for="earnings-period-picker"><span>Pay period</span><select id="earnings-period-picker" aria-label="Earnings pay period"></select></label><button class="button secondary" type="button" data-official-action="report-preview">Preview report</button></div>
+          <details class="official-period-dates"><summary>Custom dates &amp; more ranges</summary>
+          <div class="report-controls">
+            <label for="report-range-mode">
+              <span>Report range</span>
+              <select id="report-range-mode">
+                <option value="current-pay-period" selected>Pay period containing selected date</option>
+                <option value="selected-date">Selected date</option>
+                <option value="previous-pay-period">Previous pay period</option>
+                <option value="current-month">Month containing selected date</option>
+                <option value="previous-month">Previous month</option>
+                <option value="custom">Custom range</option>
+                <option value="overall">All-time analysis</option>
+              </select>
+            </label>
+            <label for="report-start-date">
+              <span>Start date</span>
+              <input id="report-start-date" type="date">
+            </label>
+            <label for="report-end-date">
+              <span>End date</span>
+              <input id="report-end-date" type="date">
+            </label>
+          </div>
+          </details>
+          <div id="report-summary-grid" class="review-grid report-summary-grid"></div>
+          <section class="official-export-panel" aria-labelledby="official-export-title"><h3 id="official-export-title">Export this earnings report</h3><div class="official-export-grid">
+            <article><span class="official-file-type">PDF</span><h4>Clean report</h4><p>Named, dated, and itemized. Ready to save or print.</p><button class="button primary" type="button" data-official-action="earnings-pdf">Download PDF</button></article>
+            <article><span class="official-file-type">XLSX</span><h4>Styled spreadsheet</h4><p>Formatted headings, currency columns, and totals.</p><button class="button secondary" type="button" data-official-action="earnings-xlsx">Download Excel</button></article>
+            <article><span class="official-file-type">CSV</span><h4>Portable data</h4><p>Labeled columns for the selected report dates.</p><button class="button secondary" type="button" data-official-action="earnings-csv">Download CSV</button></article>
+          </div><p id="official-export-status" class="save-status" role="status"></p></section>
+          <details class="dispatch-analysis" id="dispatch-analysis-section">
+            <summary><strong>Dispatch and Earnings Analysis</strong></summary>
+            <details class="analysis-guide">
+              <summary><strong>How to Read This Analysis</strong></summary>
+              <p>Select the date range, review completed-load earnings, work time, goal achievement, dispatcher workload, then expand daily details.</p>
+              <div class="analysis-guide-grid">
+                <span><b>Completed-load pay</b> measures the productivity of the loads assigned.</span>
+                <span><b>Total estimated earnings</b> includes every entered pay category.</span>
+                <span><b>Goal percentages</b> use eligible dispatched workdays as the denominator.</span>
+                <span><b>Exact duty time</b> comes only from Start Workday and End Workday.</span>
+                <span><b>Completed-load pay per duty hour</b> shows dispatched load pay produced per exact work hour.</span>
+                <span><b>Non-load duty time</b> is exact duty time not covered by valid load-cycle intervals.</span>
+              </div>
+              <p class="helper-text">Missing information is excluded rather than guessed. Results describe measurable outcomes and do not establish a dispatcher’s intent. This tracker is not an official payroll system or ELD.</p>
+            </details>
+            <div class="report-controls analysis-filters">
+              <label for="analysis-dispatcher-filter"><span>Dispatcher</span><select id="analysis-dispatcher-filter"><option value="">All</option></select></label>
+            </div>
+            <div id="dispatch-analysis-content"></div>
+            <div class="button-row compact">
+              <button class="button secondary" id="download-analysis-button" type="button">Download Analysis CSV</button>
+              <button class="button secondary" id="print-analysis-button" type="button">Print Analysis</button>
+            </div>
+          </details>
+          <details class="dispatch-analysis" id="duty-time-review-section">
+            <summary><strong>Duty-Time Review</strong></summary>
+            <div id="duty-time-review-content"></div>
+            <p class="report-disclosure permanent-disclosure">This personal tracker does not distinguish every driving, on-duty, off-duty, sleeper, exception, or ELD status. Official ELD and company records control legal compliance determinations. A review threshold is not a finding of a legal violation.</p>
+          </details>
+        </section>
+
+        <section class="panel earnings-review" aria-labelledby="earnings-review-title">
+          <div class="section-heading compact">
+            <div>
+              <p class="section-kicker">Selected Date Detail</p>
+              <h2 id="earnings-review-title">Daily earnings review</h2>
+            </div>
+          </div>
+          <div class="review-grid">
+            <div class="result-row"><span>Date</span><strong id="review-date">-</strong></div>
+            <div class="result-row"><span>Completed load count</span><strong id="review-completed-loads">0</strong></div>
+            <div class="result-row"><span>Reject count</span><strong id="review-rejects">0</strong></div>
+            <div class="result-row"><span>Regular miles</span><strong id="review-loaded-miles">0.0 mi</strong></div>
+            <div class="result-row"><span>Total rerouted miles</span><strong id="review-re-routed-miles">0.0 mi</strong></div>
+            <div class="result-row"><span>Total miles</span><strong id="review-total-miles-including-re-route">0.0 mi</strong></div>
+            <div class="result-row"><span>Total gross barrels</span><strong id="review-gross-barrels">0.00 bbl</strong></div>
+            <div class="result-row"><span>Total offloaded barrels</span><strong id="review-barrels-offloaded">0.00 bbl</strong></div>
+            <div class="result-row"><span>Total difference vs gross</span><strong id="review-difference-gross">0.00 bbl</strong></div>
+            <div class="result-row"><span>Total completed load pay</span><strong id="review-completed-pay">$0.00</strong></div>
+            <div class="result-row"><span>Excellent Day Goal</span><strong id="review-goal-amount">$300.00</strong></div>
+            <div class="result-row" id="review-goal-result"><span>Excellent Goal status</span><strong id="review-goal-status">Not eligible</strong></div>
+            <div class="result-row"><span>Excellent Goal difference</span><strong id="review-goal-difference">Not available</strong></div>
+            <div class="result-row"><span>Exact shift time</span><strong id="review-exact-duty-time">Not enough time data</strong></div>
+            <div class="result-row"><span>Completed-load pay per duty hour</span><strong id="review-completed-pay-hour">$0.00</strong></div>
+            <div class="result-row"><span>Total reject pay</span><strong id="review-reject-pay">$0.00</strong></div>
+            <div class="result-row"><span>Total loading wait</span><strong id="review-paid-pickup-wait">0 hr 0 min</strong></div>
+            <div class="result-row"><span>Total offloading wait</span><strong id="review-paid-dropoff-wait">0 hr 0 min</strong></div>
+            <div class="result-row"><span>Total paid wait</span><strong id="review-paid-wait">0 hr 0 min</strong></div>
+            <div class="result-row"><span>Total wait pay</span><strong id="review-wait-pay">$0.00</strong></div>
+            <div class="result-row"><span>Per diem applied</span><strong id="review-per-diem-applied">No</strong></div>
+            <div class="result-row"><span>Per diem amount</span><strong id="review-per-diem-pay">$0.00</strong></div>
+            <div class="result-row"><span>Sleeper berth applied</span><strong id="review-sleeper-applied">No</strong></div>
+            <div class="result-row"><span>Sleeper berth amount</span><strong id="review-sleeper-pay">$0.00</strong></div>
+            <div class="result-row"><span>Trainer pay applied</span><strong id="review-trainer-applied">No</strong></div>
+            <div class="result-row"><span>Trainer pay amount</span><strong id="review-trainer-pay">$0.00</strong></div>
+            <div class="result-row total-row"><span>Total estimated daily earnings</span><strong id="review-total-earnings">$0.00</strong></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="app-view" id="workbook-view" data-view="workbook" aria-labelledby="workbook-title">
+        <section class="panel workbook-builder-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Complete Excel Report</p>
+              <h2 id="workbook-title">Build a spreadsheet with visuals</h2>
+            </div>
+            <span class="status-pill">No CSV conversion</span>
+          </div>
+          <div class="button-row compact"><button class="button ghost" type="button" data-view-target="reports">Back to Reports</button></div>
+          <p class="workbook-intro">Choose your date range and download the enhanced Excel report directly from saved loads. It includes recalculating earnings formulas, daily productivity comparisons, and editable Excel charts; no CSV import is required.</p>
+          <div class="workbook-range-card">
+            <label for="workbook-range-mode"><span>Report range</span><select id="workbook-range-mode">
+              <option value="current-pay-period">Current pay period</option>
+              <option value="previous-pay-period">Previous pay period</option>
+              <option value="selected-date">Selected work date</option>
+              <option value="current-month">Current month</option>
+              <option value="previous-month">Previous month</option>
+              <option value="custom">Custom range</option>
+              <option value="overall">All saved records</option>
+            </select></label>
+            <label for="workbook-start-date"><span>Start date</span><input id="workbook-start-date" type="date"></label>
+            <label for="workbook-end-date"><span>End date</span><input id="workbook-end-date" type="date"></label>
+          </div>
+          <div class="workbook-preview" aria-live="polite">
+            <article><span>Dates included</span><strong id="workbook-range-label">-</strong></article>
+            <article><span>Daily records</span><strong id="workbook-day-count">0</strong></article>
+            <article><span>Load records</span><strong id="workbook-load-count">0</strong></article>
+          </div>
+          <section class="workbook-contents" aria-labelledby="workbook-contents-title">
+            <h3 id="workbook-contents-title">What your workbook includes</h3>
+            <div class="workbook-sheet-grid">
+              <article><strong>1. Dashboard</strong><span>Goal results, daily pay, hours, discrepancies and visual charts</span></article>
+              <article><strong>2. Daily Analysis</strong><span>One row per workday with goal variance and 14-hour flags</span></article>
+              <article><strong>3. Load Timing</strong><span>Loading, travel, unloading and full-cycle time for every load</span></article>
+              <article><strong>4. Source Data</strong><span>Clean daily and load records supporting the calculations</span></article>
+              <article><strong>5. How to Analyze</strong><span>Plain-English instructions for reading and checking the results</span></article>
+            </div>
+          </section>
+          <div class="workbook-download-card">
+            <button class="button primary" id="download-complete-workbook-button" type="button">Download Enhanced Excel Report</button>
+            <p id="complete-workbook-status" class="save-status" aria-live="polite"></p>
+          </div>
+          <details class="workbook-copy-guide">
+            <summary><strong>How to save and make a copy</strong></summary>
+            <ol>
+              <li>Download the workbook for the period you selected.</li>
+              <li>Open it in Microsoft Excel on your MacBook.</li>
+              <li>Select <strong>File → Save As</strong> and give it the pay-period dates.</li>
+              <li>Keep that copy unchanged as your permanent evidence for the period.</li>
+              <li>Return here and download a new workbook for the next period.</li>
+            </ol>
+          </details>
+          <p class="report-disclosure permanent-disclosure">This export creates a separate presentation copy. Downloading or editing the Excel file does not change the records in your Load Tracker.</p>
+        </section>
+      </section>
+
+      <section class="app-view" id="settings-view" data-view="settings" aria-labelledby="settings-title">
+        <section class="panel profile-panel" aria-labelledby="profile-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Driver and Equipment</p>
+              <h2 id="profile-title">Defaults</h2>
+            </div>
+            <span class="status-pill" id="profile-summary">No saved profile</span>
+          </div>
+          <div class="profile-layout">
+            <div class="field-grid profile-fields">
+              <label for="profile-driver-name">
+                <span>Default driver name</span>
+                <input id="profile-driver-name" type="text" autocomplete="name">
+              </label>
+              <label for="profile-truck-number">
+                <span>Default truck number</span>
+                <input id="profile-truck-number" type="text" autocomplete="off">
+              </label>
+              <label for="profile-trailer-number">
+                <span>Default trailer number</span>
+                <input id="profile-trailer-number" type="text" autocomplete="off">
+              </label>
+            </div>
+            <div class="profile-actions">
+              <button class="button primary" id="save-profile-button" type="button">Save Profile</button>
+              <p class="save-status" id="profile-status" aria-live="polite"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel settings-panel" aria-labelledby="settings-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Settings</p>
+              <h2 id="settings-title">Rates, sync, and backups</h2>
+            </div>
+          </div>
+          <div class="settings-grid">
+            <div class="settings-card">
+              <h3>Timesheet Identity</h3>
+              <div class="field-grid">
+                <label for="settings-timesheet-name"><span>Employee name</span><input id="settings-timesheet-name" type="text" autocomplete="name"></label>
+                <label for="settings-timesheet-number"><span>Employee number</span><input id="settings-timesheet-number" type="text" inputmode="numeric"></label>
+              </div>
+              <button class="button primary" id="save-timesheet-settings-button" type="button">Save Timesheet Identity</button>
+              <p class="save-status" id="timesheet-settings-status" aria-live="polite"></p>
+            </div>
+            <div class="settings-card">
+              <h3>Pay Rates</h3>
+              <div class="field-grid pay-rate-grid">
+                <label for="settings-fair-day-goal"><span>Personal daily target</span><input id="settings-fair-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-excellent-day-goal"><span>Personal stretch target</span><input id="settings-excellent-day-goal" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <input id="settings-daily-completed-load-goal" type="hidden">
+                <label for="settings-deadhead-rate"><span>Legacy deadhead hourly rate</span><input id="settings-deadhead-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-truck-wash-rate"><span>Truck-wash hourly rate</span><input id="settings-truck-wash-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-breakdown-rate"><span>Breakdown hourly rate</span><input id="settings-breakdown-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-other-hourly-rate"><span>Other hourly default rate</span><input id="settings-other-hourly-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-wait-rate"><span>Wait-time rate per hour</span><input id="settings-wait-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-per-diem-rate"><span>Per diem rate</span><input id="settings-per-diem-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-sleeper-rate"><span>Sleeper berth rate</span><input id="settings-sleeper-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-reject-rate"><span>Reject-pay rate</span><input id="settings-reject-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label for="settings-trainer-rate"><span>Trainer-pay rate</span><input id="settings-trainer-rate" type="number" inputmode="decimal" min="0" step="0.01"></label>
+                <label class="toggle-field" for="settings-include-rerouted-miles"><input id="settings-include-rerouted-miles" type="checkbox"><span>Include rerouted miles in loaded-mile pay lookup</span><strong>No / Yes</strong></label>
+                <label class="toggle-field" for="settings-auto-per-diem"><input id="settings-auto-per-diem" type="checkbox"><span>Automatically apply per diem on workdays</span><strong>No / Yes</strong></label>
+              </div>
+              <p class="helper-text">These choices apply to new or edited records. Saved historical pay stays at the rates captured when it was recorded.</p>
+              <details class="pay-table-details">
+                <summary>Loaded-mile pay table</summary>
+                <div id="loaded-mile-pay-editor" class="loaded-mile-pay-editor"></div>
+              </details>
+              <button class="button primary" id="save-pay-settings-button" type="button">Save Pay Rates</button>
+              <p class="save-status" id="pay-settings-status" aria-live="polite"></p>
+            </div>
+
+            <div class="settings-card cloud-card">
+              <h3>Cloud and Offline Storage</h3>
+              <form id="auth-form" class="auth-form">
+                <div class="field-grid auth-fields">
+                  <label for="auth-email">
+                    <span>Email</span>
+                    <input id="auth-email" type="email" autocomplete="username">
+                  </label>
+                  <label for="auth-password">
+                    <span>Password</span>
+                    <input id="auth-password" type="password" autocomplete="current-password">
+                  </label>
+                </div>
+                <div class="button-row auth-actions">
+                  <button class="button primary" id="sign-in-button" type="button">Sign In</button>
+                  <button class="button ghost" id="sign-out-button" type="button" hidden>Sign Out</button>
+                </div>
+              </form>
+              <div class="settings-list cloud-list">
+                <span>Status</span><strong id="auth-status">Checking sign-in...</strong>
+                <span>Signed in as</span><strong id="signed-in-email">Not signed in</strong>
+                <span>Sync status</span><strong id="settings-sync-state">Local only</strong>
+                <span>Last successful sync</span><strong id="settings-last-sync">Not yet synced</strong>
+                <span>Pending offline changes</span><strong id="settings-pending-writes">0</strong>
+                <span>Firebase user ID</span><strong id="settings-firebase-uid">Not authenticated</strong>
+                <span>Listener state</span><strong id="settings-listener-state">Waiting</strong>
+                <span>Last Firebase update</span><strong id="settings-firebase-update">No Firebase update received</strong>
+                <span>Cloud records</span><strong id="cloud-load-count">0</strong>
+                <span>Local safety copy</span><strong id="local-load-count">0</strong>
+              </div>
+              <button class="button secondary" id="manual-sync-button" type="button">Sync Now</button>
+              <div class="migration-panel" id="migration-panel" hidden>
+                <div class="migration-copy">
+                  <strong>Local records ready for cloud migration</strong>
+                  <span id="migration-summary">Sign in to compare local and cloud records.</span>
+                </div>
+                <div class="button-row migration-actions">
+                  <button class="button ghost" id="download-before-migration-button" type="button">Download Backup First</button>
+                  <button class="button secondary" id="start-migration-button" type="button">Migrate Local Records</button>
+                </div>
+                <p class="update-status" id="migration-status" aria-live="polite"></p>
+              </div>
+              <p class="update-status" id="auth-error" aria-live="polite"></p>
+            </div>
+
+            <div class="settings-card app-info-card">
+              <h3>Application Information</h3>
+              <div class="settings-list app-info-summary-list">
+                <span>Application version</span><strong id="settings-app-version">1.24.7</strong>
+                <span>Data version</span><strong id="settings-data-version">2</strong>
+                <span>Migration status</span><strong id="settings-migration-state">Ready</strong>
+                <span>Service worker</span><strong id="settings-service-worker-state">Checking</strong>
+                <span>Cache version</span><strong id="settings-cache-version">Checking</strong>
+                <span>Update status</span><strong id="settings-update-state">Ready</strong>
+              </div>
+              <details class="diagnostics-details">
+                <summary>Current Data Diagnostics</summary>
+                <div class="settings-list diagnostics-list">
+                  <span>All-time completed loads</span><strong id="total-loads-hauled">0</strong>
+                  <span>Current work date</span><strong id="current-work-date">-</strong>
+                  <span>Completed loads in selected month</span><strong id="loads-hauled-month">0</strong>
+                  <span>Completed loads</span><strong id="daily-completed-loads">0</strong>
+                  <span>Rejects</span><strong id="daily-rejects">0</strong>
+                  <span>Total loaded miles</span><strong id="daily-loaded-miles">0.0 mi</strong>
+                  <span>Total rerouted miles</span><strong id="daily-re-routed-miles">0.0 mi</strong>
+                  <span>Total miles</span><strong id="daily-total-miles-including-re-route">0.0 mi</strong>
+                  <span>Difference vs gross</span><strong id="daily-difference-gross">0.00 bbl</strong>
+                  <span>Completed load pay</span><strong id="daily-completed-pay">$0.00</strong>
+                  <span>Reject pay</span><strong id="daily-reject-pay">$0.00</strong>
+                  <span>Loading wait</span><strong id="daily-paid-pickup-wait">0 hr 0 min</strong>
+                  <span>Offloading wait</span><strong id="daily-paid-dropoff-wait">0 hr 0 min</strong>
+                  <span>Wait pay</span><strong id="daily-wait-pay">$0.00</strong>
+                  <span>Per diem pay</span><strong id="daily-per-diem-pay">$0.00</strong>
+                  <span>Sleeper pay</span><strong id="daily-sleeper-pay">$0.00</strong>
+                  <span>Trainer pay</span><strong id="daily-trainer-pay">$0.00</strong>
+                </div>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel backup-panel" aria-labelledby="backup-title">
+          <div class="section-heading compact">
+            <div>
+              <p class="section-kicker">Backup and Restore</p>
+              <h2 id="backup-title">Data tools</h2>
+            </div>
+          </div>
+          <p class="backup-reminder">Use JSON backup before major changes, switching devices, or clearing browser data.</p>
+          <div class="button-row backup-actions">
+            <button class="button ghost" id="check-updates-button" type="button">Check for Updates</button>
+            <button class="button secondary" id="print-daily-report-button" type="button">Print Report</button>
+            <button class="button ghost" id="download-log-button" type="button">Raw Load CSV</button>
+            <button class="button primary" id="download-log-excel-button" type="button">Professional Load Report (Excel)</button>
+            <button class="button ghost" id="download-earnings-button" type="button">Raw Earnings CSV</button>
+            <button class="button primary" id="download-earnings-excel-button" type="button">Professional Earnings Report (Excel)</button>
+            <button class="button primary" id="export-backup-button" type="button">Export Full Backup</button>
+          </div>
+          <div class="import-panel">
+            <label for="import-backup-file">
+              <span>Import JSON backup</span>
+              <input id="import-backup-file" type="file" accept="application/json,.json">
+            </label>
+            <label for="import-mode">
+              <span>Import mode</span>
+              <select id="import-mode">
+                <option value="merge">Merge with current records</option>
+                <option value="replace">Replace current records</option>
+              </select>
+            </label>
+            <button class="button secondary" id="import-backup-button" type="button">Import Backup</button>
+          </div>
+          <p class="update-status" id="backup-status" aria-live="polite"></p>
+          <p class="update-status" id="update-status" aria-live="polite"></p>
+        </section>
+      </section>
+
+      <p class="disclaimer">
+        For personal recordkeeping and field-estimate use only. Estimated earnings are for personal verification only and may not match official payroll.
+      </p>
+    </section>
+  </main>
+
+  <section class="paid-time-modal" id="paid-time-entry-panel" role="dialog" aria-modal="true" aria-labelledby="paid-time-title" hidden>
+    <div class="paid-time-modal-card">
+      <div class="section-heading compact paid-time-modal-heading">
+        <div><p class="section-kicker">Additional pay</p><h2 id="paid-time-title">Add Paid Time</h2></div>
+        <button class="button ghost slim" type="button" id="close-paid-time-button" aria-label="Close paid time form">Close</button>
+      </div>
+      <p class="helper-text paid-time-intro">Use this for standalone deadhead not already paid on a load, truck wash, breakdown, training, vacation, or other paid work.</p>
+      <form id="paid-time-form">
+        <div class="field-grid paid-time-essential-grid">
+          <label for="paid-time-date"><span>Work date</span><input id="paid-time-date" type="date" required></label>
+          <label for="paid-time-category"><span>What are you being paid for?</span><select id="paid-time-category"><option>Deadhead</option><option>Truck Wash</option><option>Breakdown</option><option>Training Time</option><option>Other Hourly Work</option><option>Vacation Time</option></select></label>
+          <label for="paid-time-start"><span>Start time</span><input id="paid-time-start" type="time" required></label>
+          <label for="paid-time-end"><span>End time</span><input id="paid-time-end" type="time" required></label>
+          <label for="paid-time-ticket-number"><span>Ticket number</span><input id="paid-time-ticket-number" type="text" placeholder="Optional"></label>
+          <label for="paid-time-location"><span>Location</span><input id="paid-time-location" type="text" placeholder="Optional"></label>
+          <label for="paid-time-rate"><span id="paid-time-rate-label">Hourly rate</span><input id="paid-time-rate" type="number" min="0" step="0.01" required></label>
+        </div>
+        <div class="calculated-strip paid-time-calculation"><article><span id="paid-time-quantity-label">Hours</span><strong id="paid-time-duration">Not enough time data</strong><input id="paid-time-quantity" type="number" min="0" step="0.25" readonly hidden></article><article><span>Estimated pay</span><strong id="paid-time-pay">$0.00</strong></article></div>
+        <details class="optional-section paid-time-more">
+          <summary><strong>More details</strong> <span>Optional</span></summary>
+          <div class="field-grid">
+            <label for="paid-time-custom-category" id="paid-time-custom-field" hidden><span>Custom description</span><input id="paid-time-custom-category" type="text"></label>
+            <label for="paid-time-dispatcher"><span>Dispatcher</span><input id="paid-time-dispatcher" type="text" list="dispatcher-options"></label>
+            <label for="paid-time-truck"><span>Truck</span><input id="paid-time-truck" type="text"></label>
+            <label for="paid-time-trailer"><span>Trailer</span><input id="paid-time-trailer" type="text"></label>
+            <label for="paid-time-related-load"><span>Related load ID</span><input id="paid-time-related-load" type="text"></label>
+            <label for="paid-time-miles"><span>Related miles</span><input id="paid-time-miles" type="number" min="0" step="0.1"></label>
+            <label class="full-width" for="paid-time-notes"><span>Notes</span><textarea id="paid-time-notes"></textarea></label>
+          </div>
+        </details>
+        <p class="validation-summary" id="paid-time-error" role="alert"></p>
+        <div class="button-row paid-time-actions"><button class="button primary" type="submit">Save Paid Time</button><button class="button ghost" type="button" id="save-paid-time-draft-button">Save Draft</button><button class="button ghost" type="button" id="cancel-paid-time-button">Cancel</button><button class="button secondary" type="button" id="download-paid-time-button">Paid Time CSV</button></div>
+      </form>
+    </div>
+  </section>
+
+  <dialog id="official-modal" aria-labelledby="official-modal-title"></dialog>
+
+  <script>
+    (function () {
+      var cachePrefix = 'personal-oilfield-load-tracker-';
+
+      function activateView(viewName) {
+        var views = document.querySelectorAll('.app-view');
+        var buttons = document.querySelectorAll('[data-view-target]');
+
+        for (var index = 0; index < views.length; index += 1) {
+          views[index].classList.toggle('active', views[index].getAttribute('data-view') === viewName);
+        }
+
+        for (var buttonIndex = 0; buttonIndex < buttons.length; buttonIndex += 1) {
+          buttons[buttonIndex].classList.toggle('active', buttons[buttonIndex].getAttribute('data-view-target') === viewName);
+        }
+
+        if (window.scrollTo) {
+          window.scrollTo(0, 0);
+        }
+      }
+
+      function deleteAppFileCaches() {
+        if (!window.caches || !caches.keys) {
+          return Promise.resolve();
+        }
+
+        return caches.keys().then(function (cacheNames) {
+          return Promise.all(cacheNames
+            .filter(function (cacheName) { return cacheName.indexOf(cachePrefix) === 0; })
+            .map(function (cacheName) { return caches.delete(cacheName); }));
+        });
+      }
+
+      function repairAppFiles() {
+        var updateStatus = document.getElementById('update-status');
+
+        if (updateStatus) {
+          updateStatus.textContent = 'Refreshing app files... saved records are not being cleared.';
+        }
+
+        return deleteAppFileCaches()
+          .then(function () {
+            if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistrations) {
+              return null;
+            }
+
+            return navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(registrations.map(function (registration) {
+                return registration.update ? registration.update().catch(function () { return null; }) : null;
+              }));
+            });
+          })
+          .then(function () {
+            window.location.replace('index.html?v=1.24.7&updated=' + Date.now());
+          })
+          .catch(function () {
+            window.location.replace('index.html?v=1.24.7&updated=' + Date.now());
+          });
+      }
+
+      window.personalLoadTrackerSafeRepair = repairAppFiles;
+      window.personalLoadTrackerSafeActivateView = activateView;
+
+      window.addEventListener('error', function (event) {
+        var authError = document.getElementById('auth-error');
+        var serviceWorkerState = document.getElementById('settings-service-worker-state');
+        var message = event && event.message ? event.message : 'Unknown startup error';
+
+        if (authError) {
+          authError.textContent = 'App startup error: ' + message;
+        }
+
+        if (serviceWorkerState) {
+          serviceWorkerState.textContent = 'Startup error';
+        }
+      });
+
+      window.addEventListener('unhandledrejection', function (event) {
+        var authError = document.getElementById('auth-error');
+        var reason = event && event.reason ? event.reason : {};
+        var message = reason.message || String(reason || 'Unknown startup error');
+
+        if (authError) {
+          authError.textContent = 'App startup error: ' + message;
+        }
+      });
+
+      if (window.location.search.indexOf('repair=1') !== -1) {
+        repairAppFiles();
+      }
+    }());
+  </script>
+  <script src="vendor/exceljs.min.js?v=1.24.7"></script>
+  <script src="script.js?v=1.24.7"></script>
+  <script src="export-cleanup.js?v=1.24.7"></script>
+  <script src="professional-export.js?v=1.24.7"></script>
+  <script src="complete-workbook-export.js?v=1.24.7"></script>
+  <script src="enhanced-earnings-export.js?v=1.24.7"></script>
+  <script src="export-integration.js?v=1.24.7"></script>
+  <script src="timesheet.js?v=1.24.7"></script>
+  <script src="daily-closeout.js?v=1.24.7"></script>
+  <script src="official-redesign.js?v=1.24.7"></script>
+</body>
+</html>
